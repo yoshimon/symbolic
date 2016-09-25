@@ -1,3 +1,4 @@
+import io
 from pygments.token import Token, Name
 from enum import Enum
 from copy import deepcopy
@@ -6,15 +7,12 @@ from symbolic.exceptions import *
 from symbolic.lexer import SymbolicLexer, Symto
 from symbolic.formatter import PrettyString
 
-
 class Annotateable:
-
     def __init__(self, userAnnotations, sysAnnotations):
         self.userAnnotations = userAnnotations
         self.sysAnnotations = sysAnnotations
 
 class Named(Annotateable):
-
     def __init__(self, userAnnotations, sysAnnotations, semantic, token):
         super().__init__(userAnnotations, sysAnnotations)
         self.semantic = semantic
@@ -23,7 +21,6 @@ class Named(Annotateable):
 class Statement(Annotateable): pass
 
 class Expression(Statement):
-
     def __init__(self, userAnnotations, sysAnnotations, tokens):
         super().__init__(userAnnotations, sysAnnotations)
         self.tokens = tokens
@@ -37,7 +34,6 @@ class Expression(Statement):
         return Expression(parser.pop_annotations(), tokens)
 
 class Namespace(Named):
-
     def __init__(self, userAnnotations, sysAnnotations, semantic, token):
         super().__init__(userAnnotations, sysAnnotations, semantic, token)
         self.objects = []
@@ -92,14 +88,12 @@ class FunctionKind(Enum):
     Extension = 2 
 
 class FunctionSignature:
-    
     def __init__(self, kind, inArgs, outArgs):
         self.kind = kind
         self.inArgs = inArgs
         self.outArgs = outArgs
 
 class Parameter(Named):
-
     def __init__(self, userAnnotations, sysAnnotations, semantic, token, typename, isRef):
         super().__init__(userAnnotations, sysAnnotations, semantic, token)
         self.typename = typename
@@ -127,12 +121,12 @@ class Parameter(Named):
         return Parameter(userAnnotations, sysAnnotations, semantic, name, typename, isRef)
 
 class Function(Named):
-
     def __init__(self, userAnnotations, sysAnnotations, semantic, token, kind, returnTypename, extensionTargetName, parameters, body):
         super().__init__(userAnnotations, sysAnnotations, semantic, token)
         self.kind = kind
         self.returnTypename = returnTypename
         self.extensionTargetName = extensionTargetName
+        self.extensionName = '.'.join([t.text for t in extensionTargetName] + [token.text]) if extensionTargetName is not None else None
         self.parameters = parameters
         self.body = body
         self.name = token.text
@@ -150,9 +144,21 @@ class Function(Named):
     def parse_template(parser, isTemplate):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
+        parser.push_state()
         returnTypename = Typename.try_parse(parser)
         if returnTypename is None:
+            parser.pop_state()
             return None
+
+        # If the next token is not an ID then returnTypename
+        # is actually the function name / scope and the return type is implicit void
+        if parser.token.kind != Token.Name:
+            parser.pop_state()
+            returnTypenameToken = deepcopy(parser.token)
+            returnTypenameToken.text = 'void'
+            returnTypename = Typename([returnTypenameToken], [], [])
+        else:
+            parser.remove_state()
 
         # Extensions can be explicitly scoped
         extensionTargetName = None
@@ -160,22 +166,21 @@ class Function(Named):
         if len(scope) >= 2:
             # Looks like an extension
             kind = FunctionKind.Extension
-            typename = scope[-2]
-            extension = scope[-1]
-            name = extension
+            name = scope[-1]
             extensionTargetName = scope[:-1]
-        elif len(scope) == 1:
-            # Regular function or operator
-            name = scope[0]
         else:
-            raise MissingReturnTypeError(returnTypename.token)
+            if len(scope) == 1:
+                # Regular function or operator
+                name = scope[0]
+            else:
+                raise MissingReturnTypeError(returnTypename.token)
 
-        # Operators require 1 extra token
-        if name.text == 'operator':
-            kind = FunctionKind.Operator
-            name = parser.expect_kind(Token.Operator)
-        else:
-            kind = FunctionKind.Regular
+            # Operators require 1 extra token
+            if name.text == 'operator':
+                kind = FunctionKind.Operator
+                name = parser.expect_kind(Token.Operator)
+            else:
+                kind = FunctionKind.Regular
 
         if parser.match('('):
             parameters = parser.gather_objects([Parameter], ',')
@@ -205,59 +210,61 @@ class Function(Named):
 
     def generate_from_template(self, prettyString):
         # Emit the annotations
-        prettyString += Annotation.list_to_str(self.userAnnotations)
-        prettyString += Annotation.list_to_str(self.sysAnnotations)
+        prettyString += Annotation.usrlist_to_str(self.userAnnotations)
+        prettyString += Annotation.syslist_to_str(self.sysAnnotations)
 
         # ReturnType
         prettyString += str(self.returnTypename)
 
-        # TODO: spaces when appending
-
         # Name
         if self.kind == FunctionKind.Extension:
-            prettyString += self.extensionTargetName + self.name
+            prettyString += self.extensionName
         elif self.kind == FunctionKind.Operator:
             prettyString += 'operator' + self.name
         else:
             prettyString += self.name
 
         # Parameter signature
-        prettyString += '('
         numParameters = len(self.parameters)
         if numParameters > 0:
-            for i in range(0, numParameters):
-                p = self.parameters[i]
-                prettyString += Annotation.list_to_str(p.userAnnotations)
-                prettyString += Annotation.list_to_str(p.sysAnnotations)
-                prettyString += p.typename.scopeString
-                prettyString += p.token.text
-                if p.semantic is not None:
-                    prettyString += ':'
-                    prettyString += p.semantic.text
-                if i < numParameters - 1:
-                    prettyString += ','
-        prettyString += ')\n{\n'
+            prettyString += '('
+            prettyString += '\n'
+            prettyString.indentLevel += 1
+            if numParameters > 0:
+                for i in range(0, numParameters):
+                    p = self.parameters[i]
+                    prettyString += Annotation.usrlist_to_str(p.userAnnotations)
+                    prettyString += Annotation.syslist_to_str(p.sysAnnotations)
+                    if p.isRef:
+                        prettyString += 'ref'
+                    prettyString += p.typename.scopeString
+                    prettyString += p.token.text
+                    if p.semantic is not None:
+                        prettyString += ': ' + p.semantic.text
+                    if i < numParameters - 1:
+                        prettyString += ','
+                    prettyString += '\n'
+            prettyString.indentLevel -= 1
+            prettyString += ')'
+        prettyString += ' {'
+        prettyString += '\n'
         prettyString.indentLevel += 1
-        previousLine = 0;
         for t in self.body:
-            # Append newline or continue
-            if previousLine == t.line:
-                prettyString += t.text
-            else:
-                prettyString += t.text
+            prettyString += t.text
 
             # Change indentation
             if t.text == '{':
+                prettyString += '\n'
                 prettyString.indentLevel += 1
             elif t.text == '}':
+                prettyString += '\n'
                 prettyString.indentLevel -= 1
-
-            previousLine = t.line
+        prettyString += '\n'
         prettyString.indentLevel -= 1
-        prettyString += '}\n'
+        prettyString += '}'
+        prettyString += '\n'
 
 class Member(Named):
-
     def __init__(self, userAnnotations, sysAnnotations, semantic, token, typename):
         super().__init__(userAnnotations, sysAnnotations, semantic, token)
         self.typename = typename
@@ -280,7 +287,6 @@ class Member(Named):
         return Member(userAnnotations, sysAnnotations, semantic, name, typename)
 
 class MemberList:
-
     @staticmethod
     def parse(parser):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
@@ -306,7 +312,6 @@ class MemberList:
         return result
 
 class Struct(Named):
-    
     def __init__(self, userAnnotations, sysAnnotations, semantic, token, members, body):
         super().__init__(userAnnotations, sysAnnotations, semantic, token)
         self.members = members
@@ -348,7 +353,6 @@ class Struct(Named):
         return Struct.parse_template(parser, False)
 
 class Alias(Named):
-
     def __init__(self, userAnnotations, sysAnnotations, semantic, srcType, dstType):
         super().__init__(userAnnotations, sysAnnotations, semantic, srcType)
         self.srcType = srcType
@@ -376,7 +380,6 @@ class Alias(Named):
         return alias
 
 class Reference(Annotateable):
-
     def __init__(self, userAnnotations, sysAnnotations, string):
         super().__init__(userAnnotations, sysAnnotations)
         self.string = string
@@ -388,21 +391,30 @@ class Reference(Annotateable):
         return self.string
 
 class Annotation:
-    
     def __init__(self, token, args):
         super().__init__()
         self.token = token
         self.args = args
 
     @staticmethod
-    def list_to_str(collection):
+    def list_to_str(collection, open, close = None):
         result = ''
         for annotation in collection:
-            result += '[' + annotation.token.text
+            result += open + annotation.token.text
             if len(annotation.args) > 0:
                 result += '(' + ', '.join([t.text for t in annotation.args]) + ')'
-            result += ']\n'
+            if close is not None:
+                result += close
+            result += '\n'
         return result
+
+    @staticmethod
+    def usrlist_to_str(collection):
+        return Annotation.list_to_str(collection, '[', ']')
+
+    @staticmethod
+    def syslist_to_str(collection):
+        return Annotation.list_to_str(collection, '@')
 
     @staticmethod
     def parse_annotation_interior(parser):
@@ -449,7 +461,7 @@ class Annotation:
 
     @staticmethod
     def sys_annotations():
-        return ['static', 'private', 'noconstructor', 'deprecate', 'copyreferences', 'using', 'prefix', 'suffix']
+        return ['static', 'private', 'noconstructor', 'deprecate', 'copyreferences', 'unitprefix', 'unitsuffix', 'prefix', 'suffix']
 
     @staticmethod
     def has(name, collection):
@@ -480,7 +492,6 @@ class Annotation:
                     raise MissingAnnotationArgsError(annotation.token, signatures)
 
 class Typename:
-
     def __init__(self, scope, templateArgs, dims):
         super().__init__()
         self.scope = scope
@@ -542,7 +553,6 @@ class Typename:
         return self.scopeString
 
 class TemplateParameter(Named):
-
     def __init__(self, userAnnotations, sysAnnotations, semantic, token):
         super().__init__(userAnnotations, sysAnnotations, semantic, token)
 
@@ -559,38 +569,43 @@ class TemplateParameter(Named):
         return TemplateParameter(userAnnotations, sysAnnotations, semantic, name)
 
 class Template(Named):
-    
-    def __init__(self, userAnnotations, sysAnnotations, semantic, obj, namespaceList, references):
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parameters, obj, namespaceList, references):
         super().__init__(userAnnotations, sysAnnotations, semantic, obj.token)
         self.obj = obj
+        self.parameters = parameters
         self.namespaceList = namespaceList
         self.namespaceList.pop(0)
         self.references = references
 
-        if Annotation.is_not_compatible(['copyreferences', 'using', 'prefix', 'suffix', 'private', 'deprecate'], sysAnnotations):
+        if Annotation.is_not_compatible(['copyreferences', 'unitprefix', 'unitsuffix', 'prefix', 'suffix', 'private', 'deprecate'], sysAnnotations):
             raise UnsupportedSystemAnnotationsError(self.token, 'Template', sysAnnotations)
 
-        Annotation.verify_annotation(self.sysAnnotations, 'using', [[Token.Literal.String]])
+        Annotation.verify_annotation(self.sysAnnotations, 'unitprefix', [[Token.Literal.String]])
+        Annotation.verify_annotation(self.sysAnnotations, 'unitsuffix', [[Token.Literal.String]])
         Annotation.verify_annotation(self.sysAnnotations,'prefix', [[Token.Literal.String]])
         Annotation.verify_annotation(self.sysAnnotations,'suffix', [[Token.Literal.String]])
 
-    def generate_translation_unit(self, unitName, *args):
+    def generate_translation_unit(self):
         result = PrettyString()
 
-        # References
+        # References + Unitprefix
         for annotation in self.sysAnnotations:
             if annotation.token.text == 'copyreferences':
                 for ref in self.references:
                     result += 'using {0};\n'.format(ref.string)
-            elif annotation.token.text == 'using':
-                result += 'using {0};\n'.format(annotation.args[0].text[1:-1])
+            elif annotation.token.text == 'unitprefix':
+                result += '{0}\n'.format(annotation.args[0].text[1:-1])
 
         result += '\n'
 
         # Namespace
         for namespace in self.namespaceList:
-            indentStr = ' ' * indent * Formatter.indentSize
-            result += 'namespace {0} {{\n'.format(namespace.token.text)
+            result += Annotation.usrlist_to_str(namespace.userAnnotations)
+            result += Annotation.syslist_to_str(namespace.sysAnnotations)
+            result += 'namespace {0}'.format(namespace.token.text)
+            if namespace.semantic is not None:
+                result += ': ' + namespace.semantic.text
+            result += ' {\n'
             result.indentLevel += 1
 
         # Prefix
@@ -606,17 +621,15 @@ class Template(Named):
             if annotation.token.text == 'suffix':
                 result += annotation.args[0].text[1:-1] + '\n'
 
-        # Tokenize prefix, objStr and suffix
-        # TODO: Substitute template values
-        # Requires: SymbolicLexer to be instantiated (cache it?)
-        # and the pre-processor. Both should be cached outside the template class
-        for arg in args:
-            pass
-
         # Close namespace
         for namespace in self.namespaceList:
-            result += "}}\n"
             result.indentLevel -= 1
+            result += "}\n"
+
+        # Unit suffix
+        for annotation in self.sysAnnotations:
+            if annotation.token.text == 'unitsuffix':
+                result += '{0}\n'.format(annotation.args[0].text[1:-1])
 
         return result.value.strip()
 
@@ -646,10 +659,24 @@ class Template(Named):
             return None
 
         # Register the template with the current namespace
-        template = Template(userAnnotations, sysAnnotations, semantic, obj, list(parser.namespaceStack), list(parser.references))
+        template = Template(userAnnotations, sysAnnotations, semantic, parameters, obj, list(parser.namespaceStack), list(parser.references))
         parser.namespaceStack[-1].objects.append(template)
 
-        # REMOVE THIS
-        templateSource = template.generate_translation_unit('D:\\testunit.template', 'LHSTest', 'RHSTest')
+        # TEMPLATE TEST
+
+        # Convert the template to a translation unit
+        templateSource = template.generate_translation_unit()
+
+        # Substitution table
+        subs = {}
+        subs['LHS'] = 'LHSTest'
+        subs['RHS'] = 'RHSTest'
+        tokens = parser.lexer.tokenize(templateSource, subs)
+
+        # Dump pretty-formatted file
+        templateSub = PrettyString.from_tokens(tokens)
+
+        with io.open("D:\\test.txt", "w") as textFile:
+            print(templateSub, file=textFile)
 
         return template

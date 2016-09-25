@@ -4,11 +4,11 @@ from pygments.lexer import RegexLexer, include, bygroups, using, this, default, 
 from pygments.util import get_bool_opt
 from pygments.token import Token, Text, Operator, Name, String, Number, Punctuation, Error
 from pygments.filter import simplefilter
+from jinja2 import Template
 
 __all__ = ['SymbolicLexer']
 
 class Symto:
-
     def __init__(self, kind, fileName, text, line, column):
         
         self.kind = kind
@@ -38,6 +38,9 @@ class SymbolicLexer(RegexLexer):
     filenames = ['*.sym']
     priority = 0.1
 
+    openBrackets = ['(', '{', '<', '[']
+    closeBrackets = [')', '}', '>', ']']
+
     tokens = {
         'root': [
             (r'[a-zA-Z_]\w*', Name),
@@ -55,9 +58,14 @@ class SymbolicLexer(RegexLexer):
         ],
     }
 
-    def __init__(self, **options):
+    def __init__(self, preprocessor, **options):
         RegexLexer.__init__(self, **options)
+        # State must be maintained on the outside
         self.fileName = ''
+        self.preprocessor = preprocessor
+        self.libName = None
+        self.ppt = None # Pre-processor table
+        self.subs = None # Template / Substitution table
 
         # Register custom filter
         self.add_filter(symbolic_filter())
@@ -66,20 +74,30 @@ class SymbolicLexer(RegexLexer):
         line = 1
         column = 1
         for index, token, value in RegexLexer.get_tokens_unprocessed(self, text):
-            yield index, token, TokenValue(self.fileName, value, line, column)
+            actualValue = self.subs[value] if (self.subs is not None) and (value in self.subs) else value
+            yield index, token, TokenValue(self.fileName, actualValue, line, column)
             if value == '\n':
                 line += 1
                 column = 1
             else:
-                column += len(value)
+                column += len(actualValue)
 
     def analyse_text(text):
         if re.search('using ', text):
             return 0.4
         return 0.0
 
-    def tokenize(self, context):
-        srcFileTokens = self.get_tokens(context)
+    def tokenize(self, srcFileText, subs = None):
+        # Bind substitution table
+        self.subs = subs
 
-        # Convert to custom token struct
-        return [Symto(t[0], t[1].fileName, t[1].text, t[1].line, t[1].column) for t in srcFileTokens]
+        srcFileTxt = srcFileText.replace('$', self.libName)
+        template = self.preprocessor.from_string(srcFileTxt, self.ppt, Template)
+        context = template.render(self.ppt)
+        srcFileTokens = self.get_tokens(context)
+        actualTokens = [Symto(t[0], t[1].fileName, t[1].text, t[1].line, t[1].column) for t in srcFileTokens]
+        
+        # Unbind substitution table
+        self.subs = None
+        
+        return actualTokens

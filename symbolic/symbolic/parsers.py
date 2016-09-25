@@ -3,11 +3,10 @@ from pygments.token import Token, Name
 
 from symbolic.objects import Namespace, Expression, Reference, Annotation, Struct, Function, Alias, Template
 from symbolic.exceptions import UnexpectedTokenError, UnexpectedEOFError, UnsupportedSystemAnnotationsError
-from symbolic.lexer import TokenValue, Symto
+from symbolic.lexer import TokenValue, Symto, SymbolicLexer
 import re
 
 class Symto:
-
     def __init__(self, kind, text, line, column):
         self.kind = kind
         self.text = text
@@ -15,17 +14,14 @@ class Symto:
         self.column = column
 
 class BaseParser:
-
-    openBrackets = ['(', '{', '<', '[']
-    closeBrackets = [')', '}', '>', ']']
-
-    def __init__(self, tokens):
-        self.reset(tokens)
+    def __init__(self, lexer, tokens):
+        self.reset(lexer, tokens)
 
     def is_eof(self):
         return self.tokenIdx >= len(self.tokens)
 
-    def reset(self, tokens):
+    def reset(self, lexer, tokens):
+        self.lexer = lexer
         self.tokens = list(tokens)
 
         self.tokenStateStack = []
@@ -111,7 +107,7 @@ class BaseParser:
         return result
 
     def match_push_open_bracket(self, stack):
-        val = self.match_list(BaseParser.openBrackets)
+        val = self.match_list(SymbolicLexer.openBrackets)
         success = val is not None
         if success:
             stack.append(val)
@@ -121,14 +117,14 @@ class BaseParser:
         if len(stack) == 0:
             return False
 
-        val = self.match_list(BaseParser.closeBrackets)
+        val = self.match_list(SymbolicLexer.closeBrackets)
         
         if val is None:
             return False
 
         # The indices into both tables have to match
-        i = BaseParser.openBrackets.index(stack[-1].text)
-        j = BaseParser.closeBrackets.index(val.text)
+        i = SymbolicLexer.openBrackets.index(stack[-1].text)
+        j = SymbolicLexer.closeBrackets.index(val.text)
         success = i == j
         if success:
             stack.pop()
@@ -150,9 +146,8 @@ class BaseParser:
         return tokens
 
 class UnitParser(BaseParser):
-
-    def __init__(self, tokens):
-        super().__init__(tokens)
+    def __init__(self, lexer, tokens):
+        super().__init__(lexer, tokens)
         # Create a dependency graph for this unit with the global namespace
         self.unitGraph = nx.DiGraph()
         self.unitGraph.add_node('$Global')
@@ -219,7 +214,7 @@ class UnitParser(BaseParser):
     def to_ast(self):
         ''' Converts the token stream to an AST. '''
         # Reset stream position
-        self.reset(self.tokens)
+        self.reset(self.lexer, self.tokens)
 
         # References first
         self.references = self.parse_all_references()

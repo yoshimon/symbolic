@@ -4,7 +4,6 @@ import os
 import glob
 import io
 import networkx as nx
-from jinja2 import Template
 from jinja2 import Environment
 
 from symbolic.parsers import UnitParser
@@ -55,11 +54,12 @@ if __name__ == "__main__":
         line_statement_prefix='#',
         line_comment_prefix='//'
     )
+    
+    # Bind the pre-processor to the lexer
+    lexer = SymbolicLexer(jinjaEnv)
 
     # Create a dependency graph to sort the libraries
     libDepGraph = nx.DiGraph()
-
-    symLexer = SymbolicLexer()
 
     # Read & parse the project JSON descriptor
     with open(projFilePath) as jsonProjFileData:
@@ -116,6 +116,9 @@ if __name__ == "__main__":
 
         # Translate each library by going through all *.sym files
         for node in libDepGraph.nodes(data=True):
+            # Update lexer state
+            lexer.libName = node[0]
+
             absLibPath = node[1]['absLibPath']
 
             # Load the per-library pre-processor table
@@ -129,25 +132,15 @@ if __name__ == "__main__":
                 filePPT = load_ppt(filePath + '.pp')
 
                 # Merge all pre-processor tables by overwriting
-                ppt = merge_ppts([projectPPT, libPPT, filePPT])
+                lexer.ppt = merge_ppts([projectPPT, libPPT, filePPT])
 
                 # Load the source file
                 with open(filePath, 'r') as srcFile:
-                    srcFileTxt = srcFile.read()
-
-                    # Replace all $ occurrences with library name
-                    srcFileTxt = srcFileTxt.replace('$', libName)
-
-                    # Pre-process the source file
-                    template = jinjaEnv.from_string(srcFileTxt, ppt, Template)
-                    context = template.render(ppt)
-
-                    # Tokenize the source
-                    symLexer.fileName = filePath
-                    srcFileTokens = symLexer.tokenize(context)
-
+                    lexer.fileName = filePath
+                    srcFileTokens = lexer.tokenize(srcFile.read())
+                    
                     # Parse and convert to AST
-                    unitParser = UnitParser(srcFileTokens)
+                    unitParser = UnitParser(lexer, srcFileTokens)
                     ast = unitParser.to_ast()
 
                     # Save the AST for later validation
