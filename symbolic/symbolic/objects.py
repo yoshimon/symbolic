@@ -32,10 +32,13 @@ class Variable:
 
 class InstructionKind(Enum):
     Expression = 0
+    # Control flow statements have to start at 1
     If = 1
     For = 2
     While = 3
     Do = 4
+    Elif = 5
+    Else = 6
 
 class Instruction(Annotateable):
     def __init__(self, userAnnotations, sysAnnotations, semantic, kind, expression=None, instructions=None, forInit=None, forWhile=None, forStep=None):
@@ -51,7 +54,11 @@ class Instruction(Annotateable):
     def parse(parser, args):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         
-        if parser.match('if'):
+        # Control flow statements
+        ikMap = [(e.name.lower(), e) for e in InstructionKind][1:] # Ignore Expression
+        kind = parser.match_map(InstructionKind.Expression, ikMap)
+
+        if kind != InstructionKind.Expression:
             tokens = parser.fetch_block('(', ')')
             semantic = Annotation.parse_semantic(parser)
             expression = Expression(userAnnotations, sysAnnotations, tokens)
@@ -60,7 +67,7 @@ class Instruction(Annotateable):
             parser.expect('{')
             instructions = parser.gather_objects([Instruction], args=['}'])
             parser.expect('}')
-            return Instruction(userAnnotations, sysAnnotations, semantic, InstructionKind.If, expression=expression, instructions=instructions)
+            return Instruction(userAnnotations, sysAnnotations, semantic, kind, expression=expression, instructions=instructions)
         else:
             if parser.token.text in args:
                 return None
@@ -75,7 +82,7 @@ class Instruction(Annotateable):
             expression.userAnnotations = userAnnotations
             expression.sysAnnotations = sysAnnotations
 
-            return Instruction(None, None, None, InstructionKind.Expression, expression=expression) 
+            return Instruction(None, None, None, kind, expression=expression) 
 
 class ExpressionAtomKind(Enum):
     Var = 0
@@ -386,7 +393,7 @@ class Function(TemplateObject):
             parser.expect('{')
 
             # Parse instructions
-            instructions = parser.gather_objects([Instruction], args=['}'])
+            objects = parser.gather_objects([Struct, Alias, Template, Function, Instruction], args=['}'])
 
             parser.expect('}')
         parser.match(';')

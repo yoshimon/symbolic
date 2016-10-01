@@ -78,6 +78,13 @@ class BaseParser:
 
         return None
 
+    def match_map(self, default, kvList):
+        for (k, v) in kvList:
+            if self.match(k):
+                return v
+
+        return default
+
     def match_kind(self, tokenType):
         return self.match_kinds([tokenType])
 
