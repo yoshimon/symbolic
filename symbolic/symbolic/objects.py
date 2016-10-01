@@ -72,11 +72,13 @@ class Instruction(Annotateable):
             if parser.token.text in args:
                 return None
 
-            expression = parser.try_parse_any([Expression], [';'])
+            expression = parser.try_parse_any([Expression], [';', '{']) # Disambiguation with nested functions
             if expression is None:
                 return None
 
-            parser.match(';')
+            if not parser.match(';'):
+                if parser.match('{'): # Disambiguation with nested functions
+                    return None
 
             # Forward annotations
             expression.userAnnotations = userAnnotations
@@ -393,7 +395,7 @@ class Function(TemplateObject):
             parser.expect('{')
 
             # Parse instructions
-            objects = parser.gather_objects([Struct, Alias, Template, Function, Instruction], args=['}'])
+            objects = parser.gather_objects([Struct, Alias, Template, Instruction, Function], args=['}'])
 
             parser.expect('}')
         parser.match(';')
