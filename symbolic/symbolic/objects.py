@@ -122,6 +122,7 @@ class Expression(Annotateable):
 
         out, stack, states = [], [], [State.Default]
         isNextOpenParenFunction = False
+        wasLastTerminal = False
         # K=2 lookahead
         for i, t in enumerate(tokens):
             prev = tokens[i-1] if i > 0 else None
@@ -129,6 +130,12 @@ class Expression(Annotateable):
             t2 = tokens[i+2] if i < len(tokens) - 2 else None
 
             if t.isTerminal:
+                if wasLastTerminal:
+                    raise InvalidExpressionError(t)
+
+                # Set state for next cycle
+                wasLastTerminal = True
+
                 kind = ExpressionAtomKind.Number if t.isNumber else ExpressionAtomKind.Var
                 # K=1 lookahead
                 if t1 is not None:
@@ -147,74 +154,78 @@ class Expression(Annotateable):
                                 stack.append(ExpressionAtom(t, ExpressionAtomKind.TemplateEnd))
 
                 out.append(ExpressionAtom(t, kind))
-            elif t.text == '[':
-                # If this is an Array the last output token has to be a terminal, a function, an array or a template
-                if not out:
-                    raise MissingArrayTypeError(t)
+            else:
+                # We can fetch a literal in the next cycle again
+                wasLastTerminal = False
 
-                if not out[-1].kind in [ExpressionAtomKind.Var, ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.ArrayBegin, ExpressionAtomKind.ArrayEnd, ExpressionAtomKind.TemplateBegin, ExpressionAtomKind.TemplateEnd]:
-                    raise InvalidArrayTypeError(out[-1].token)
+                if t.text == '[':
+                    # If this is an Array the last output token has to be a terminal, a function, an array or a template
+                    if not out:
+                        raise MissingArrayTypeError(t)
 
-                if (not prev.text in SymbolicLexer.closeBrackets) and (prev.kind != Token.Name):
-                    raise InvalidArrayTypeError(out[-1].token)
+                    if not out[-1].kind in [ExpressionAtomKind.Var, ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.ArrayBegin, ExpressionAtomKind.ArrayEnd, ExpressionAtomKind.TemplateBegin, ExpressionAtomKind.TemplateEnd]:
+                        raise InvalidArrayTypeError(out[-1].token)
 
-                out.append(ExpressionAtom(t, ExpressionAtomKind.ArrayBegin));
-                states.append(State.Array)
-                stack.append(ExpressionAtom(t, ExpressionAtomKind.ArrayEnd))
-            elif t.isOpenBracket:
-                if t.text == '(':
-                    # Is this a potential tuple?
-                    if not isNextOpenParenFunction:
-                        states.append(State.Tuple)
-                    else:
-                        isNextOpenParenFunction = False
-                stack.append(ExpressionAtom(t, -1))
-            elif t.text == ',':
-                # Tuples > 1 are not allowed
-                if states[-1] == State.Tuple:
-                    raise InvalidExpressionError(t)
+                    if (not prev.text in SymbolicLexer.closeBrackets) and (prev.kind != Token.Name):
+                        raise InvalidArrayTypeError(out[-1].token)
 
-                # Keep track of how many ops were added
-                if Algorithm.pop_while(stack, lambda atom: not atom.token.isOpenBracket, lambda atom: out.append(atom)):
-                    raise MissingBracketsError(t)
-                
-                # If there were no ops added, the comma might be invalid if this is not an unbounded array
-                if states[-1] != State.Array:
-                    if out[-1].kind in [ExpressionAtomKind.Delimiter, ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.TemplateBegin]:
+                    out.append(ExpressionAtom(t, ExpressionAtomKind.ArrayBegin));
+                    states.append(State.Array)
+                    stack.append(ExpressionAtom(t, ExpressionAtomKind.ArrayEnd))
+                elif t.isOpenBracket:
+                    if t.text == '(':
+                        # Is this a potential tuple?
+                        if not isNextOpenParenFunction:
+                            states.append(State.Tuple)
+                        else:
+                            isNextOpenParenFunction = False
+                    stack.append(ExpressionAtom(t, -1))
+                elif t.text == ',':
+                    # Tuples > 1 are not allowed
+                    if states[-1] == State.Tuple:
                         raise InvalidExpressionError(t)
 
-                # Add comma as delimiter
-                out.append(ExpressionAtom(t, ExpressionAtomKind.Delimiter))
-            elif (t.isCloseBracket and t.text != '>') or (t.text == '>' and states[-1] == State.Template): # Special case for template >
-                # Keep track of how many parameters were added
-                if Algorithm.pop_while(stack, lambda atom: not atom.token.text == t.matchingOpenBracket, lambda atom: out.append(atom)):
-                    raise MissingBracketsError(t)
-
-                # Put array symbol on output stream
-                if t.text == ']':
-                    out.append(ExpressionAtom(t, ExpressionAtomKind.ArrayEnd))
-
-                # Pop open bracket and state
-                stack.pop()
-                states.pop()
-
-                if stack:
-                    # Pop function, template
-                    if stack[-1].kind in [ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.TemplateEnd]:
-                        out.append(stack[-1])
-                        stack.pop()
-            elif t.kind is Operator:
-                # Assume this is a unary op
-                kind = ExpressionAtomKind.UnaryOp if (t.isUnaryOp and prev is None) or (prev is not None and prev.text != ')' and not prev.isTerminal) else ExpressionAtomKind.BinaryOp
-                o1 = t
+                    # Keep track of how many ops were added
+                    if Algorithm.pop_while(stack, lambda atom: not atom.token.isOpenBracket, lambda atom: out.append(atom)):
+                        raise MissingBracketsError(t)
                 
-                # Binary operator
-                if kind == ExpressionAtomKind.BinaryOp:
-                    Algorithm.pop_while(stack, lambda o2: (o2.token.isOp) and ((o1.isBinaryLeftAssociative and o1.binaryPrecedence > o2.token.binaryPrecedence) or (o1.isBinaryRightAssociative and o1.binaryPrecedence >= o2.token.binaryPrecedence)), lambda o2: out.append(o2))
+                    # If there were no ops added, the comma might be invalid if this is not an unbounded array
+                    if states[-1] != State.Array:
+                        if out[-1].kind in [ExpressionAtomKind.Delimiter, ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.TemplateBegin]:
+                            raise InvalidExpressionError(t)
+
+                    # Add comma as delimiter
+                    out.append(ExpressionAtom(t, ExpressionAtomKind.Delimiter))
+                elif (t.isCloseBracket and t.text != '>') or (t.text == '>' and states[-1] == State.Template): # Special case for template >
+                    # Keep track of how many parameters were added
+                    if Algorithm.pop_while(stack, lambda atom: not atom.token.text == t.matchingOpenBracket, lambda atom: out.append(atom)):
+                        raise MissingBracketsError(t)
+
+                    # Put array symbol on output stream
+                    if t.text == ']':
+                        out.append(ExpressionAtom(t, ExpressionAtomKind.ArrayEnd))
+
+                    # Pop open bracket and state
+                    stack.pop()
+                    states.pop()
+
+                    if stack:
+                        # Pop function, template
+                        if stack[-1].kind in [ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.TemplateEnd]:
+                            out.append(stack[-1])
+                            stack.pop()
+                elif t.kind is Operator:
+                    # Assume this is a unary op
+                    kind = ExpressionAtomKind.UnaryOp if (t.isUnaryOp and prev is None) or (prev is not None and prev.text != ')' and not prev.isTerminal) else ExpressionAtomKind.BinaryOp
+                    o1 = t
                 
-                stack.append(ExpressionAtom(o1, kind))
-            else:
-                raise InvalidExpressionError(t)
+                    # Binary operator
+                    if kind == ExpressionAtomKind.BinaryOp:
+                        Algorithm.pop_while(stack, lambda o2: (o2.token.isOp) and ((o1.isBinaryLeftAssociative and o1.binaryPrecedence > o2.token.binaryPrecedence) or (o1.isBinaryRightAssociative and o1.binaryPrecedence >= o2.token.binaryPrecedence)), lambda o2: out.append(o2))
+                
+                    stack.append(ExpressionAtom(o1, kind))
+                else:
+                    raise InvalidExpressionError(t)
 
         # Remaining tokens to output
         if not Algorithm.pop_while(stack, lambda atom: not atom.token.text == '(', lambda atom: out.append(atom)):
@@ -230,7 +241,10 @@ class Expression(Annotateable):
     def parse(parser, args):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         tokens = parser.until_any(args)
-        return Expression(userAnnotations, sysAnnotations, tokens)
+        try:
+            return Expression(userAnnotations, sysAnnotations, tokens)
+        except:
+            return None
 
 class Namespace(Named):
     def __init__(self, userAnnotations, sysAnnotations, semantic, token):
@@ -391,14 +405,16 @@ class Function(TemplateObject):
         body = None
         if isTemplate:
             body = parser.fetch_block('{', '}')
+            parser.match(';')
         else:
-            parser.expect('{')
+            if parser.match('{'):
+                # Parse instructions
+                objects = parser.gather_objects([Struct, Alias, Template, Instruction, Function], args=['}'])
 
-            # Parse instructions
-            objects = parser.gather_objects([Struct, Alias, Template, Instruction, Function], args=['}'])
-
-            parser.expect('}')
-        parser.match(';')
+                parser.expect('}')
+                parser.match(';')
+            else:
+                parser.expect(';')
         
         # Register the function with the current namespace
         func = Function(userAnnotations, sysAnnotations, semantic, name, body, kind, returnTypename, extensionTargetName, parameters)
