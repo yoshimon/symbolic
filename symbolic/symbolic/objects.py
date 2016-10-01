@@ -356,49 +356,43 @@ class Function(TemplateObject):
     def parse_template(parser, isTemplate):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
-        parser.push_state()
+        kind = FunctionKind.Regular
+        name = Symto(parser.token.kind, parser.token.fileName, '', parser.token.line, parser.token.column)
+        extensionTargetName = None
+        parameters = []
         returnTypename = Typename.try_parse(parser)
-        if returnTypename is None:
-            parser.pop_state()
-            return None
+        hasExplicitReturnType = returnTypename is not None
 
         # If the next token is not an ID then returnTypename
         # is actually the function name / scope and the return type is implicit void
         if parser.token.kind != Token.Name:
-            parser.pop_state()
+            if hasExplicitReturnType:
+                name = returnTypename.scope[-1]
             returnTypenameToken = deepcopy(parser.token)
             returnTypenameToken.text = 'void'
             returnTypename = Typename([returnTypenameToken], [], [])
-        else:
-            parser.remove_state()
-
-        # Extensions can be explicitly scoped
-        extensionTargetName = None
-        scope = Namespace.parse_explicit_scoping(parser)
-        if len(scope) >= 2:
-            # Looks like an extension
-            kind = FunctionKind.Extension
-            name = scope[-1]
-            extensionTargetName = scope[:-1]
-        else:
-            if len(scope) == 1:
-                # Regular function or operator
-                name = scope[0]
+        
+        if hasExplicitReturnType:
+            # Extensions can be explicitly scoped
+            scope = Namespace.parse_explicit_scoping(parser)
+            if len(scope) >= 2:
+                # Looks like an extension
+                kind = FunctionKind.Extension
+                name = scope[-1]
+                extensionTargetName = scope[:-1]
             else:
-                raise MissingReturnTypeError(returnTypename.token)
+                if len(scope) == 1:
+                    # Regular function or operator
+                    name = scope[0]
 
-            # Operators require 1 extra token
-            if name.text == 'operator':
-                kind = FunctionKind.Operator
-                name = parser.expect_kind(Token.Operator)
-            else:
-                kind = FunctionKind.Regular
+                # Operators require 1 extra token
+                if name.text == 'operator':
+                    kind = FunctionKind.Operator
+                    name = parser.expect_kind(Token.Operator)
 
-        if parser.match('('):
-            parameters = parser.gather_objects([Parameter], ',')
-            parser.expect(')')
-        else:
-            parameters = []
+            if parser.match('('):
+                parameters = parser.gather_objects([Parameter], ',')
+                parser.expect(')')
 
         semantic = Annotation.parse_semantic(parser)
 
@@ -408,13 +402,11 @@ class Function(TemplateObject):
             parser.match(';')
         else:
             if parser.match('{'):
-                # Parse instructions
                 objects = parser.gather_objects([Struct, Alias, Template, Instruction, Function], args=['}'])
-
                 parser.expect('}')
                 parser.match(';')
-            else:
-                parser.expect(';')
+            elif not parser.match(';'):
+                return None
         
         # Register the function with the current namespace
         func = Function(userAnnotations, sysAnnotations, semantic, name, body, kind, returnTypename, extensionTargetName, parameters)
@@ -841,9 +833,10 @@ class Template(Named):
         if not parser.match('template'):
             return None
 
-        parser.expect('<')
-        parameters = parser.gather_objects([TemplateParameter], ',')
-        parser.expect('>')
+        parameters = []
+        if parser.match('<'):
+            parameters = parser.gather_objects([TemplateParameter], ',')
+            parser.expect('>')
         semantic = Annotation.parse_semantic(parser)
 
         # Deduce the template kind

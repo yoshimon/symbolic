@@ -200,7 +200,7 @@ class UnitParser(BaseParser):
         for c in classes:
             self.push_state()
             o = c.parse(self, args)
-            if not o is None:
+            if o is not None:
                 self.remove_state()
                 return o
             self.pop_state()
