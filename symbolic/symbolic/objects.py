@@ -1,37 +1,227 @@
 import io
-from pygments.token import Token, Name
+from enum import Enum
+from pygments.token import Token, Text, Operator, Name, String, Number, Punctuation, Error
 from enum import Enum
 from copy import deepcopy
 from functools import reduce
 from symbolic.exceptions import *
 from symbolic.lexer import SymbolicLexer, Symto
 from symbolic.formatter import PrettyString
+from symbolic.algorithm import Algorithm
+from builtins import AssertionError
 
 class Annotateable:
-    def __init__(self, userAnnotations, sysAnnotations):
+    def __init__(self, userAnnotations, sysAnnotations, semantic):
         self.userAnnotations = userAnnotations
         self.sysAnnotations = sysAnnotations
+        self.semantic = semantic
 
 class Named(Annotateable):
     def __init__(self, userAnnotations, sysAnnotations, semantic, token):
-        super().__init__(userAnnotations, sysAnnotations)
-        self.semantic = semantic
+        super().__init__(userAnnotations, sysAnnotations, semantic)
         self.token = token
 
-class Statement(Annotateable): pass
+class TemplateObject(Named):
+    def __init__(self, userAnnotations, sysAnnotations, semantic, token, body):
+        super().__init__(userAnnotations, sysAnnotations, semantic, token)
+        self.body = body
 
-class Expression(Statement):
-    def __init__(self, userAnnotations, sysAnnotations, tokens):
-        super().__init__(userAnnotations, sysAnnotations)
-        self.tokens = tokens
+class Variable:
+    def __init__(self, typename):
+        self.typename = typename
+
+class InstructionKind(Enum):
+    Expression = 0
+    If = 1
+    For = 2
+    While = 3
+    Do = 4
+
+class Instruction(Annotateable):
+    def __init__(self, userAnnotations, sysAnnotations, semantic, kind, expression=None, instructions=None, forInit=None, forWhile=None, forStep=None):
+        super().__init__(userAnnotations, sysAnnotations, semantic)
+        self.kind = kind
+        self.expression = expression
+        self.instructions = instructions
+        self.forInit = forInit
+        self.forWhile = forWhile
+        self.forStep = forStep
 
     @staticmethod
-    def try_parse(parser, tokenEndDelims):
-        parser.push_annotations()
-        tokens = []
-        while not any(parser.token.text in delim for delim in endDelims):
-            tokens.append(parser.token)
-        return Expression(parser.pop_annotations(), tokens)
+    def parse(parser, args):
+        userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
+        
+        if parser.match('if'):
+            tokens = parser.fetch_block('(', ')')
+            semantic = Annotation.parse_semantic(parser)
+            expression = Expression(userAnnotations, sysAnnotations, tokens)
+            if expression is None:
+                raise MissingExpressionError()
+            parser.expect('{')
+            instructions = parser.gather_objects([Instruction], args=['}'])
+            parser.expect('}')
+            return Instruction(userAnnotations, sysAnnotations, semantic, InstructionKind.If, expression=expression, instructions=instructions)
+        else:
+            if parser.token.text in args:
+                return None
+
+            expression = parser.try_parse_any([Expression], [';'])
+            if expression is None:
+                return None
+
+            parser.match(';')
+
+            # Forward annotations
+            expression.userAnnotations = userAnnotations
+            expression.sysAnnotations = sysAnnotations
+
+            return Instruction(None, None, None, InstructionKind.Expression, expression=expression) 
+
+class ExpressionAtomKind(Enum):
+    Var = 0
+    Number = 1
+    FunctionBegin = 2
+    FunctionEnd = 3
+    ArrayBegin = 4
+    ArrayEnd = 5
+    TemplateBegin = 6
+    TemplateEnd = 6
+    UnaryOp = 7
+    BinaryOp = 8
+    Delimiter = 9
+
+class ExpressionAtom:
+    def __init__(self, token, kind):
+        self.token = token
+        self.kind = kind
+
+class Expression(Annotateable):
+    def __init__(self, userAnnotations, sysAnnotations, tokens):
+        super().__init__(userAnnotations, sysAnnotations, None)
+        self.tokens = tokens
+        postfixTokens = Expression.to_postfix(tokens)
+        self.tree = Expression.to_ast(postfixTokens)
+
+    @staticmethod
+    def to_postfix(tokens):
+        class State(Enum):
+            Default = 0
+            Function = 1
+            Array = 2
+            Template = 3
+            Tuple = 4
+
+        out, stack, states = [], [], [State.Default]
+        isNextOpenParenFunction = False
+        # K=2 lookahead
+        for i, t in enumerate(tokens):
+            prev = tokens[i-1] if i > 0 else None
+            t1 = tokens[i+1] if i < len(tokens) - 1 else None
+            t2 = tokens[i+2] if i < len(tokens) - 2 else None
+
+            if t.isTerminal:
+                kind = ExpressionAtomKind.Number if t.isNumber else ExpressionAtomKind.Var
+                # K=1 lookahead
+                if t1 is not None:
+                    # Function, Template
+                    if t.kind == Token.Name:
+                        if t1.text == '(':
+                            kind = ExpressionAtomKind.FunctionBegin
+                            states.append(State.Function)
+                            stack.append(ExpressionAtom(t, ExpressionAtomKind.FunctionEnd))
+                            isNextOpenParenFunction = True
+                        elif t1.text == '<':
+                            # K=2 lookahead
+                            if (not t2 is None) and (t2.kind == Token.String):
+                                kind = ExpressionAtomKind.TemplateBegin
+                                states.append(State.Template)
+                                stack.append(ExpressionAtom(t, ExpressionAtomKind.TemplateEnd))
+
+                out.append(ExpressionAtom(t, kind))
+            elif t.text == '[':
+                # If this is an Array the last output token has to be a terminal, a function, an array or a template
+                if not out:
+                    raise MissingArrayTypeError(t)
+
+                if not out[-1].kind in [ExpressionAtomKind.Var, ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.ArrayBegin, ExpressionAtomKind.ArrayEnd, ExpressionAtomKind.TemplateBegin, ExpressionAtomKind.TemplateEnd]:
+                    raise InvalidArrayTypeError(out[-1].token)
+
+                if (not prev.text in SymbolicLexer.closeBrackets) and (prev.kind != Token.Name):
+                    raise InvalidArrayTypeError(out[-1].token)
+
+                out.append(ExpressionAtom(t, ExpressionAtomKind.ArrayBegin));
+                states.append(State.Array)
+                stack.append(ExpressionAtom(t, ExpressionAtomKind.ArrayEnd))
+            elif t.isOpenBracket:
+                if t.text == '(':
+                    # Is this a potential tuple?
+                    if not isNextOpenParenFunction:
+                        states.append(State.Tuple)
+                    else:
+                        isNextOpenParenFunction = False
+                stack.append(ExpressionAtom(t, -1))
+            elif t.text == ',':
+                # Tuples > 1 are not allowed
+                if states[-1] == State.Tuple:
+                    raise InvalidExpressionError(t)
+
+                # Keep track of how many ops were added
+                if Algorithm.pop_while(stack, lambda atom: not atom.token.isOpenBracket, lambda atom: out.append(atom)):
+                    raise MissingBracketsError(t)
+                
+                # If there were no ops added, the comma might be invalid if this is not an unbounded array
+                if states[-1] != State.Array:
+                    if out[-1].kind in [ExpressionAtomKind.Delimiter, ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.TemplateBegin]:
+                        raise InvalidExpressionError(t)
+
+                # Add comma as delimiter
+                out.append(ExpressionAtom(t, ExpressionAtomKind.Delimiter))
+            elif (t.isCloseBracket and t.text != '>') or (t.text == '>' and states[-1] == State.Template): # Special case for template >
+                # Keep track of how many parameters were added
+                if Algorithm.pop_while(stack, lambda atom: not atom.token.text == t.matchingOpenBracket, lambda atom: out.append(atom)):
+                    raise MissingBracketsError(t)
+
+                # Put array symbol on output stream
+                if t.text == ']':
+                    out.append(ExpressionAtom(t, ExpressionAtomKind.ArrayEnd))
+
+                # Pop open bracket and state
+                stack.pop()
+                states.pop()
+
+                if stack:
+                    # Pop function, template
+                    if stack[-1].kind in [ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.TemplateEnd]:
+                        out.append(stack[-1])
+                        stack.pop()
+            elif t.kind is Operator:
+                # Assume this is a unary op
+                kind = ExpressionAtomKind.UnaryOp if (t.isUnaryOp and prev is None) or (prev is not None and prev.text != ')' and not prev.isTerminal) else ExpressionAtomKind.BinaryOp
+                o1 = t
+                
+                # Binary operator
+                if kind == ExpressionAtomKind.BinaryOp:
+                    Algorithm.pop_while(stack, lambda o2: (o2.token.isOp) and ((o1.isBinaryLeftAssociative and o1.binaryPrecedence > o2.token.binaryPrecedence) or (o1.isBinaryRightAssociative and o1.binaryPrecedence >= o2.token.binaryPrecedence)), lambda o2: out.append(o2))
+                
+                stack.append(ExpressionAtom(o1, kind))
+            else:
+                raise InvalidExpressionError(t)
+
+        # Remaining tokens to output
+        if not Algorithm.pop_while(stack, lambda atom: not atom.token.text == '(', lambda atom: out.append(atom)):
+            raise MissingBracketsError(stack[-1].token)
+
+        return out
+
+    @staticmethod
+    def to_ast(postfix):
+        return None
+
+    @staticmethod
+    def parse(parser, args):
+        userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
+        tokens = parser.until_any(args)
+        return Expression(userAnnotations, sysAnnotations, tokens)
 
 class Namespace(Named):
     def __init__(self, userAnnotations, sysAnnotations, semantic, token):
@@ -42,14 +232,14 @@ class Namespace(Named):
             raise UnsupportedSystemAnnotationsError(self.token, 'Namespace', sysAnnotations)
 
     @staticmethod
-    def parse(parser):
+    def parse(parser, args):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         if not parser.match('namespace'):
             return None
 
         token = parser.expect_kind(Token.Name)
-        semantic = parser.expect_kind(Token.Name) if parser.match(':') else None
+        semantic = Annotation.parse_semantic(parser)
 
         parser.expect('{')
         
@@ -100,7 +290,7 @@ class Parameter(Named):
         self.isRef = isRef
 
     @staticmethod
-    def parse(parser):
+    def parse(parser, args):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         isRef = parser.match('ref')
@@ -110,7 +300,7 @@ class Parameter(Named):
             return None
 
         name = parser.match_kind(Token.Name)
-        semantic = parser.expect_kind(Token.Name) if parser.match(':') else None
+        semantic = Annotation.parse_semantic(parser)
 
         # Handle unnamed parameter
         if name is None:
@@ -120,15 +310,14 @@ class Parameter(Named):
 
         return Parameter(userAnnotations, sysAnnotations, semantic, name, typename, isRef)
 
-class Function(Named):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, token, kind, returnTypename, extensionTargetName, parameters, body):
-        super().__init__(userAnnotations, sysAnnotations, semantic, token)
+class Function(TemplateObject):
+    def __init__(self, userAnnotations, sysAnnotations, semantic, token, body, kind, returnTypename, extensionTargetName, parameters):
+        super().__init__(userAnnotations, sysAnnotations, semantic, token, body)
         self.kind = kind
         self.returnTypename = returnTypename
         self.extensionTargetName = extensionTargetName
         self.extensionName = '.'.join([t.text for t in extensionTargetName] + [token.text]) if extensionTargetName is not None else None
         self.parameters = parameters
-        self.body = body
         self.name = token.text
 
         if kind == FunctionKind.Extension:
@@ -188,31 +377,31 @@ class Function(Named):
         else:
             parameters = []
 
-        semantic = parser.expect_kind(Token.Name) if parser.match(':') else None
+        semantic = Annotation.parse_semantic(parser)
 
         body = None
         if isTemplate:
             body = parser.fetch_block('{', '}')
         else:
             parser.expect('{')
+
+            # Parse instructions
+            instructions = parser.gather_objects([Instruction], args=['}'])
+
             parser.expect('}')
         parser.match(';')
         
         # Register the function with the current namespace
-        func = Function(userAnnotations, sysAnnotations, semantic, name, kind, returnTypename, extensionTargetName, parameters, body)
+        func = Function(userAnnotations, sysAnnotations, semantic, name, body, kind, returnTypename, extensionTargetName, parameters)
         parser.namespaceStack[-1].objects.append(func)
 
         return func
 
     @staticmethod
-    def parse(parser):
+    def parse(parser, args):
         return Function.parse_template(parser, False)
 
     def generate_from_template(self, prettyString):
-        # Emit the annotations
-        prettyString += Annotation.usrlist_to_str(self.userAnnotations)
-        prettyString += Annotation.syslist_to_str(self.sysAnnotations)
-
         # ReturnType
         prettyString += str(self.returnTypename)
 
@@ -246,23 +435,6 @@ class Function(Named):
                     prettyString += '\n'
             prettyString.indentLevel -= 1
             prettyString += ')'
-        prettyString += ' {'
-        prettyString += '\n'
-        prettyString.indentLevel += 1
-        for t in self.body:
-            prettyString += t.text
-
-            # Change indentation
-            if t.text == '{':
-                prettyString += '\n'
-                prettyString.indentLevel += 1
-            elif t.text == '}':
-                prettyString += '\n'
-                prettyString.indentLevel -= 1
-        prettyString += '\n'
-        prettyString.indentLevel -= 1
-        prettyString += '}'
-        prettyString += '\n'
 
 class Member(Named):
     def __init__(self, userAnnotations, sysAnnotations, semantic, token, typename):
@@ -273,14 +445,14 @@ class Member(Named):
             raise UnsupportedSystemAnnotationsError(self.token, 'Member', sysAnnotations)
 
     @staticmethod
-    def parse(parser):
+    def parse(parser, args):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         typename = Typename.try_parse()
         if typename is None:
             return None
 
         name = parser.expect_kind(Token.Name)
-        semantic = parser.expect_kind(Token.Name) if parser.match(':') else None
+        semantic = Annotation.parse_semantic(parser)
         
         parser.match(';')
 
@@ -288,7 +460,7 @@ class Member(Named):
 
 class MemberList:
     @staticmethod
-    def parse(parser):
+    def parse(parser, args):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         typename = Typename.try_parse(parser)
         if typename is None:
@@ -301,7 +473,7 @@ class MemberList:
                 break
             names.append(name)
 
-        semantic = parser.expect_kind(Token.Name) if parser.match(':') else None
+        semantic = Annotation.parse_semantic(parser)
 
         parser.match(';')
         
@@ -311,11 +483,10 @@ class MemberList:
         
         return result
 
-class Struct(Named):
+class Struct(TemplateObject):
     def __init__(self, userAnnotations, sysAnnotations, semantic, token, members, body):
-        super().__init__(userAnnotations, sysAnnotations, semantic, token)
+        super().__init__(userAnnotations, sysAnnotations, semantic, token, body)
         self.members = members
-        self.body = body
 
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
             raise UnsupportedSystemAnnotationsError(self.token, 'Struct', sysAnnotations)
@@ -328,7 +499,7 @@ class Struct(Named):
             return None
 
         token = parser.expect_kind(Token.Name)
-        semantic = parser.expect_kind(Token.Name) if parser.match(':') else None
+        semantic = Annotation.parse_semantic(parser)
 
         members = []
         body = None
@@ -349,39 +520,54 @@ class Struct(Named):
         return struct
 
     @staticmethod
-    def parse(parser):
+    def parse(parser, args):
         return Struct.parse_template(parser, False)
 
-class Alias(Named):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, srcType, dstType):
-        super().__init__(userAnnotations, sysAnnotations, semantic, srcType)
-        self.srcType = srcType
-        self.dstType = dstType
+    def generate_from_template(self, prettyString):
+        prettyString += 'struct ' + self.token.text
+
+class Alias(TemplateObject):
+    def __init__(self, userAnnotations, sysAnnotations, semantic, token, body, targetType):
+        super().__init__(userAnnotations, sysAnnotations, semantic, token, body)
+        self.targetType = targetType
 
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
             raise UnsupportedSystemAnnotationsError(self.token, 'Alias', sysAnnotations)
 
     @staticmethod
-    def parse(parser):
+    def parse_template(parser, isTemplate):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         if not parser.match('using'):
             return None
 
-        srcType = Typename.parse(parser)
-        semantic = parser.expect_kind(Token.Name) if parser.match(':') else None
-        parser.expect('{')
-        dstType = Typename.parse(parser)
-        parser.expect('}')
-        
+        name = parser.expect_kind(Token.Name)
+        semantic = Annotation.parse_semantic(parser)
+        targetType = None
+        body = None
+        if isTemplate:
+            body = parser.fetch_block('{', '}')
+        else:
+            parser.expect('{')
+            targetType = Typename.parse(parser)
+            parser.expect('}')
+        parser.match(';')
+
         # Register the struct with the current namespace
-        alias = Alias(userAnnotations, sysAnnotations, semantic, srcType, dstType)
+        alias = Alias(userAnnotations, sysAnnotations, semantic, name, body, targetType)
         parser.namespaceStack[-1].objects.append(alias)
 
         return alias
 
+    @staticmethod
+    def parse(parser, args):
+        return Alias.parse_template(parser, False)
+
+    def generate_from_template(self, prettyString):
+        prettyString += 'using ' + self.token.text
+
 class Reference(Annotateable):
-    def __init__(self, userAnnotations, sysAnnotations, string):
-        super().__init__(userAnnotations, sysAnnotations)
+    def __init__(self, userAnnotations, sysAnnotations, semantic, string):
+        super().__init__(userAnnotations, sysAnnotations, semantic)
         self.string = string
 
         if sysAnnotations:
@@ -441,6 +627,10 @@ class Annotation:
             return None
 
     @staticmethod
+    def parse_semantic(parser):
+        return Annotation.parse_annotation_interior(parser) if parser.match(':') else None
+
+    @staticmethod
     def parse_annotations(parser):
         userAnnotations = []
         sysAnnotations = []
@@ -461,7 +651,7 @@ class Annotation:
 
     @staticmethod
     def sys_annotations():
-        return ['static', 'private', 'noconstructor', 'deprecate', 'copyreferences', 'unitprefix', 'unitsuffix', 'prefix', 'suffix']
+        return ['static', 'private', 'noconstructor', 'deprecate']
 
     @staticmethod
     def has(name, collection):
@@ -557,14 +747,14 @@ class TemplateParameter(Named):
         super().__init__(userAnnotations, sysAnnotations, semantic, token)
 
     @staticmethod
-    def parse(parser):
+    def parse(parser, args):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         name = parser.match_kind(Token.Name)
         if name is None:
             return None
 
-        semantic = parser.expect_kind(Token.Name) if parser.match(':') else None
+        semantic = Annotation.parse_semantic(parser)
 
         return TemplateParameter(userAnnotations, sysAnnotations, semantic, name)
 
@@ -577,26 +767,11 @@ class Template(Named):
         self.namespaceList.pop(0)
         self.references = references
 
-        if Annotation.is_not_compatible(['copyreferences', 'unitprefix', 'unitsuffix', 'prefix', 'suffix', 'private', 'deprecate'], sysAnnotations):
+        if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
             raise UnsupportedSystemAnnotationsError(self.token, 'Template', sysAnnotations)
-
-        Annotation.verify_annotation(self.sysAnnotations, 'unitprefix', [[Token.Literal.String]])
-        Annotation.verify_annotation(self.sysAnnotations, 'unitsuffix', [[Token.Literal.String]])
-        Annotation.verify_annotation(self.sysAnnotations,'prefix', [[Token.Literal.String]])
-        Annotation.verify_annotation(self.sysAnnotations,'suffix', [[Token.Literal.String]])
 
     def generate_translation_unit(self):
         result = PrettyString()
-
-        # References + Unitprefix
-        for annotation in self.sysAnnotations:
-            if annotation.token.text == 'copyreferences':
-                for ref in self.references:
-                    result += 'using {0};\n'.format(ref.string)
-            elif annotation.token.text == 'unitprefix':
-                result += '{0}\n'.format(annotation.args[0].text[1:-1])
-
-        result += '\n'
 
         # Namespace
         for namespace in self.namespaceList:
@@ -608,33 +783,34 @@ class Template(Named):
             result += ' {\n'
             result.indentLevel += 1
 
-        # Prefix
-        for annotation in self.sysAnnotations:
-            if annotation.token.text == 'prefix':
-                result += annotation.args[0].text[1:-1] + '\n'
+        # Emit the annotations
+        result += Annotation.usrlist_to_str(self.userAnnotations)
+        result += Annotation.syslist_to_str(self.sysAnnotations)
 
-        # Emit the object string
+        # Emit object header
         self.obj.generate_from_template(result)
 
-        # Suffix
-        for annotation in self.sysAnnotations:
-            if annotation.token.text == 'suffix':
-                result += annotation.args[0].text[1:-1] + '\n'
+        # Template body
+        if self.obj.semantic is not None:
+            result += ': ' + self.obj.semantic.text
+        result += ' {'
+        result += '\n'
+        result.indentLevel += 1
+        result.value += PrettyString.from_tokens(self.obj.body, self.obj.body[0].line) if len(self.obj.body) > 0 else 1
+        result += '\n'
+        result.indentLevel -= 1
+        result += '}'
+        result += '\n'
 
         # Close namespace
         for namespace in self.namespaceList:
             result.indentLevel -= 1
             result += "}\n"
 
-        # Unit suffix
-        for annotation in self.sysAnnotations:
-            if annotation.token.text == 'unitsuffix':
-                result += '{0}\n'.format(annotation.args[0].text[1:-1])
-
         return result.value.strip()
 
     @staticmethod
-    def parse(parser):
+    def parse(parser, args):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         if not parser.match('template'):
@@ -643,10 +819,10 @@ class Template(Named):
         parser.expect('<')
         parameters = parser.gather_objects([TemplateParameter], ',')
         parser.expect('>')
-        semantic = parser.expect_kind(Token.Name) if parser.match(':') else None
+        semantic = Annotation.parse_semantic(parser)
 
         # Deduce the template kind
-        templateClasses = [Struct, Function]
+        templateClasses = [Struct, Alias, Function]
         for c in templateClasses:
             parser.push_state()
             obj = c.parse_template(parser, True)
@@ -661,22 +837,5 @@ class Template(Named):
         # Register the template with the current namespace
         template = Template(userAnnotations, sysAnnotations, semantic, parameters, obj, list(parser.namespaceStack), list(parser.references))
         parser.namespaceStack[-1].objects.append(template)
-
-        # TEMPLATE TEST
-
-        # Convert the template to a translation unit
-        templateSource = template.generate_translation_unit()
-
-        # Substitution table
-        subs = {}
-        subs['LHS'] = 'LHSTest'
-        subs['RHS'] = 'RHSTest'
-        tokens = parser.lexer.tokenize(templateSource, subs)
-
-        # Dump pretty-formatted file
-        templateSub = PrettyString.from_tokens(tokens)
-
-        with io.open("D:\\test.txt", "w") as textFile:
-            print(templateSub, file=textFile)
 
         return template

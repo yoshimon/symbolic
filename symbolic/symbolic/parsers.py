@@ -33,7 +33,7 @@ class BaseParser:
 
     def advance(self):
         if self.is_eof():
-            raise UnexpectedEOFError(self.token)
+            raise UnexpectedEOFError()
 
         self.tokenIdx += 1
         if not self.is_eof():
@@ -42,9 +42,20 @@ class BaseParser:
             self.token = None
         return self.token
 
+    def back(self):
+        if self.tokenIdx == 0:
+            raise UnexpectedEOFError()
+
+        self.tokenIdx -= 1
+        if self.tokenIdx >= 0:
+            self.token = self.tokens[self.tokenIdx]
+        else:
+            self.token = None
+        return self.token
+
     def consume(self):
         if self.is_eof():
-            raise UnexpectedEOFError(self.token)
+            raise UnexpectedEOFError()
 
         token = self.token
         self.advance()
@@ -59,7 +70,7 @@ class BaseParser:
             self.advance()
         return success
 
-    def match_list(self, list):
+    def match_any(self, list):
         for val in list:
             token = self.token
             if self.match(val):
@@ -100,15 +111,26 @@ class BaseParser:
     def remove_state(self):
         return self.tokenStateStack.pop()
 
-    def fetch_until(self, endDelim):
+    def until_any(self, endDelims):
+        if not endDelims:
+            raise AssertionError()
+
         result = []
-        while not self.match(endDelim):
-            result.append(self.advance())
+        while not self.match_any(endDelims):
+            result.append(self.consume())
+        self.back()
         return result
 
-    def match_push_open_bracket(self, stack):
-        val = self.match_list(SymbolicLexer.openBrackets)
+    def match_push_any_open_bracket(self, stack):
+        val = self.match_any(SymbolicLexer.openBrackets)
         success = val is not None
+        if success:
+            stack.append(val)
+        return success
+
+    def match_push_open_bracket(self, stack, openBracket):
+        val = self.token
+        success = self.match(openBracket)
         if success:
             stack.append(val)
         return success
@@ -117,7 +139,7 @@ class BaseParser:
         if len(stack) == 0:
             return False
 
-        val = self.match_list(SymbolicLexer.closeBrackets)
+        val = self.match_any(SymbolicLexer.closeBrackets)
         
         if val is None:
             return False
@@ -130,16 +152,27 @@ class BaseParser:
             stack.pop()
         return success
 
+    def match_pop_close_bracket(self, stack, closeBracket):
+        if len(stack) == 0:
+            return False
+
+        val = self.token
+        success = self.match(closeBracket)
+        if success:
+            stack.pop()
+
+        return success
+
     def fetch_block(self, startDelim, endDelim):
         tokens = []
         if self.match(startDelim):
             bracketStack = []
-            while not self.match(endDelim) or len(bracketStack) > 0:
-                if self.match_push_open_bracket(bracketStack):
+            while len(bracketStack) > 0 or not self.match(endDelim):
+                if self.match_push_open_bracket(bracketStack, startDelim):
                     tokens.append(bracketStack[-1])
                 else:
                     bracket = self.token
-                    if self.match_pop_matching_close_bracket(bracketStack):
+                    if self.match_pop_close_bracket(bracketStack, endDelim):
                         tokens.append(bracket)
                     else:
                         tokens.append(self.consume())
@@ -152,14 +185,14 @@ class UnitParser(BaseParser):
         self.unitGraph = nx.DiGraph()
         self.unitGraph.add_node('$Global')
 
-    def try_parse_objects(self, classes):
+    def try_parse_any(self, classes, args):
         ''' Parses all object types in the supplied list. '''
         if self.is_eof():
             return None
 
         for c in classes:
             self.push_state()
-            o = c.parse(self)
+            o = c.parse(self, args)
             if not o is None:
                 self.remove_state()
                 return o
@@ -167,16 +200,16 @@ class UnitParser(BaseParser):
 
         return None
 
-    def gather_objects(self, classes, matchAfterSuccess = None):
+    def gather_objects(self, classes, matchAfterSuccess = None, args = []):
         result = []
         while True:
-           o = self.try_parse_objects(classes)
-           if o is None:
-               break
-           result.append(o)
-           if matchAfterSuccess is not None:
-               if not self.match(matchAfterSuccess):
-                   break
+            o = self.try_parse_any(classes, args)
+            if o is None:
+                break
+            result.append(o)
+            if matchAfterSuccess is not None:
+                if not self.match(matchAfterSuccess):
+                    break
         return result
 
     def gather_namespace_objects(self):
@@ -191,7 +224,7 @@ class UnitParser(BaseParser):
         while True:
             self.push_state()
             userAnnotations, sysAnnotations = Annotation.parse_annotations(self)
-            if not self.match('using'):
+            if not self.match('import'):
                 self.pop_state()
                 break
 
@@ -202,11 +235,12 @@ class UnitParser(BaseParser):
             while self.match('.'):
                 refTokens.append(self.expect_kind(Token.Name))
 
+            semantic = Annotation.parse_semantic(self)
             self.expect(';')
 
             refStrList = [t.text for t in refTokens]
             refString = '.'.join(refStrList)
-            ref = Reference(userAnnotations, sysAnnotations, refString)
+            ref = Reference(userAnnotations, sysAnnotations, semantic, refString)
             references.append(ref)
 
         return references

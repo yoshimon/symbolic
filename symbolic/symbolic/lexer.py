@@ -17,6 +17,49 @@ class Symto:
         self.line = line
         self.column = column
         self.columnEnd = column + len(text)
+        self.isTerminal = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex, Token.Name, Token.String]
+        self.isNumber = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex]
+        
+        # Op (for convenience)
+        self.isOp = kind == Token.Operator
+        if self.isOp:
+            self.isBinaryOp = text in Ops.binary
+            if self.isBinaryOp:
+                op = Ops.binary[text]
+                self.isBinaryLeftAssociative = op[1]
+                self.isBinaryRightAssociative = not self.isBinaryLeftAssociative
+                self.binaryPrecedence = op[0]
+            
+            self.isUnaryOp = text in Ops.unary
+            if self.isUnaryOp:
+                op = Ops.unary[text]
+                self.isUnaryLeftAssociative = op[1]
+                self.isUnaryRightAssociative = not self.isUnaryLeftAssociative
+                self.unaryPrecedence = op[0]
+
+        self.isOpenBracket = text in SymbolicLexer.openBrackets
+        if self.isOpenBracket:
+            self.matchingCloseBracket = SymbolicLexer.closeBrackets[SymbolicLexer.openBrackets.index(text)]
+
+        self.isCloseBracket = text in SymbolicLexer.closeBrackets
+        if self.isCloseBracket:
+            self.matchingOpenBracket = SymbolicLexer.openBrackets[SymbolicLexer.closeBrackets.index(text)]
+
+    @staticmethod
+    def is_left_associtative(op):
+        return (definitions[op][1])
+
+    @staticmethod
+    def is_right_associtative(op):
+        return not is_left_associtative(op)
+
+    @staticmethod
+    def precedence(op):
+        return definitions[op][0]
+
+    @staticmethod
+    def has_unary(op):
+        return definitions[op][0]
 
 class TokenValue:
     def __init__(self, fileName, text, line, column):
@@ -47,9 +90,10 @@ class SymbolicLexer(RegexLexer):
             (r'(\d+\.\d*|\.\d+|\d+)[eE][+-]?\d+', Number.Float),
             (r'(\d+\.\d*|\.\d+|\d+[fF])[fF]?', Number.Float),
             (r'0x[0-9a-fA-F]+', Number.Hex),
+            (r'0[a-zA-Z]+', Error),
             (r'\d+', Number.Integer),
             (r'(<<|<<=|>>|>>=|~=|\|=|&=|^=|\+=|\*=|%=|-=|==|!=|<=|>=|&&|\|\|)', Operator),
-            (r'[@.~!%^&*+=|?:<>/-\[\]]', Operator),
+            (r'[@.~!%^&*+-=|?:<>/\[\]]', Operator),
             (r"'[^\']*'", String),
             (r'"[^\"]*"', String),
             (r'[,;(){}\\]', Punctuation),
@@ -101,3 +145,59 @@ class SymbolicLexer(RegexLexer):
         self.subs = None
         
         return actualTokens
+
+class Ops:
+    unary = {
+            # Name: Precedence, Left-associative
+            '+': [2, False],
+            '-': [2, False],
+            '!': [2, False],
+            '~': [2, False],
+            '*': [2, False],
+            '&': [2, False],
+        }
+
+    binary = {
+            # Name: Precedence, Left-associative
+            '.': [1, True],
+
+            '*': [3, True],
+            '/': [3, True],
+            '%': [3, True],
+
+            '+': [4, True],
+            '-': [4, True],
+
+            '<<': [5, True],
+            '>>': [5, True],
+
+            '<': [6, True],
+            '<=': [6, True],
+            '>': [6, True],
+            '>=': [6, True],
+
+            '==': [7, True],
+            '!=': [7, True],
+
+            '&': [8, True],
+            
+            '^': [9, True],
+            
+            '|': [10, True],
+            
+            '&&': [11, True],
+            
+            '||': [12, True],
+            
+            '=': [14, False],
+            '+=': [14, False],
+            '-=': [14, False],
+            '*=': [14, False],
+            '/=': [14, False],
+            '%=': [14, False],
+            '<<=': [14, False],
+            '>>=': [14, False],
+            '&=': [14, False],
+            '^=': [14, False],
+            '|=': [14, False],   
+        }

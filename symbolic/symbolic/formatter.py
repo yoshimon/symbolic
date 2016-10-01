@@ -46,13 +46,11 @@ class PrettyString:
         self.value += newText
 
     @staticmethod
-    def from_tokens(tokens):
+    def from_tokens(tokens, firstLine = 1):
         result = ''
-        previousLine = 1
+        previousLine = firstLine
         previousColumnEnd = 1
         for t in tokens:
-
-            # Break line if token indicates new line
             if t.line != previousLine:
                 result += '\n' * (t.line - previousLine)
                 previousColumnEnd = 1

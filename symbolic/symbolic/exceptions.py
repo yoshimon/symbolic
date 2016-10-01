@@ -13,7 +13,7 @@ class UnexpectedTokenError(SymbolicError):
     def __str__(self):
         return super().__str__() + "Found {0} but expected {1}.".format(repr(self.found), repr(self.expected))
 
-class UnexpectedEOFError(SymbolicError):
+class UnexpectedEOFError(Exception):
     def __str__(self):
         return super().__str__() + "Unexpected EOF."
 
@@ -56,3 +56,23 @@ class MissingAnnotationArgsError(SymbolicError):
 class MissingReturnTypeError(SymbolicError):
     def __str__(self):
         return super().__str__() + "Missing return type."
+
+class MissingExpressionError(SymbolicError):
+    def __str__(self):
+        return super().__str__() + "Missing expression."
+
+class MissingBracketsError(SymbolicError):
+    def __str__(self):
+        return super().__str__() + "Missing brackets."
+
+class InvalidExpressionError(SymbolicError):
+    def __str__(self):
+        return super().__str__() + "Invalid expression."
+
+class MissingArrayTypeError(SymbolicError):
+    def __str__(self):
+        return super().__str__() + "Missing array accessor type."
+
+class InvalidArrayTypeError(SymbolicError):
+    def __str__(self):
+        return super().__str__() + "Invalid array accessor type."
