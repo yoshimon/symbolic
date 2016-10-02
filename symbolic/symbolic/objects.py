@@ -32,13 +32,17 @@ class Variable:
 
 class InstructionKind(Enum):
     Expression = 0
-    # Control flow statements have to start at 1
-    If = 1
-    For = 2
-    While = 3
-    Do = 4
-    Elif = 5
-    Else = 6
+    # Jmps
+    Break = 1
+    Return = 2
+    Continue = 3
+    # If has to be first here
+    If = 4
+    For = 5
+    While = 6
+    Do = 7
+    Elif = 8
+    Else = 9
 
 class Instruction(Annotateable):
     def __init__(self, userAnnotations, sysAnnotations, semantic, kind, expression=None, instructions=None, forInit=None, forWhile=None, forStep=None):
@@ -51,34 +55,83 @@ class Instruction(Annotateable):
         self.forStep = forStep
 
     @staticmethod
+    def expect_expression(parser, endDelim):
+        expression = Expression.parse(parser, [endDelim])
+        if (expression is None) or (not expression.postfixTokens):
+            raise MissingExpressionError(parser.token)
+        parser.expect(endDelim)
+        return expression
+
+    @staticmethod
+    def parse_parenthesized_expression(parser):
+        parser.expect('(')
+        expression = Instruction.expect_expression(parser, ')')
+        semantic = Annotation.parse_semantic(parser)
+        return expression, semantic
+
+    @staticmethod
+    def parse_instruction_body(parser):
+        parser.expect('{')
+        instructions = parser.gather_objects([Instruction], args=['}'])
+        parser.expect('}')
+        return instructions
+
+    @staticmethod
     def parse(parser, args):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         
         # Control flow statements
-        ikMap = [(e.name.lower(), e) for e in InstructionKind][1:] # Ignore Expression
+        ikMap = [(e.name.lower(), e) for e in InstructionKind][InstructionKind.If.value:] # Ignore Expression
         kind = parser.match_map(InstructionKind.Expression, ikMap)
 
         if kind != InstructionKind.Expression:
-            tokens = parser.fetch_block('(', ')')
-            semantic = Annotation.parse_semantic(parser)
-            expression = Expression(userAnnotations, sysAnnotations, tokens)
-            if expression is None:
-                raise MissingExpressionError()
-            parser.expect('{')
-            instructions = parser.gather_objects([Instruction], args=['}'])
-            parser.expect('}')
-            return Instruction(userAnnotations, sysAnnotations, semantic, kind, expression=expression, instructions=instructions)
+            if kind not in [InstructionKind.Do, InstructionKind.For, InstructionKind.Else]:
+                # KEYWORD(EXPRESSION)
+                expression, semantic = Instruction.parse_parenthesized_expression(parser)
+                instructions = Instruction.parse_instruction_body(parser)
+                return Instruction(userAnnotations, sysAnnotations, semantic, kind, expression=expression, instructions=instructions)
+            elif kind == InstructionKind.Do:
+                # DO { ... } WHILE(EXPRESSION)
+                instructions = Instruction.parse_instruction_body(parser)
+                parser.expect('while')
+                expression, semantic = Instruction.parse_parenthesized_expression(parser)
+                return Instruction(userAnnotations, sysAnnotations, semantic, kind, expression=expression, instructions=instructions)
+            elif kind == InstructionKind.For:
+                # FOR(INIT_EXPR, INIT_EXPR; COND, COND; STEP, STEP)
+                parser.expect('(')
+                forInit = parser.gather_objects([Expression], ',', args=[',', ';'])
+                parser.expect(';')
+                forWhile = parser.gather_objects([Expression], ',', args=[',', ';'])
+                parser.expect(';')
+                forStep = parser.gather_objects([Expression], ',', args=[',', ')'])
+                parser.expect(')')
+                semantic = Annotation.parse_semantic(parser)
+                instructions = Instruction.parse_instruction_body(parser)
+                return Instruction(userAnnotations, sysAnnotations, semantic, kind, instructions=instructions, forInit=forInit, forWhile=forWhile, forStep=forStep)
+            elif kind == InstructionKind.Else:
+                # ELSE { ... }
+                semantic = Annotation.parse_semantic(parser)
+                instructions = Instruction.parse_instruction_body(parser)
+                return Instruction(userAnnotations, sysAnnotations, semantic, kind, instructions=instructions)
+            else:
+                raise DevError(parser.token)
         else:
+            # Early-out if the current token is one of the end delimiters
             if parser.token.text in args:
                 return None
 
-            expression = parser.try_parse_any([Expression], [';', '{']) # Disambiguation with nested functions
-            if expression is None:
+            ikMap = [(e.name.lower(), e) for e in InstructionKind][InstructionKind.Break.value:InstructionKind.If.value]
+            kind = parser.match_map(InstructionKind.Expression, ikMap)
+
+            if kind in [InstructionKind.Expression, InstructionKind.Return]:
+                expression = parser.try_parse_any([Expression], [';', '{']) # Disambiguation with nested functions
+                if expression is None:
+                    return None
+
+            if parser.match('{'): # Disambiguation with nested functions
                 return None
 
-            if not parser.match(';'):
-                if parser.match('{'): # Disambiguation with nested functions
-                    return None
+            parser.expect(';')
 
             # Forward annotations
             expression.userAnnotations = userAnnotations
@@ -108,8 +161,8 @@ class Expression(Annotateable):
     def __init__(self, userAnnotations, sysAnnotations, tokens):
         super().__init__(userAnnotations, sysAnnotations, None)
         self.tokens = tokens
-        postfixTokens = Expression.to_postfix(tokens)
-        self.tree = Expression.to_ast(postfixTokens)
+        self.postfixTokens = Expression.to_postfix(tokens)
+        self.tree = Expression.to_ast(self.postfixTokens)
 
     @staticmethod
     def to_postfix(tokens):

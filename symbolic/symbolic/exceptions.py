@@ -5,6 +5,10 @@ class SymbolicError(Exception):
     def __str__(self):
         return "{0} @ ({1}, {2}): ".format(repr(self.token.fileName), self.token.line, self.token.column)
 
+class DevError(Exception):
+    def __str__(self):
+        return super().__str__() + "Developer error."
+
 class UnexpectedTokenError(SymbolicError):
     def __init__(self, token, expected, found):
         super().__init__(token)
