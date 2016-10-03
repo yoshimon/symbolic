@@ -42,6 +42,9 @@ class BaseParser:
             self.token = None
         return self.token
 
+    def can_back(self):
+        return self.tokenIdx > 0
+
     def back(self):
         if self.tokenIdx == 0:
             raise UnexpectedEOFError()
@@ -85,17 +88,25 @@ class BaseParser:
 
         return default
 
+    def peek_kind(self, tokenType):
+        return self.peek_kinds([tokenType])
+
+    def peek_kinds(self, tokenTypes):
+        token = self.token
+        success = token.kind in tokenTypes
+        if success:
+            return token
+        else:
+            return None
+
     def match_kind(self, tokenType):
         return self.match_kinds([tokenType])
 
     def match_kinds(self, tokenTypes):
-        token = self.token
-        success = token.kind in tokenTypes
-        if success:
+        token = self.peek_kinds(tokenTypes)
+        if token is not None:
             self.advance()
-            return token
-        else:
-            return None
+        return token
 
     def expect(self, val):
         if not self.match(val):
@@ -122,16 +133,33 @@ class BaseParser:
         if not endDelims:
             raise AssertionError()
 
+        bracketStack = []
         result = []
-        while not self.match_any(endDelims):
-            result.append(self.consume())
+        while len(bracketStack) > 0 or not self.match_any(endDelims):
+            if self.match_push_any_open_bracket(bracketStack):
+                result.append(bracketStack[-1])
+            else:
+                bracket = self.token
+                if self.match_pop_matching_close_bracket(bracketStack):
+                    result.append(bracket)
+                else:
+                    result.append(self.consume())
+
+        # Dont include the end delimiter
         self.back()
+
         return result
 
     def match_push_any_open_bracket(self, stack):
         val = self.match_any(SymbolicLexer.openBrackets)
         success = val is not None
         if success:
+            # Make sure < operators are not confused with template brackets
+            if val.text == '<':
+                if not self.peek_kind(Token.Literal.String):
+                    self.back()
+                    return False
+
             stack.append(val)
         return success
 
@@ -142,14 +170,33 @@ class BaseParser:
             stack.append(val)
         return success
 
+    def was_previous_match_kind(self, kind):
+        if not self.can_back():
+            return False
+
+        self.back()
+        success = self.match_kind(kind)
+        if not success:
+            self.consume()
+        return success
+
     def match_pop_matching_close_bracket(self, stack):
         if len(stack) == 0:
             return False
+
+        # Template disambiguation
+        wasPreviousString = self.was_previous_match_kind(Token.Literal.String)
 
         val = self.match_any(SymbolicLexer.closeBrackets)
         
         if val is None:
             return False
+
+        # Make sure > operators are not confused with template brackets
+        if val.text == '>':
+            if not wasPreviousString:
+                self.back()
+                return False
 
         # The indices into both tables have to match
         i = SymbolicLexer.openBrackets.index(stack[-1].text)

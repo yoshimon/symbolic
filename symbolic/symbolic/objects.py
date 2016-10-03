@@ -114,7 +114,7 @@ class Instruction(Annotateable):
                 instructions = Instruction.parse_instruction_body(parser)
                 return Instruction(userAnnotations, sysAnnotations, semantic, kind, instructions=instructions)
             else:
-                raise DevError(parser.token)
+                raise DevError()
         else:
             # Early-out if the current token is one of the end delimiters
             if parser.token.text in args:
@@ -147,22 +147,28 @@ class ExpressionAtomKind(Enum):
     ArrayBegin = 4
     ArrayEnd = 5
     TemplateBegin = 6
-    TemplateEnd = 6
-    UnaryOp = 7
-    BinaryOp = 8
-    Delimiter = 9
+    TemplateEnd = 7
+    UnaryOp = 8
+    BinaryOp = 9
+    Delimiter = 10
 
 class ExpressionAtom:
     def __init__(self, token, kind):
         self.token = token
         self.kind = kind
 
+class ExpressionAST:
+    def __init__(self, atom, parent, children=[]):
+        self.atom = atom
+        self.parent = parent
+        self.children = children
+
 class Expression(Annotateable):
     def __init__(self, userAnnotations, sysAnnotations, tokens):
         super().__init__(userAnnotations, sysAnnotations, None)
         self.tokens = tokens
-        self.postfixTokens = Expression.to_postfix(tokens)
-        self.tree = Expression.to_ast(self.postfixTokens)
+        self.postfixAtoms = Expression.to_postfix(tokens)
+        self.tree = Expression.to_ast(self.postfixAtoms)
 
     @staticmethod
     def to_postfix(tokens):
@@ -201,7 +207,7 @@ class Expression(Annotateable):
                             isNextOpenParenFunction = True
                         elif t1.text == '<':
                             # K=2 lookahead
-                            if (not t2 is None) and (t2.kind == Token.String):
+                            if (not t2 is None) and (t2.kind == Token.Literal.String):
                                 kind = ExpressionAtomKind.TemplateBegin
                                 states.append(State.Template)
                                 stack.append(ExpressionAtom(t, ExpressionAtomKind.TemplateEnd))
@@ -222,17 +228,9 @@ class Expression(Annotateable):
                     if (not prev.text in SymbolicLexer.closeBrackets) and (prev.kind != Token.Name):
                         raise InvalidArrayTypeError(out[-1].token)
 
-                    out.append(ExpressionAtom(t, ExpressionAtomKind.ArrayBegin));
+                    out.append(ExpressionAtom(t, ExpressionAtomKind.ArrayBegin))
                     states.append(State.Array)
                     stack.append(ExpressionAtom(t, ExpressionAtomKind.ArrayEnd))
-                elif t.isOpenBracket:
-                    if t.text == '(':
-                        # Is this a potential tuple?
-                        if not isNextOpenParenFunction:
-                            states.append(State.Tuple)
-                        else:
-                            isNextOpenParenFunction = False
-                    stack.append(ExpressionAtom(t, -1))
                 elif t.text == ',':
                     # Tuples > 1 are not allowed
                     if states[-1] == State.Tuple:
@@ -249,6 +247,14 @@ class Expression(Annotateable):
 
                     # Add comma as delimiter
                     out.append(ExpressionAtom(t, ExpressionAtomKind.Delimiter))
+                elif (t.isOpenBracket and t.text != '<') or (t.text == '<' and states[-1] == State.Template):
+                    if t.text == '(':
+                        # Is this a potential tuple?
+                        if not isNextOpenParenFunction:
+                            states.append(State.Tuple)
+                        else:
+                            isNextOpenParenFunction = False
+                    stack.append(ExpressionAtom(t, -1))
                 elif (t.isCloseBracket and t.text != '>') or (t.text == '>' and states[-1] == State.Template): # Special case for template >
                     # Keep track of how many parameters were added
                     if Algorithm.pop_while(stack, lambda atom: not atom.token.text == t.matchingOpenBracket, lambda atom: out.append(atom)):
@@ -287,8 +293,79 @@ class Expression(Annotateable):
         return out
 
     @staticmethod
-    def to_ast(postfix):
-        return None
+    def to_ast(postfixAtoms):
+        argCount = 0
+        argCountStack = []
+        argStack = []
+        parent = None
+
+        for atom in postfixAtoms:
+            root = ExpressionAST(atom, parent)
+
+            if atom.kind in [ExpressionAtomKind.Var, ExpressionAtomKind.Number]:
+                argCount += 1 if argCount == 0 else 0
+                argStack.append(root)
+            elif atom.kind in [ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.ArrayBegin, ExpressionAtomKind.TemplateBegin]:
+                argCount += 1 if argCount == 0 else 0
+                argCountStack.append(argCount)
+                argCount = 0
+                argStack.append(root)
+                parent = root
+            elif atom.kind in [ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.ArrayEnd, ExpressionAtomKind.TemplateEnd]:
+                numArgs = argCount+1
+                if len(argStack) < numArgs:
+                    raise InvalidExpressionError(atom.token)
+
+                args = list(argStack[-numArgs:])
+
+                # Replace root (End) with Begin
+                root = args[0] # Begin
+
+                args = args[1:] # Pop Begin
+                argStack = argStack[:-numArgs]
+                root.children = args
+                argStack.append(root)
+                parent = root.parent
+
+                # Restore argument count
+                argCount = argCountStack[-1]
+                argCountStack.pop()
+            elif atom.kind == ExpressionAtomKind.UnaryOp:
+                if len(argStack) < 1:
+                    raise InvalidExpressionError(atom.token)
+
+                argCount += 1 if argCount == 0 else 0
+                child = argStack[-1]
+                argStack = argStack[:-1]
+                root.children = [child]
+                argStack.append(root)
+                parent = root.parent
+            elif atom.kind == ExpressionAtomKind.BinaryOp:
+                if len(argStack) < 2:
+                    raise InvalidExpressionError(atom.token)
+
+                argCount += 1 if argCount == 0 else 0
+                lhs = argStack[-2]
+                rhs = argStack[-1]
+                argStack = argStack[:-2]
+                root.children = [lhs, rhs]
+                argStack.append(root)
+                parent = root.parent
+            elif atom.kind == ExpressionAtomKind.Delimiter:
+                argCount += 1 if argCount > 0 else 2
+            else:
+                raise DevError()
+
+        # Empty expression
+        if not argStack:
+            return None
+
+        # Invalid expression
+        if len(argStack) > 1:
+            raise InvalidExpressionError(argStack[0].atom.token)
+
+        # Just right! :)
+        return argStack[0]
 
     @staticmethod
     def parse(parser, args):
@@ -770,7 +847,7 @@ class Typename:
         templateArgs = []
         if parser.match('<'):
             while True:
-                token = parser.match_kind(Token.String)
+                token = parser.match_kind(Token.Literal.String)
                 if token is None:
                     break
                 templateArgs += [token]

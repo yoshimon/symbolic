@@ -17,7 +17,7 @@ class Symto:
         self.line = line
         self.column = column
         self.columnEnd = column + len(text)
-        self.isTerminal = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex, Token.Name, Token.String]
+        self.isTerminal = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex, Token.Name, Token.Literal.String]
         self.isNumber = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex]
         
         # Op (for convenience)
