@@ -123,19 +123,20 @@ class Instruction(Annotateable):
             ikMap = [(e.name.lower(), e) for e in InstructionKind][InstructionKind.Break.value:InstructionKind.If.value]
             kind = parser.match_map(InstructionKind.Expression, ikMap)
 
+            expression = None
             if kind in [InstructionKind.Expression, InstructionKind.Return]:
                 expression = parser.try_parse_any([Expression], [';', '{']) # Disambiguation with nested functions
                 if expression is None:
                     return None
 
+                # Forward annotations
+                expression.userAnnotations = userAnnotations
+                expression.sysAnnotations = sysAnnotations
+
             if parser.match('{'): # Disambiguation with nested functions
                 return None
 
             parser.expect(';')
-
-            # Forward annotations
-            expression.userAnnotations = userAnnotations
-            expression.sysAnnotations = sysAnnotations
 
             return Instruction(None, None, None, kind, expression=expression) 
 
