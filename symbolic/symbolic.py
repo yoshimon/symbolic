@@ -8,6 +8,7 @@ from jinja2 import Environment
 
 from symbolic.parsers import UnitParser
 from symbolic.lexer import SymbolicLexer, Symto
+from symbolic.dag import UnitDependencyGraph
 
 # Loads a pre-processor table from file
 def load_ppt(filePath):
@@ -139,11 +140,14 @@ if __name__ == "__main__":
                     lexer.fileName = filePath
                     srcFileTokens = lexer.tokenize(srcFile.read())
                     
-                    # Parse and convert to AST
+                    # Parse the unit and extract an object representation
                     unitParser = UnitParser(lexer, srcFileTokens)
-                    ast = unitParser.to_ast()
+                    references, globalNamespace = unitParser.parse()
 
-                    # Save the AST for later validation
+                    # Create a dependency graph for the unit
+                    unitDAG = UnitDependencyGraph(references, globalNamespace)
+
+                    # Dump the sorted DAG to disk
                     
                     # TODO: if an error occurs: show the expanded context
 

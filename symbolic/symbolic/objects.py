@@ -329,8 +329,7 @@ class Expression(Annotateable):
                 parent = root.parent
 
                 # Restore argument count
-                argCount = argCountStack[-1]
-                argCountStack.pop()
+                argCount = argCountStack.pop()
             elif atom.kind == ExpressionAtomKind.UnaryOp:
                 if len(argStack) < 1:
                     raise InvalidExpressionError(atom.token)
@@ -401,13 +400,14 @@ class Namespace(Named):
         namespace = Namespace(userAnnotations, sysAnnotations, semantic, token)
         parser.namespaceStack[-1].objects.append(namespace)
         parser.namespaceStack.append(namespace)
+        try:
+            # Parse all objects inside it
+            parser.gather_namespace_objects()
 
-        # Parse all objects inside it
-        parser.gather_namespace_objects()
-
-        # Exit the namespace
-        parser.expect('}')
-        parser.namespaceStack.pop()
+            # Exit the namespace
+            parser.expect('}')
+        finally:
+            parser.namespaceStack.pop()
 
         return namespace
 
@@ -464,9 +464,10 @@ class Parameter(Named):
 
         return Parameter(userAnnotations, sysAnnotations, semantic, name, typename, isRef)
 
-class Function(TemplateObject):
+class Function(TemplateObject, Namespace):
     def __init__(self, userAnnotations, sysAnnotations, semantic, token, body, kind, returnTypename, extensionTargetName, parameters):
-        super().__init__(userAnnotations, sysAnnotations, semantic, token, body)
+        Namespace.__init__(self, userAnnotations, sysAnnotations, semantic, token)
+        TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, token, body)
         self.kind = kind
         self.returnTypename = returnTypename
         self.extensionTargetName = extensionTargetName
@@ -527,21 +528,23 @@ class Function(TemplateObject):
 
         semantic = Annotation.parse_semantic(parser)
 
-        body = None
-        if isTemplate:
-            body = parser.fetch_block('{', '}')
-            parser.match(';')
-        else:
-            if parser.match('{'):
-                objects = parser.gather_objects([Struct, Alias, Template, Instruction, Function], args=['}'])
-                parser.expect('}')
-                parser.match(';')
-            elif not parser.match(';'):
-                return None
-        
         # Register the function with the current namespace
-        func = Function(userAnnotations, sysAnnotations, semantic, name, body, kind, returnTypename, extensionTargetName, parameters)
+        func = Function(userAnnotations, sysAnnotations, semantic, name, None, kind, returnTypename, extensionTargetName, parameters)
         parser.namespaceStack[-1].objects.append(func)
+        parser.namespaceStack.append(func)
+        try:
+            if isTemplate:
+                func.body = parser.fetch_block('{', '}')
+                parser.match(';')
+            else:
+                if parser.match('{'):
+                    func.objects = parser.gather_objects([Struct, Alias, Template, Instruction, Function], args=['}'])
+                    parser.expect('}')
+                    parser.match(';')
+                elif not parser.match(';'):
+                    return None
+        finally:
+            parser.namespaceStack.pop()
 
         return func
 
@@ -653,8 +656,7 @@ class Struct(TemplateObject):
         body = None
         if isTemplate:
             body = parser.fetch_block('{', '}')
-        else:
-            parser.expect('{')
+        elif parser.match('{'):
             memberLists = parser.gather_objects([MemberList])
             parser.expect('}')
             # Fold member lists

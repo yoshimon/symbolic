@@ -299,7 +299,7 @@ class UnitParser(BaseParser):
 
         return references
 
-    def to_ast(self):
+    def parse(self):
         ''' Converts the token stream to an AST. '''
         # Reset stream position
         self.reset(self.lexer, self.tokens)
@@ -310,7 +310,4 @@ class UnitParser(BaseParser):
         # Parse, starting at the global namespace
         self.gather_namespace_objects()
 
-        # Make sure we have parsed everything, otherwise there must be an error
-
-        # Pop the global namespace
-        return self.namespaceStack.pop()
+        return self.references, self.namespaceStack.pop()
