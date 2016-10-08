@@ -15,9 +15,10 @@ class GUIDKind(Enum):
     Type = 1
     Template = 2
     Instruction = 3
+    Namespace = 4
 
 class GUID:
-    def __init__(self, kind, obj, scope, *, numTemplateArgs=0, dims=None, args=None, returnTypenameScope=None):
+    def __init__(self, kind, obj, scope, *, numTemplateArgs=0, dims=None, args=None, returnTypenameScope=None, extensionTargetScope=None):
         self.kind = kind
         self.obj = obj
         self.isAnonymous = scope[-1].text == ''
@@ -26,6 +27,7 @@ class GUID:
         self.template = '<{0}>'.format(numTemplateArgs) if numTemplateArgs > 0 else ''
         self.dims = '[{0}]'.format(', '.join(Symto.strlist(dims))) if dims is not None else ''
         self.args = '({0})'.format(', '.join(['.'.join(Symto.strlist(arg)) for arg in args])) if args is not None else ''
+        self.extending = ' extending {0}'.format('.'.join(Symto.strlist(extensionTargetScope))) if extensionTargetScope is not None else ''
         self.libName = ' from {0}'.format(obj.token.libName)
         self.typeName = ' as {0}'.format(kind.name)
 
@@ -34,7 +36,7 @@ class GUID:
         namespaceStrings = []
         parent = self.obj.parent
         while parent.parent:
-            namespaceStrings += [parent.scopeString] if parent.scopeString != '' else ['@{0}'.format(id(parent))]
+            namespaceStrings += [parent.token.text] if parent.token.text != '' else ['@{0}'.format(id(parent))]
             parent = parent.parent
 
         if namespaceStrings:
@@ -47,19 +49,20 @@ class GUID:
         return self.value
 
 class Annotateable:
-    def __init__(self, userAnnotations, sysAnnotations, semantic):
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent):
         self.userAnnotations = userAnnotations
         self.sysAnnotations = sysAnnotations
         self.semantic = semantic
+        self.parent = parent
 
 class Named(Annotateable):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, token):
-        Annotateable.__init__(self, userAnnotations, sysAnnotations, semantic)
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token):
+        Annotateable.__init__(self, userAnnotations, sysAnnotations, semantic, parent)
         self.token = token
 
 class TemplateObject(Named):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, token, body):
-        Named.__init__(self, userAnnotations, sysAnnotations, semantic, token)
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body):
+        Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
         self.body = body
 
 class InstructionKind(Enum):
@@ -76,10 +79,9 @@ class InstructionKind(Enum):
     Elif = 8
     Else = 9
 
-class Instruction(Annotateable):
+class Instruction(Named):
     def __init__(self, userAnnotations, sysAnnotations, semantic, parent, libName, fileName, kind, *, expression=None, instructions=None, forInit=None, forWhile=None, forStep=None):
-        Annotateable.__init__(self, userAnnotations, sysAnnotations, semantic)
-        self.parent = parent
+        Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, Symto(Token.Text, libName, fileName, '', 1, 1))
         self.kind = kind
         self.expression = expression
         self.instructions = instructions
@@ -87,17 +89,13 @@ class Instruction(Annotateable):
         self.forWhile = forWhile
         self.forStep = forStep
 
-        # Store a token for the GUID generation
-        self.token = Symto(Token.Text, libName, fileName, '', 1, 1)
-
     def guid(self):
-        # Create GUID with dummy token
         return GUID(GUIDKind.Instruction, self, [self.token])
 
     @staticmethod
     def expect_expression(parser, endDelim):
         expression = Expression.parse(parser, [endDelim])
-        if (expression is None) or (not expression.postfixTokens):
+        if (expression is None) or (not expression.postfixAtoms):
             raise MissingExpressionError(parser.token)
         parser.expect(endDelim)
         return expression
@@ -205,8 +203,8 @@ class ExpressionAST:
         self.children = children
 
 class Expression(Annotateable):
-    def __init__(self, userAnnotations, sysAnnotations, tokens):
-        Annotateable.__init__(self, userAnnotations, sysAnnotations, None)
+    def __init__(self, userAnnotations, sysAnnotations, parent, tokens):
+        Annotateable.__init__(self, userAnnotations, sysAnnotations, None, parent)
         self.tokens = tokens
         self.postfixAtoms = Expression.to_postfix(tokens)
         self.tree = Expression.to_ast(self.postfixAtoms)
@@ -246,6 +244,10 @@ class Expression(Annotateable):
                             states.append(State.Function)
                             stack.append(ExpressionAtom(t, ExpressionAtomKind.FunctionEnd))
                             isNextOpenParenFunction = True
+                        elif t1.text == '[':
+                            kind = ExpressionAtomKind.ArrayBegin
+                            states.append(State.Array)
+                            stack.append(ExpressionAtom(t, ExpressionAtomKind.ArrayEnd))
                         elif t1.text == '<':
                             # K=2 lookahead
                             if (not t2 is None) and (t2.kind == Token.Literal.String):
@@ -258,21 +260,7 @@ class Expression(Annotateable):
                 # We can fetch a literal in the next cycle again
                 wasLastTerminal = False
 
-                if t.text == '[':
-                    # If this is an Array the last output token has to be a terminal, a function, an array or a template
-                    if not out:
-                        raise MissingArrayTypeError(t)
-
-                    if not out[-1].kind in [ExpressionAtomKind.Var, ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.ArrayBegin, ExpressionAtomKind.ArrayEnd, ExpressionAtomKind.TemplateBegin, ExpressionAtomKind.TemplateEnd]:
-                        raise InvalidArrayTypeError(out[-1].token)
-
-                    if (not prev.text in SymbolicLexer.closeBrackets) and (prev.kind != Token.Name):
-                        raise InvalidArrayTypeError(out[-1].token)
-
-                    out.append(ExpressionAtom(t, ExpressionAtomKind.ArrayBegin))
-                    states.append(State.Array)
-                    stack.append(ExpressionAtom(t, ExpressionAtomKind.ArrayEnd))
-                elif t.text == ',':
+                if t.text == ',':
                     # Tuples > 1 are not allowed
                     if states[-1] == State.Tuple:
                         raise InvalidExpressionError(t)
@@ -295,15 +283,15 @@ class Expression(Annotateable):
                             states.append(State.Tuple)
                         else:
                             isNextOpenParenFunction = False
+                    elif t.text == '[':
+                        if states[-1] != State.Array:
+                            raise MissingArrayTypeError(t)
+
                     stack.append(ExpressionAtom(t, -1))
                 elif (t.isCloseBracket and t.text != '>') or (t.text == '>' and states[-1] == State.Template): # Special case for template >
                     # Keep track of how many parameters were added
                     if Algorithm.pop_while(stack, lambda atom: not atom.token.text == t.matchingOpenBracket, lambda atom: out.append(atom)):
                         raise MissingBracketsError(t)
-
-                    # Put array symbol on output stream
-                    if t.text == ']':
-                        out.append(ExpressionAtom(t, ExpressionAtomKind.ArrayEnd))
 
                     # Pop open bracket and state
                     stack.pop()
@@ -311,7 +299,7 @@ class Expression(Annotateable):
 
                     if stack:
                         # Pop function, template
-                        if stack[-1].kind in [ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.TemplateEnd]:
+                        if stack[-1].kind in [ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.ArrayEnd, ExpressionAtomKind.TemplateEnd]:
                             out.append(stack[-1])
                             stack.pop()
                 elif t.kind is Operator:
@@ -361,10 +349,9 @@ class Expression(Annotateable):
 
                 # Replace root (End) with Begin
                 root = args[0] # Begin
-
                 args = args[1:] # Pop Begin
-                argStack = argStack[:-numArgs]
                 root.children = args
+                argStack = argStack[:-numArgs]
                 argStack.append(root)
                 parent = root.parent
 
@@ -404,7 +391,7 @@ class Expression(Annotateable):
         if len(argStack) > 1:
             raise InvalidExpressionError(argStack[0].atom.token)
 
-        # Just right! :)
+        # Just right!
         return argStack[0]
 
     @staticmethod
@@ -412,18 +399,20 @@ class Expression(Annotateable):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         tokens = parser.until_any(args)
         try:
-            return Expression(userAnnotations, sysAnnotations, tokens)
+            return Expression(userAnnotations, sysAnnotations, parser.namespaceStack[-1], tokens)
         except:
             return None
 
 class Namespace(Named):
     def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token):
-        Named.__init__(self, userAnnotations, sysAnnotations, semantic, token)
-        self.parent = parent
+        Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
         self.objects = []
 
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
             raise UnsupportedSystemAnnotationsError(self.token, 'Namespace', sysAnnotations)
+
+    def guid(self):
+        return GUID(GUIDKind.Namespace, self, [self.token])
 
     @staticmethod
     def parse(parser, args):
@@ -438,8 +427,9 @@ class Namespace(Named):
         parser.expect('{')
         
         # Push the namespace onto the scope stack
-        namespace = Namespace(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], token)
-        parser.namespaceStack[-1].objects.append(namespace)
+        parent = parser.namespaceStack[-1]
+        namespace = Namespace(userAnnotations, sysAnnotations, semantic, parent, token)
+        parent.objects.append(namespace)
         parser.namespaceStack.append(namespace)
         try:
             # Parse all objects inside it
@@ -479,8 +469,8 @@ class FunctionSignature:
         self.outArgs = outArgs
 
 class Parameter(Named):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, token, typename, isRef):
-        Named.__init__(self, userAnnotations, sysAnnotations, semantic, token)
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, typename, isRef):
+        Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
         self.typename = typename
         self.isRef = isRef
 
@@ -502,12 +492,12 @@ class Parameter(Named):
             tmp = typename.scope[-1]
             name = Symto(Token.Text, tmp.libName, tmp.fileName, '', tmp.line, tmp.columnEnd + 1)
 
-        return Parameter(userAnnotations, sysAnnotations, semantic, name, typename, isRef)
+        return Parameter(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, typename, isRef)
 
 class Function(TemplateObject, Namespace):
     def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body, kind, returnTypename, extensionTargetName, parameters):
         Namespace.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
-        TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, token, body)
+        TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body)
         self.kind = kind
         self.returnTypename = returnTypename
         self.extensionTargetName = extensionTargetName
@@ -525,7 +515,7 @@ class Function(TemplateObject, Namespace):
 
     def guid(self):
         parameters = [parameter.typename.scope for parameter in self.parameters]
-        return GUID(GUIDKind.Function, self, [self.token], args=parameters, returnTypenameScope=self.returnTypename.scope)
+        return GUID(GUIDKind.Function, self, [self.token], args=parameters, returnTypenameScope=self.returnTypename.scope, extensionTargetScope=self.extensionTargetName)
 
     @staticmethod
     def parse_template(parser, isTemplate):
@@ -571,8 +561,9 @@ class Function(TemplateObject, Namespace):
         semantic = Annotation.parse_semantic(parser)
 
         # Register the function with the current namespace
-        func = Function(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, None, kind, returnTypename, extensionTargetName, parameters)
-        parser.namespaceStack[-1].objects.append(func)
+        parent = parser.namespaceStack[-1]
+        func = Function(userAnnotations, sysAnnotations, semantic, parent, name, None, kind, returnTypename, extensionTargetName, parameters)
+        parent.objects.append(func)
         parser.namespaceStack.append(func)
         try:
             if isTemplate:
@@ -580,10 +571,11 @@ class Function(TemplateObject, Namespace):
                 parser.match(';')
             else:
                 if parser.match('{'):
-                    func.objects = parser.gather_objects([Struct, Alias, Template, Instruction, Function], args=['}'])
+                    func.objects = parser.gather_objects([Namespace, Struct, Alias, Template, Instruction, Function], args=['}'])
                     parser.expect('}')
                     parser.match(';')
                 elif not parser.match(';'):
+                    parent.objects.pop()
                     return None
         finally:
             parser.namespaceStack.pop()
@@ -631,8 +623,7 @@ class Function(TemplateObject, Namespace):
 
 class Member(Named):
     def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, typename):
-        Named.__init__(self, userAnnotations, sysAnnotations, semantic, token)
-        self.parent = parent
+        Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
         self.typename = typename
 
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
@@ -683,8 +674,7 @@ class MemberList:
 
 class Struct(TemplateObject):
     def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body, members):
-        TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, token, body)
-        self.parent = parent
+        TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body)
         self.members = members
 
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
@@ -715,8 +705,12 @@ class Struct(TemplateObject):
         parser.match(';')
 
         # Register the struct with the current namespace
-        struct = Struct(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], token, body, members)
-        parser.namespaceStack[-1].objects.append(struct)
+        parent = parser.namespaceStack[-1]
+        struct = Struct(userAnnotations, sysAnnotations, semantic, parent, token, body, members)
+        parent.objects.append(struct)
+
+        if token.text == 'B':
+            token = token
 
         return struct
 
@@ -728,9 +722,8 @@ class Struct(TemplateObject):
         prettyString += 'struct ' + self.token.text
 
 class Alias(TemplateObject):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, token, body, parent, targetType):
-        TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, token, body)
-        self.parent = parent
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body, targetType):
+        TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body)
         self.targetType = targetType
 
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
@@ -758,7 +751,7 @@ class Alias(TemplateObject):
         parser.match(';')
 
         # Register the struct with the current namespace
-        alias = Alias(userAnnotations, sysAnnotations, semantic, name, body, parser.namespaceStack[-1], targetType)
+        alias = Alias(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, body, targetType)
         parser.namespaceStack[-1].objects.append(alias)
 
         return alias
@@ -772,7 +765,7 @@ class Alias(TemplateObject):
 
 class Reference(Annotateable):
     def __init__(self, userAnnotations, sysAnnotations, semantic, string):
-        Annotateable.__init__(self, userAnnotations, sysAnnotations, semantic)
+        Annotateable.__init__(self, userAnnotations, sysAnnotations, semantic, None)
         self.string = string
 
         if sysAnnotations:
@@ -949,8 +942,8 @@ class Typename:
         return self.scopeString
 
 class TemplateParameter(Named):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, token):
-        Named.__init__(self, userAnnotations, sysAnnotations, semantic, token)
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token):
+        Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
 
     @staticmethod
     def parse(parser, args):
@@ -961,13 +954,11 @@ class TemplateParameter(Named):
             return None
 
         semantic = Annotation.parse_semantic(parser)
-
-        return TemplateParameter(userAnnotations, sysAnnotations, semantic, name)
+        return TemplateParameter(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name)
 
 class Template(Named):
     def __init__(self, userAnnotations, sysAnnotations, semantic, parent, parameters, obj, namespaceList, references):
-        Named.__init__(self, userAnnotations, sysAnnotations, semantic, obj.token)
-        self.parent = parent
+        Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, obj.token)
         self.obj = obj
         self.parameters = parameters
         self.namespaceList = namespaceList
