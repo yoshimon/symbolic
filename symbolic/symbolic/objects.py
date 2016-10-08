@@ -18,15 +18,15 @@ class GUIDKind(Enum):
     Namespace = 4
 
 class GUID:
-    def __init__(self, kind, obj, scope, *, numTemplateArgs=0, dims=None, args=None, returnTypenameScope=None, extensionTargetScope=None):
+    def __init__(self, kind, obj, scope, *, numTemplateArgs=0, dims=None, parameters=None, returnTypenameScope=None, extensionTargetScope=None):
         self.kind = kind
         self.obj = obj
         self.isAnonymous = scope[-1].text == ''
         self.returnType = '{0} '.format('.'.join(Symto.strlist(returnTypenameScope))) if returnTypenameScope is not None else ''
         self.scope = '.'.join(Symto.strlist(scope)) if not self.isAnonymous else '@{0}'.format(id(obj))
         self.template = '<{0}>'.format(numTemplateArgs) if numTemplateArgs > 0 else ''
-        self.dims = '[{0}]'.format(', '.join(Symto.strlist(dims, none='*'))) if dims is not None else ''
-        self.args = '({0})'.format(', '.join(['.'.join(Symto.strlist(arg)) for arg in args])) if args is not None else ''
+        self.dims = '[{0}]'.format(', '.join(Symto.strlist(dims, none=Template.Wildcard))) if dims is not None else ''
+        self.parameters = '({0})'.format(', '.join(['ref ' + parameter.typename.scopeString if parameter.isRef else parameter.typename.scopeString for parameter in parameters])) if parameters is not None else ''
         self.extending = ' extending {0}'.format('.'.join(Symto.strlist(extensionTargetScope))) if extensionTargetScope is not None else ''
         self.libName = ' from {0}'.format(obj.token.libName)
         self.typeName = ' as {0}'.format(kind.name)
@@ -43,7 +43,7 @@ class GUID:
             self.namespace = ' in {0}'.format('::'.join(reversed(namespaceStrings)))
 
         # Pre-compute string representation
-        self.value = self.returnType + self.scope + self.template + self.dims + self.args + self.typeName + self.namespace + self.libName
+        self.value = self.returnType + self.scope + self.template + self.dims + self.parameters + self.typeName + self.namespace + self.libName
 
     def __str__(self):
         return self.value
@@ -514,8 +514,7 @@ class Function(TemplateObject, Namespace):
             raise UnsupportedSystemAnnotationsError(self.token, 'Function', sysAnnotations)
 
     def guid(self):
-        parameters = [parameter.typename.scope for parameter in self.parameters]
-        return GUID(GUIDKind.Function, self, [self.token], args=parameters, returnTypenameScope=self.returnTypename.scope, extensionTargetScope=self.extensionTargetName)
+        return GUID(GUIDKind.Function, self, [self.token], parameters=self.parameters, returnTypenameScope=self.returnTypename.scope, extensionTargetScope=self.extensionTargetName)
 
     @staticmethod
     def parse_template(parser, isTemplate):
@@ -967,6 +966,9 @@ class TemplateParameter(Named):
         return TemplateParameter(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name)
 
 class Template(Named):
+    # The template substitution wildcard
+    Wildcard = '*'
+
     def __init__(self, userAnnotations, sysAnnotations, semantic, parent, parameters, obj, namespaceList, references):
         Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, obj.token)
         self.obj = obj
@@ -988,22 +990,30 @@ class Template(Named):
 
         # Substitute template parameters
         if returnTypenameScope:
-            returnTypenameScope = [Symto.from_token(token, Token.Operator, '*') if token.text in parameterStrings else token for token in returnTypenameScope]
+            returnTypenameScope = [Symto.from_token(token, Token.Operator, Template.Wildcard) if token.text in parameterStrings else token for token in returnTypenameScope]
 
         # Substitute parameter types
         if parameters:
             newParameters = []
             for parameter in parameters:
-                newScope = []
+                # Substitute tokens in the parameter typename
+                newTypenameScope = []
                 for token in parameter.typename.scope:
                     if token.text in parameterStrings:
-                        newScope.append(Symto.from_token(token, Token.Operator, '*'))
+                        newTypenameScope.append(Symto.from_token(token, Token.Operator, Template.Wildcard))
                     else:
-                        newScope.append(token)
-                newParameters.append(newScope)
+                        newTypenameScope.append(token)
+
+                # Substitute the typename
+                newTypename = Typename(newTypenameScope, [], [])
+
+                # Create the substituted parameter
+                unnamedToken = Symto.from_token(token, Token.Text, '')
+                clonedParameter = Parameter(parameter.userAnnotations, parameter.sysAnnotations, parameter.semantic, parameter.parent, unnamedToken, newTypename, False)
+                newParameters.append(clonedParameter)
             parameters = newParameters
 
-        return GUID(GUIDKind.Template, self, [self.token], numTemplateArgs=len(self.parameters), args=parameters, returnTypenameScope=returnTypenameScope)
+        return GUID(GUIDKind.Template, self, [self.token], parameters=parameters, numTemplateArgs=len(self.parameters), returnTypenameScope=returnTypenameScope)
 
     def generate_translation_unit(self):
         result = PrettyString()
