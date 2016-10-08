@@ -10,8 +10,8 @@ __all__ = ['SymbolicLexer']
 
 class Symto:
     @staticmethod
-    def strlist(l):
-        return map(lambda t: t.text, l)
+    def strlist(l, none=None):
+        return map(lambda t: t.text if t is not None else none, l)
 
     @staticmethod
     def is_left_associtative(op):

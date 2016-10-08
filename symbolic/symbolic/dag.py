@@ -34,11 +34,9 @@ class UnitDependencyGraph:
 
             # Connect immediate dependencies
             if isinstance(obj, Struct):
-                # Structs depend on their members
-                for member in obj.members:
-                    guid = member.guid()
-                    guidStr = str(guid)
-                    self.dependencies.add_node(guidStr, dependency=Dependency(member))
+                pass
+            if isinstance(obj, MemberList):
+                pass
             elif isinstance(obj, Alias):
                 pass
             elif isinstance(obj, Namespace):

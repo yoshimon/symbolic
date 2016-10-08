@@ -25,7 +25,7 @@ class GUID:
         self.returnType = '{0} '.format('.'.join(Symto.strlist(returnTypenameScope))) if returnTypenameScope is not None else ''
         self.scope = '.'.join(Symto.strlist(scope)) if not self.isAnonymous else '@{0}'.format(id(obj))
         self.template = '<{0}>'.format(numTemplateArgs) if numTemplateArgs > 0 else ''
-        self.dims = '[{0}]'.format(', '.join(Symto.strlist(dims))) if dims is not None else ''
+        self.dims = '[{0}]'.format(', '.join(Symto.strlist(dims, none='*'))) if dims is not None else ''
         self.args = '({0})'.format(', '.join(['.'.join(Symto.strlist(arg)) for arg in args])) if args is not None else ''
         self.extending = ' extending {0}'.format('.'.join(Symto.strlist(extensionTargetScope))) if extensionTargetScope is not None else ''
         self.libName = ' from {0}'.format(obj.token.libName)
@@ -630,7 +630,7 @@ class Member(Named):
             raise UnsupportedSystemAnnotationsError(self.token, 'Member', sysAnnotations)
 
     def guid(self):
-        return GUID(GUIDKind.Type, self, self.typename.scope)
+        return GUID(GUIDKind.Type, self, self.typename.scope, numTemplateArgs=len(self.typename.templateArgs), dims=self.typename.dims)
 
     @staticmethod
     def parse(parser, args):
@@ -648,6 +648,17 @@ class Member(Named):
         return Member(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, typename)
 
 class MemberList:
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, members, typename):
+        Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
+        self.members = members
+        self.typename = typename
+
+        if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
+            raise UnsupportedSystemAnnotationsError(self.token, 'Member', sysAnnotations)
+
+    def guid(self):
+        return GUID(GUIDKind.Type, self, self.typename.scope, numTemplateArgs=len(self.typename.templateArgs), dims=self.typename.dims)
+
     @staticmethod
     def parse(parser, args):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
@@ -665,17 +676,18 @@ class MemberList:
         semantic = Annotation.parse_semantic(parser)
         parser.match(';')
         
-        result = []
+        members = []
         for name in names:
             name = Symto.from_token(parser.token, Token.Text, '') if name is None else name
-            result.append(Member(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, typename))
+            members.append(Member(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, typename))
         
-        return result
+        return MemberList(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, members, typename)
 
-class Struct(TemplateObject):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body, members):
+class Struct(TemplateObject, Namespace):
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body):
+        Namespace.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
         TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body)
-        self.members = members
+        self.members = None
 
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
             raise UnsupportedSystemAnnotationsError(self.token, 'Struct', sysAnnotations)
@@ -693,24 +705,25 @@ class Struct(TemplateObject):
         token = parser.match_kind(Token.Name)
         semantic = Annotation.parse_semantic(parser)
 
-        members = []
-        body = None
-        if isTemplate:
-            body = parser.fetch_block('{', '}')
-        elif parser.match('{'):
-            memberLists = parser.gather_objects([MemberList])
-            parser.expect('}')
-            # Fold member lists
-            members = reduce((lambda l, r: l + r), memberLists) if memberLists else []
-        parser.match(';')
-
         # Register the struct with the current namespace
         parent = parser.namespaceStack[-1]
-        struct = Struct(userAnnotations, sysAnnotations, semantic, parent, token, body, members)
+        struct = Struct(userAnnotations, sysAnnotations, semantic, parent, token, None)
         parent.objects.append(struct)
-
-        if token.text == 'B':
-            token = token
+        parser.namespaceStack.append(struct)
+        try:
+            if isTemplate:
+                struct.body = parser.fetch_block('{', '}')
+                parser.match(';')
+            else:
+                if parser.match('{'):
+                    struct.objects = parser.gather_objects([MemberList, Namespace, Struct, Alias, Template, Function], args=['}'])
+                    parser.expect('}')
+                    parser.match(';')
+                elif not parser.match(';'):
+                    parent.objects.pop()
+                    return None
+        finally:
+            parser.namespaceStack.pop()
 
         return struct
 
@@ -884,9 +897,6 @@ class Typename:
         self.templateArgs = templateArgs
         self.dims = dims
         self.scopeString = '.'.join([tok.text for tok in scope])
-
-    def guid(self):
-        return GUID(GUIDKind.Type, self, self.scope, numTemplateArgs=len(self.templateArgs), dims=self.dims)
 
     @staticmethod
     def try_parse(parser):
