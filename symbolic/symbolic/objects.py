@@ -10,6 +10,42 @@ from symbolic.formatter import PrettyString
 from symbolic.algorithm import Algorithm
 from builtins import AssertionError
 
+class GUIDKind(Enum):
+    Function = 0
+    Type = 1
+    Template = 2
+    Instruction = 3
+
+class GUID:
+    def __init__(self, kind, obj, scope, *, numTemplateArgs=0, dims=None, args=None, returnTypenameScope=None):
+        self.kind = kind
+        self.obj = obj
+        self.isAnonymous = scope[-1].text == ''
+        self.returnType = '{0} '.format('.'.join(Symto.strlist(returnTypenameScope))) if returnTypenameScope is not None else ''
+        self.scope = '.'.join(Symto.strlist(scope)) if not self.isAnonymous else '@{0}'.format(id(obj))
+        self.template = '<{0}>'.format(numTemplateArgs) if numTemplateArgs > 0 else ''
+        self.dims = '[{0}]'.format(', '.join(Symto.strlist(dims))) if dims is not None else ''
+        self.args = '({0})'.format(', '.join(['.'.join(Symto.strlist(arg)) for arg in args])) if args is not None else ''
+        self.libName = ' from {0}'.format(obj.token.libName)
+        self.typeName = ' as {0}'.format(kind.name)
+
+        # Build namespace string
+        self.namespace = ''
+        namespaceStrings = []
+        parent = self.obj.parent
+        while parent.parent:
+            namespaceStrings += [parent.scopeString] if parent.scopeString != '' else ['@{0}'.format(id(parent))]
+            parent = parent.parent
+
+        if namespaceStrings:
+            self.namespace = ' in {0}'.format('::'.join(reversed(namespaceStrings)))
+
+        # Pre-compute string representation
+        self.value = self.returnType + self.scope + self.template + self.dims + self.args + self.typeName + self.namespace + self.libName
+
+    def __str__(self):
+        return self.value
+
 class Annotateable:
     def __init__(self, userAnnotations, sysAnnotations, semantic):
         self.userAnnotations = userAnnotations
@@ -18,17 +54,13 @@ class Annotateable:
 
 class Named(Annotateable):
     def __init__(self, userAnnotations, sysAnnotations, semantic, token):
-        super().__init__(userAnnotations, sysAnnotations, semantic)
+        Annotateable.__init__(self, userAnnotations, sysAnnotations, semantic)
         self.token = token
 
 class TemplateObject(Named):
     def __init__(self, userAnnotations, sysAnnotations, semantic, token, body):
-        super().__init__(userAnnotations, sysAnnotations, semantic, token)
+        Named.__init__(self, userAnnotations, sysAnnotations, semantic, token)
         self.body = body
-
-class Variable:
-    def __init__(self, typename):
-        self.typename = typename
 
 class InstructionKind(Enum):
     Expression = 0
@@ -45,14 +77,22 @@ class InstructionKind(Enum):
     Else = 9
 
 class Instruction(Annotateable):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, kind, expression=None, instructions=None, forInit=None, forWhile=None, forStep=None):
-        super().__init__(userAnnotations, sysAnnotations, semantic)
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, libName, fileName, kind, *, expression=None, instructions=None, forInit=None, forWhile=None, forStep=None):
+        Annotateable.__init__(self, userAnnotations, sysAnnotations, semantic)
+        self.parent = parent
         self.kind = kind
         self.expression = expression
         self.instructions = instructions
         self.forInit = forInit
         self.forWhile = forWhile
         self.forStep = forStep
+
+        # Store a token for the GUID generation
+        self.token = Symto(Token.Text, libName, fileName, '', 1, 1)
+
+    def guid(self):
+        # Create GUID with dummy token
+        return GUID(GUIDKind.Instruction, self, [self.token])
 
     @staticmethod
     def expect_expression(parser, endDelim):
@@ -89,13 +129,13 @@ class Instruction(Annotateable):
                 # KEYWORD(EXPRESSION)
                 expression, semantic = Instruction.parse_parenthesized_expression(parser)
                 instructions = Instruction.parse_instruction_body(parser)
-                return Instruction(userAnnotations, sysAnnotations, semantic, kind, expression=expression, instructions=instructions)
+                return Instruction(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], parser.lexer.libName, parser.lexer.fileName, kind, expression=expression, instructions=instructions)
             elif kind == InstructionKind.Do:
                 # DO { ... } WHILE(EXPRESSION)
                 instructions = Instruction.parse_instruction_body(parser)
                 parser.expect('while')
                 expression, semantic = Instruction.parse_parenthesized_expression(parser)
-                return Instruction(userAnnotations, sysAnnotations, semantic, kind, expression=expression, instructions=instructions)
+                return Instruction(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], parser.lexer.libName, parser.lexer.fileName, kind, expression=expression, instructions=instructions)
             elif kind == InstructionKind.For:
                 # FOR(INIT_EXPR, INIT_EXPR; COND, COND; STEP, STEP)
                 parser.expect('(')
@@ -107,12 +147,12 @@ class Instruction(Annotateable):
                 parser.expect(')')
                 semantic = Annotation.parse_semantic(parser)
                 instructions = Instruction.parse_instruction_body(parser)
-                return Instruction(userAnnotations, sysAnnotations, semantic, kind, instructions=instructions, forInit=forInit, forWhile=forWhile, forStep=forStep)
+                return Instruction(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], parser.lexer.libName, parser.lexer.fileName, kind, instructions=instructions, forInit=forInit, forWhile=forWhile, forStep=forStep)
             elif kind == InstructionKind.Else:
                 # ELSE { ... }
                 semantic = Annotation.parse_semantic(parser)
                 instructions = Instruction.parse_instruction_body(parser)
-                return Instruction(userAnnotations, sysAnnotations, semantic, kind, instructions=instructions)
+                return Instruction(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], parser.lexer.libName, parser.lexer.fileName, kind, instructions=instructions)
             else:
                 raise DevError()
         else:
@@ -138,7 +178,7 @@ class Instruction(Annotateable):
 
             parser.expect(';')
 
-            return Instruction(None, None, None, kind, expression=expression) 
+            return Instruction(None, None, None, parser.namespaceStack[-1], parser.lexer.libName, parser.lexer.fileName, kind, expression=expression) 
 
 class ExpressionAtomKind(Enum):
     Var = 0
@@ -166,7 +206,7 @@ class ExpressionAST:
 
 class Expression(Annotateable):
     def __init__(self, userAnnotations, sysAnnotations, tokens):
-        super().__init__(userAnnotations, sysAnnotations, None)
+        Annotateable.__init__(self, userAnnotations, sysAnnotations, None)
         self.tokens = tokens
         self.postfixAtoms = Expression.to_postfix(tokens)
         self.tree = Expression.to_ast(self.postfixAtoms)
@@ -377,8 +417,9 @@ class Expression(Annotateable):
             return None
 
 class Namespace(Named):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, token):
-        super().__init__(userAnnotations, sysAnnotations, semantic, token)
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token):
+        Named.__init__(self, userAnnotations, sysAnnotations, semantic, token)
+        self.parent = parent
         self.objects = []
 
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
@@ -397,7 +438,7 @@ class Namespace(Named):
         parser.expect('{')
         
         # Push the namespace onto the scope stack
-        namespace = Namespace(userAnnotations, sysAnnotations, semantic, token)
+        namespace = Namespace(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], token)
         parser.namespaceStack[-1].objects.append(namespace)
         parser.namespaceStack.append(namespace)
         try:
@@ -439,7 +480,7 @@ class FunctionSignature:
 
 class Parameter(Named):
     def __init__(self, userAnnotations, sysAnnotations, semantic, token, typename, isRef):
-        super().__init__(userAnnotations, sysAnnotations, semantic, token)
+        Named.__init__(self, userAnnotations, sysAnnotations, semantic, token)
         self.typename = typename
         self.isRef = isRef
 
@@ -458,22 +499,20 @@ class Parameter(Named):
 
         # Handle unnamed parameter
         if name is None:
-            name = deepcopy(typename.scope[-1])
-            name.column = name.columnEnd + 1
-            name.text = ''
+            tmp = typename.scope[-1]
+            name = Symto(Token.Text, tmp.libName, tmp.fileName, '', tmp.line, tmp.columnEnd + 1)
 
         return Parameter(userAnnotations, sysAnnotations, semantic, name, typename, isRef)
 
 class Function(TemplateObject, Namespace):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, token, body, kind, returnTypename, extensionTargetName, parameters):
-        Namespace.__init__(self, userAnnotations, sysAnnotations, semantic, token)
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body, kind, returnTypename, extensionTargetName, parameters):
+        Namespace.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
         TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, token, body)
         self.kind = kind
         self.returnTypename = returnTypename
         self.extensionTargetName = extensionTargetName
         self.extensionName = '.'.join([t.text for t in extensionTargetName] + [token.text]) if extensionTargetName is not None else None
         self.parameters = parameters
-        self.name = token.text
 
         if kind == FunctionKind.Extension:
             fail = Annotation.is_not_compatible(['static', 'private', 'deprecate'], sysAnnotations)
@@ -484,12 +523,16 @@ class Function(TemplateObject, Namespace):
         if fail:
             raise UnsupportedSystemAnnotationsError(self.token, 'Function', sysAnnotations)
 
+    def guid(self):
+        parameters = [parameter.typename.scope for parameter in self.parameters]
+        return GUID(GUIDKind.Function, self, [self.token], args=parameters, returnTypenameScope=self.returnTypename.scope)
+
     @staticmethod
     def parse_template(parser, isTemplate):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         kind = FunctionKind.Regular
-        name = Symto(parser.token.kind, parser.token.fileName, '', parser.token.line, parser.token.column)
+        name = Symto(parser.token.kind, parser.token.libName, parser.token.fileName, '', parser.token.line, parser.token.column)
         extensionTargetName = None
         parameters = []
         returnTypename = Typename.try_parse(parser)
@@ -500,8 +543,7 @@ class Function(TemplateObject, Namespace):
         if parser.token.kind != Token.Name:
             if hasExplicitReturnType:
                 name = returnTypename.scope[-1]
-            returnTypenameToken = deepcopy(parser.token)
-            returnTypenameToken.text = 'void'
+            returnTypenameToken = Symto(Token.Name, parser.token.libName, parser.token.fileName, 'void', parser.token.line, parser.token.column)
             returnTypename = Typename([returnTypenameToken], [], [])
         
         if hasExplicitReturnType:
@@ -529,7 +571,7 @@ class Function(TemplateObject, Namespace):
         semantic = Annotation.parse_semantic(parser)
 
         # Register the function with the current namespace
-        func = Function(userAnnotations, sysAnnotations, semantic, name, None, kind, returnTypename, extensionTargetName, parameters)
+        func = Function(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, None, kind, returnTypename, extensionTargetName, parameters)
         parser.namespaceStack[-1].objects.append(func)
         parser.namespaceStack.append(func)
         try:
@@ -588,12 +630,16 @@ class Function(TemplateObject, Namespace):
             prettyString += ')'
 
 class Member(Named):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, token, typename):
-        super().__init__(userAnnotations, sysAnnotations, semantic, token)
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, typename):
+        Named.__init__(self, userAnnotations, sysAnnotations, semantic, token)
+        self.parent = parent
         self.typename = typename
 
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
             raise UnsupportedSystemAnnotationsError(self.token, 'Member', sysAnnotations)
+
+    def guid(self):
+        return GUID(GUIDKind.Type, self, self.typename.scope)
 
     @staticmethod
     def parse(parser, args):
@@ -602,12 +648,13 @@ class Member(Named):
         if typename is None:
             return None
 
-        name = parser.expect_kind(Token.Name)
+        name = parser.match_kind(Token.Name)
+        name = Symto.from_token(parser.token, Token.Text, '') if name is None else name
+
         semantic = Annotation.parse_semantic(parser)
-        
         parser.match(';')
 
-        return Member(userAnnotations, sysAnnotations, semantic, name, typename)
+        return Member(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, typename)
 
 class MemberList:
     @staticmethod
@@ -617,7 +664,7 @@ class MemberList:
         if typename is None:
             return None
 
-        names = [parser.expect_kind(Token.Name)]
+        names = [parser.match_kind(Token.Name)]
         while parser.match(','):
             name = parser.match_kind(Token.Name)
             if name is None:
@@ -625,22 +672,26 @@ class MemberList:
             names.append(name)
 
         semantic = Annotation.parse_semantic(parser)
-
         parser.match(';')
         
         result = []
         for name in names:
-            result.append(Member(userAnnotations, sysAnnotations, semantic, name, typename))
+            name = Symto.from_token(parser.token, Token.Text, '') if name is None else name
+            result.append(Member(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, typename))
         
         return result
 
 class Struct(TemplateObject):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, token, members, body):
-        super().__init__(userAnnotations, sysAnnotations, semantic, token, body)
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body, members):
+        TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, token, body)
+        self.parent = parent
         self.members = members
 
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
             raise UnsupportedSystemAnnotationsError(self.token, 'Struct', sysAnnotations)
+
+    def guid(self):
+        return GUID(GUIDKind.Type, self, [self.token])
 
     @staticmethod
     def parse_template(parser, isTemplate):
@@ -649,7 +700,7 @@ class Struct(TemplateObject):
         if not parser.match('struct'):
             return None
 
-        token = parser.expect_kind(Token.Name)
+        token = parser.match_kind(Token.Name)
         semantic = Annotation.parse_semantic(parser)
 
         members = []
@@ -664,7 +715,7 @@ class Struct(TemplateObject):
         parser.match(';')
 
         # Register the struct with the current namespace
-        struct = Struct(userAnnotations, sysAnnotations, semantic, token, members, body)
+        struct = Struct(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], token, body, members)
         parser.namespaceStack[-1].objects.append(struct)
 
         return struct
@@ -677,12 +728,16 @@ class Struct(TemplateObject):
         prettyString += 'struct ' + self.token.text
 
 class Alias(TemplateObject):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, token, body, targetType):
-        super().__init__(userAnnotations, sysAnnotations, semantic, token, body)
+    def __init__(self, userAnnotations, sysAnnotations, semantic, token, body, parent, targetType):
+        TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, token, body)
+        self.parent = parent
         self.targetType = targetType
 
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
             raise UnsupportedSystemAnnotationsError(self.token, 'Alias', sysAnnotations)
+
+    def guid(self):
+        return GUID(GUIDKind.Type, self, [self.token])
 
     @staticmethod
     def parse_template(parser, isTemplate):
@@ -703,7 +758,7 @@ class Alias(TemplateObject):
         parser.match(';')
 
         # Register the struct with the current namespace
-        alias = Alias(userAnnotations, sysAnnotations, semantic, name, body, targetType)
+        alias = Alias(userAnnotations, sysAnnotations, semantic, name, body, parser.namespaceStack[-1], targetType)
         parser.namespaceStack[-1].objects.append(alias)
 
         return alias
@@ -717,7 +772,7 @@ class Alias(TemplateObject):
 
 class Reference(Annotateable):
     def __init__(self, userAnnotations, sysAnnotations, semantic, string):
-        super().__init__(userAnnotations, sysAnnotations, semantic)
+        Annotateable.__init__(self, userAnnotations, sysAnnotations, semantic)
         self.string = string
 
         if sysAnnotations:
@@ -728,7 +783,6 @@ class Reference(Annotateable):
 
 class Annotation:
     def __init__(self, token, args):
-        super().__init__()
         self.token = token
         self.args = args
 
@@ -833,11 +887,13 @@ class Annotation:
 
 class Typename:
     def __init__(self, scope, templateArgs, dims):
-        super().__init__()
         self.scope = scope
         self.templateArgs = templateArgs
         self.dims = dims
         self.scopeString = '.'.join([tok.text for tok in scope])
+
+    def guid(self):
+        return GUID(GUIDKind.Type, self, self.scope, numTemplateArgs=len(self.templateArgs), dims=self.dims)
 
     @staticmethod
     def try_parse(parser):
@@ -894,7 +950,7 @@ class Typename:
 
 class TemplateParameter(Named):
     def __init__(self, userAnnotations, sysAnnotations, semantic, token):
-        super().__init__(userAnnotations, sysAnnotations, semantic, token)
+        Named.__init__(self, userAnnotations, sysAnnotations, semantic, token)
 
     @staticmethod
     def parse(parser, args):
@@ -909,8 +965,9 @@ class TemplateParameter(Named):
         return TemplateParameter(userAnnotations, sysAnnotations, semantic, name)
 
 class Template(Named):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, parameters, obj, namespaceList, references):
-        super().__init__(userAnnotations, sysAnnotations, semantic, obj.token)
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, parameters, obj, namespaceList, references):
+        Named.__init__(self, userAnnotations, sysAnnotations, semantic, obj.token)
+        self.parent = parent
         self.obj = obj
         self.parameters = parameters
         self.namespaceList = namespaceList
@@ -919,6 +976,33 @@ class Template(Named):
 
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
             raise UnsupportedSystemAnnotationsError(self.token, 'Template', sysAnnotations)
+
+    def guid(self):
+        parameters = getattr(self.obj, "parameters", None)
+        returnTypename = getattr(self.obj, "returnTypename", None)
+        returnTypenameScope = returnTypename.scope if returnTypename else None
+
+        # Deduce parameter typename strings
+        parameterStrings = [p.typename.scopeString for p in parameters] if parameters is not None else None
+
+        # Substitute template parameters
+        if returnTypenameScope:
+            returnTypenameScope = [Symto.from_token(token, Token.Operator, '*') if token.text in parameterStrings else token for token in returnTypenameScope]
+
+        # Substitute parameter types
+        if parameters:
+            newParameters = []
+            for parameter in parameters:
+                newScope = []
+                for token in parameter.typename.scope:
+                    if token.text in parameterStrings:
+                        newScope.append(Symto.from_token(token, Token.Operator, '*'))
+                    else:
+                        newScope.append(token)
+                newParameters.append(newScope)
+            parameters = newParameters
+
+        return GUID(GUIDKind.Template, self, [self.token], numTemplateArgs=len(self.parameters), args=parameters, returnTypenameScope=returnTypenameScope)
 
     def generate_translation_unit(self):
         result = PrettyString()
@@ -986,7 +1070,7 @@ class Template(Named):
             return None
 
         # Register the template with the current namespace
-        template = Template(userAnnotations, sysAnnotations, semantic, parameters, obj, list(parser.namespaceStack), list(parser.references))
+        template = Template(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], parameters, obj, list(parser.namespaceStack), list(parser.references))
         parser.namespaceStack[-1].objects.append(template)
 
         return template

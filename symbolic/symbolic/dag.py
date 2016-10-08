@@ -1,5 +1,6 @@
 from symbolic.objects import *
 import networkx as nx
+import matplotlib.pyplot as plt
 
 class Dependency:
     def __init__(self, obj):
@@ -22,9 +23,10 @@ class UnitDependencyGraph:
         while objs:
             obj = objs.pop()
 
-            # The dependencies are resolved using symbolic matching only
-            # Create a GUID for the object
-            self.dependencies.add_node(obj, dependency=Dependency(obj))
+            # Generate a GUID for the object
+            guid = obj.guid()
+            guidStr = str(guid)
+            self.dependencies.add_node(guidStr, dependency=Dependency(obj))
 
             # Recursive objects (Namespaces, Functions)
             children = getattr(obj, "objects", None)
@@ -32,9 +34,29 @@ class UnitDependencyGraph:
 
             # Connect immediate dependencies
             if isinstance(obj, Struct):
+                # Structs depend on their members
                 for member in obj.members:
-                    pass
+                    guid = member.guid()
+                    guidStr = str(guid)
+                    self.dependencies.add_node(guidStr, dependency=Dependency(member))
+            elif isinstance(obj, Alias):
+                pass
+            elif isinstance(obj, Namespace):
+                pass
+            elif isinstance(obj, Template):
+                pass
+            elif isinstance(obj, Instruction):
+                pass
+            elif isinstance(obj, Function):
+                pass
+            else:
+                assert False
                 
+        print("Nodes of graph: ")
+        print(self.dependencies.nodes())
+        nx.draw(self.dependencies)
+        plt.show()
+
     @staticmethod
     def merge(graphs):
         # Try to connect unresolved dependencies

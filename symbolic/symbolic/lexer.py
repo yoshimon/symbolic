@@ -9,9 +9,33 @@ from jinja2 import Template
 __all__ = ['SymbolicLexer']
 
 class Symto:
-    def __init__(self, kind, fileName, text, line, column):
-        
+    @staticmethod
+    def strlist(l):
+        return map(lambda t: t.text, l)
+
+    @staticmethod
+    def is_left_associtative(op):
+        return (definitions[op][1])
+
+    @staticmethod
+    def is_right_associtative(op):
+        return not is_left_associtative(op)
+
+    @staticmethod
+    def precedence(op):
+        return definitions[op][0]
+
+    @staticmethod
+    def has_unary(op):
+        return definitions[op][0]
+
+    @staticmethod
+    def from_token(other, kind, text):
+        return Symto(kind, other.libName, other.fileName, text, other.line, other.column)
+
+    def __init__(self, kind, libName, fileName, text, line, column):
         self.kind = kind
+        self.libName = libName
         self.fileName = fileName
         self.text = text
         self.line = line
@@ -45,28 +69,14 @@ class Symto:
         if self.isCloseBracket:
             self.matchingOpenBracket = SymbolicLexer.openBrackets[SymbolicLexer.closeBrackets.index(text)]
 
-    @staticmethod
-    def is_left_associtative(op):
-        return (definitions[op][1])
-
-    @staticmethod
-    def is_right_associtative(op):
-        return not is_left_associtative(op)
-
-    @staticmethod
-    def precedence(op):
-        return definitions[op][0]
-
-    @staticmethod
-    def has_unary(op):
-        return definitions[op][0]
+    def __str__(self):
+        return self.text
 
 class TokenValue:
-    def __init__(self, fileName, text, line, column):
+    def __init__(self, text, line, column):
         self.text = text
         self.line = line
         self.column = column
-        self.fileName = fileName
 
 @simplefilter
 def symbolic_filter(self, lexer, stream, options):
@@ -118,13 +128,13 @@ class SymbolicLexer(RegexLexer):
         line = 1
         column = 1
         for index, token, value in RegexLexer.get_tokens_unprocessed(self, text):
-            actualValue = self.subs[value] if (self.subs is not None) and (value in self.subs) else value
-            yield index, token, TokenValue(self.fileName, actualValue, line, column)
+            text = self.subs[value] if (self.subs is not None) and (value in self.subs) else value
+            yield index, token, TokenValue(text, line, column)
             if value == '\n':
                 line += 1
                 column = 1
             else:
-                column += len(actualValue)
+                column += len(text)
 
     def analyse_text(text):
         if re.search('using ', text):
@@ -139,7 +149,7 @@ class SymbolicLexer(RegexLexer):
         template = self.preprocessor.from_string(srcFileTxt, self.ppt, Template)
         context = template.render(self.ppt)
         srcFileTokens = self.get_tokens(context)
-        actualTokens = [Symto(t[0], t[1].fileName, t[1].text, t[1].line, t[1].column) for t in srcFileTokens]
+        actualTokens = [Symto(t[0], self.libName, self.fileName, t[1].text, t[1].line, t[1].column) for t in srcFileTokens]
         
         # Unbind substitution table
         self.subs = None

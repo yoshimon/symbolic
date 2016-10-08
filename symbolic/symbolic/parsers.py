@@ -6,13 +6,6 @@ from symbolic.exceptions import UnexpectedTokenError, UnexpectedEOFError, Unsupp
 from symbolic.lexer import TokenValue, Symto, SymbolicLexer
 import re
 
-class Symto:
-    def __init__(self, kind, text, line, column):
-        self.kind = kind
-        self.text = text
-        self.line = line
-        self.column = column
-
 class BaseParser:
     def __init__(self, lexer, tokens):
         self.reset(lexer, tokens)
@@ -24,12 +17,12 @@ class BaseParser:
         self.lexer = lexer
         self.tokens = list(tokens)
 
-        self.tokenStateStack = []
-        self.namespaceStack = [Namespace([], [], '', [Token.Text, '$Global'])]
-
         # Start at first token
         self.tokenIdx = -1
         self.token = self.advance()
+        
+        self.tokenStateStack = []
+        self.namespaceStack = [Namespace([], [], '', None, Symto(Token.Text, self.token.libName, self.token.fileName, '', 1, 1))] # Global namespace
 
     def advance(self):
         if self.is_eof():
@@ -234,10 +227,9 @@ class BaseParser:
 
 class UnitParser(BaseParser):
     def __init__(self, lexer, tokens):
-        super().__init__(lexer, tokens)
-        # Create a dependency graph for this unit with the global namespace
+        BaseParser.__init__(self, lexer, tokens)
         self.unitGraph = nx.DiGraph()
-        self.unitGraph.add_node('$Global')
+        self.unitGraph.add_node('') # Global namespace
 
     def try_parse_any(self, classes, args):
         ''' Parses all object types in the supplied list. '''
