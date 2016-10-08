@@ -19,7 +19,7 @@ class UnitDependencyGraph:
         self.dependencies = nx.DiGraph()
 
         # Create a dependency for every object
-        objs = list(self.rootNamespace.objects)
+        objs = list(reversed(self.rootNamespace.objects))
         while objs:
             obj = objs.pop()
 
@@ -30,7 +30,7 @@ class UnitDependencyGraph:
 
             # Recursive objects (Namespaces, Functions)
             children = getattr(obj, "objects", None)
-            objs += children if children is not None else []
+            objs += reversed(children) if children is not None else []
 
             # Connect immediate dependencies
             if isinstance(obj, Struct):

@@ -500,6 +500,7 @@ class Function(TemplateObject, Namespace):
         TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body)
         self.kind = kind
         self.returnTypename = returnTypename
+        self.scope = extensionTargetName + [token] if kind == FunctionKind.Extension else [token]
         self.extensionTargetName = extensionTargetName
         self.extensionName = '.'.join([t.text for t in extensionTargetName] + [token.text]) if extensionTargetName is not None else None
         self.parameters = parameters
@@ -514,7 +515,7 @@ class Function(TemplateObject, Namespace):
             raise UnsupportedSystemAnnotationsError(self.token, 'Function', sysAnnotations)
 
     def guid(self):
-        return GUID(GUIDKind.Function, self, [self.token], parameters=self.parameters, returnTypenameScope=self.returnTypename.scope, extensionTargetScope=self.extensionTargetName)
+        return GUID(GUIDKind.Function, self, self.scope, parameters=self.parameters, returnTypenameScope=self.returnTypename.scope, extensionTargetScope=self.extensionTargetName)
 
     @staticmethod
     def parse_template(parser, isTemplate):
