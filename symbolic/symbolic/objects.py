@@ -563,13 +563,13 @@ class Function(TemplateObject, Namespace):
         # Register the function with the current namespace
         parent = parser.namespaceStack[-1]
         func = Function(userAnnotations, sysAnnotations, semantic, parent, name, None, kind, returnTypename, extensionTargetName, parameters)
-        parent.objects.append(func)
         parser.namespaceStack.append(func)
         try:
             if isTemplate:
                 func.body = parser.fetch_block('{', '}')
                 parser.match(';')
             else:
+                parent.objects.append(func)
                 if parser.match('{'):
                     func.objects = parser.gather_objects([Namespace, Struct, Alias, Template, Instruction, Function], args=['}'])
                     parser.expect('}')
@@ -708,13 +708,13 @@ class Struct(TemplateObject, Namespace):
         # Register the struct with the current namespace
         parent = parser.namespaceStack[-1]
         struct = Struct(userAnnotations, sysAnnotations, semantic, parent, token, None)
-        parent.objects.append(struct)
         parser.namespaceStack.append(struct)
         try:
             if isTemplate:
                 struct.body = parser.fetch_block('{', '}')
                 parser.match(';')
             else:
+                parent.objects.append(struct)
                 if parser.match('{'):
                     struct.objects = parser.gather_objects([MemberList, Namespace, Struct, Alias, Template, Function], args=['}'])
                     parser.expect('}')
@@ -764,8 +764,10 @@ class Alias(TemplateObject):
         parser.match(';')
 
         # Register the struct with the current namespace
-        alias = Alias(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, body, targetType)
-        parser.namespaceStack[-1].objects.append(alias)
+        parent = parser.namespaceStack[-1]
+        alias = Alias(userAnnotations, sysAnnotations, semantic, parent, name, body, targetType)
+        if not isTemplate:
+            parent.objects.append(alias)
 
         return alias
 
@@ -1082,7 +1084,8 @@ class Template(Named):
             return None
 
         # Register the template with the current namespace
-        template = Template(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], parameters, obj, list(parser.namespaceStack), list(parser.references))
-        parser.namespaceStack[-1].objects.append(template)
+        parent = parser.namespaceStack[-1]
+        template = Template(userAnnotations, sysAnnotations, semantic, parent, parameters, obj, list(parser.namespaceStack), list(parser.references))
+        parent.objects.append(template)
 
         return template

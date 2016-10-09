@@ -19,7 +19,7 @@ class UnitDependencyGraph:
         self.dependencies = nx.DiGraph()
 
         # Create a dependency for every object
-        objs = list(reversed(self.rootNamespace.objects))
+        objs = list(self.rootNamespace.objects)
         while objs:
             obj = objs.pop()
 
@@ -30,22 +30,24 @@ class UnitDependencyGraph:
 
             # Recursive objects (Namespaces, Functions)
             children = getattr(obj, "objects", None)
-            objs += reversed(children) if children is not None else []
+            objs += children if children is not None else []
 
             # Connect immediate dependencies
-            if isinstance(obj, Struct):
+            if isinstance(obj, Instruction):
                 pass
-            if isinstance(obj, MemberList):
+            elif isinstance(obj, Function):
                 pass
+            elif isinstance(obj, MemberList):
+                for member in obj.members:
+                    pass
             elif isinstance(obj, Alias):
-                pass
-            elif isinstance(obj, Namespace):
                 pass
             elif isinstance(obj, Template):
                 pass
-            elif isinstance(obj, Instruction):
+            elif isinstance(obj, Struct):
+                # Handled in MemberList
                 pass
-            elif isinstance(obj, Function):
+            elif isinstance(obj, Namespace):
                 pass
             else:
                 assert False
