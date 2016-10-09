@@ -454,7 +454,7 @@ class Namespace(Named):
         if not parser.match('namespace'):
             return None
 
-        token = parser.expect_kind(Token.Name)
+        token = parser.match_kind_optional(Token.Name, Token.Text, '')
         semantic = Annotation.parse_semantic(parser)
 
         parser.expect('{')
@@ -593,8 +593,8 @@ class Function(TemplateObject, Namespace):
                     extensionTypename = Typename(extensionTypename.scope[:-1], templateParameters=extensionTypename.templateParameters[:-1], dims=extensionTypename.dims[:-1]) if extensionTypename else None
                 else:
                     # Make sure the return type, if it's not an extension, does not contain any template parameters
-                    for typename in returnTypename:
-                        if typename.templateParameters:
+                    for templateParameters in returnTypename.templateParameters:
+                        if templateParameters:
                             return None
 
                     if len(extensionTypename.scope) == 1:
@@ -758,7 +758,7 @@ class Struct(TemplateObject, Namespace):
         if not parser.match('struct'):
             return None
 
-        token = parser.match_kind(Token.Name)
+        token = parser.match_kind_optional(Token.Name, Token.Text, '')
         semantic = Annotation.parse_semantic(parser)
 
         # Register the struct with the current namespace
@@ -807,7 +807,7 @@ class Alias(TemplateObject):
         if not parser.match('using'):
             return None
 
-        name = parser.expect_kind(Token.Name)
+        token = parser.match_kind_optional(Token.Name, Token.Text, '')
         semantic = Annotation.parse_semantic(parser)
         targetType = None
         body = None
@@ -821,7 +821,7 @@ class Alias(TemplateObject):
 
         # Register the struct with the current namespace
         parent = parser.namespaceStack[-1]
-        alias = Alias(userAnnotations, sysAnnotations, semantic, parent, name, body, targetType)
+        alias = Alias(userAnnotations, sysAnnotations, semantic, parent, token, body, targetType)
         if not isTemplate:
             parent.objects.append(alias)
 
@@ -959,7 +959,7 @@ class Typename:
 
         # Generate args if necessary
         if dims is None:
-            dims = [[] for _ in scope]
+            dims = []
 
         self.templateParameters = templateParameters
         self.dims = dims
@@ -968,7 +968,6 @@ class Typename:
         strings = []
         for i in range(len(self.scope)):
             templateParameters = self.templateParameters[i]
-            dims = self.dims[i]
 
             # Base
             token = self.scope[i]
@@ -983,13 +982,14 @@ class Typename:
                 s += ', '.join(parameter.text for parameter in templateParameters)
                 s += '>'
 
-            # Array dims
-            if dims:
-                s += '['
-                s += ', '.join(arg.text if arg is not None else ' ' for arg in dims)
-                s += ']'
-
             strings.append(s)
+        
+        # Array dims
+        if self.dims:
+            s += '['
+            s += ', '.join(arg.text if arg is not None else ' ' for arg in self.dims)
+            s += ']'
+
         return '.'.join(strings)
 
     def __str__(self):
@@ -1043,16 +1043,15 @@ class Typename:
 
         scope = [token]
         templateParameters = [Typename.parse_template_parameters(parser, allowPartialMask)]
-        dims = [Typename.parse_array_dimensions(parser)]
         while True:
             token = parser.token
             if parser.match('.'):
                 scope += [parser.expect_kind(Token.Name)]
                 templateParameters += [Typename.parse_template_parameters(parser, allowPartialMask)]
-                dims += [Typename.parse_array_dimensions(parser)]
             else:
                 break
 
+        dims = Typename.parse_array_dimensions(parser)
         return Typename(scope, templateParameters=templateParameters, dims=dims)
 
     @staticmethod

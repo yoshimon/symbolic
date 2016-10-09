@@ -143,6 +143,10 @@ class BaseParser:
 
         return result
 
+    def match_kind_optional(self, kind, optionalKind, optionalText):
+        token = self.match_kind(kind)
+        return Symto.from_token(self.token, optionalKind, optionalText) if token is None else token
+
     def match_push_any_open_bracket(self, stack):
         val = self.match_any(SymbolicLexer.openBrackets)
         success = val is not None
