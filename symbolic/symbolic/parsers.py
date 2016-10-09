@@ -2,7 +2,7 @@ import networkx as nx
 from pygments.token import Token, Name
 
 from symbolic.objects import Namespace, Expression, Reference, Annotation, Struct, Function, Alias, Template
-from symbolic.exceptions import UnexpectedTokenError, UnexpectedEOFError, UnsupportedSystemAnnotationsError
+from symbolic.exceptions import *
 from symbolic.lexer import TokenValue, Symto, SymbolicLexer
 import re
 
@@ -301,5 +301,8 @@ class UnitParser(BaseParser):
 
         # Parse, starting at the global namespace
         self.gather_namespace_objects()
+
+        if not self.is_eof():
+            raise ExpectedEOFError(self.token)
 
         return self.references, self.namespaceStack.pop()

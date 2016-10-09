@@ -80,3 +80,7 @@ class MissingArrayTypeError(SymbolicError):
 class InvalidArrayTypeError(SymbolicError):
     def __str__(self):
         return SymbolicError.__str__(self) + "Invalid array accessor type."
+
+class ExpectedEOFError(SymbolicError):
+    def __str__(self):
+        return SymbolicError.__str__(self) + "Expected EOF."
