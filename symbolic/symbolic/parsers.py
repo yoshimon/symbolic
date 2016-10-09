@@ -93,9 +93,9 @@ class BaseParser:
             return None
 
     def match_kind(self, tokenType):
-        return self.match_kinds([tokenType])
+        return self.match_any_kind([tokenType])
 
-    def match_kinds(self, tokenTypes):
+    def match_any_kind(self, tokenTypes):
         token = self.peek_kinds(tokenTypes)
         if token is not None:
             self.advance()

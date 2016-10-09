@@ -18,18 +18,48 @@ class GUIDKind(Enum):
     Namespace = 4
 
 class GUID:
-    def __init__(self, kind, obj, scope, *, numTemplateArgs=0, dims=None, parameters=None, returnTypenameScope=None, extensionTargetScope=None):
+    @staticmethod
+    def normalize_typename_by_template(typename, targetName, templateParameterId, scopeOffset=0):
+        for token in typename.scope[scopeOffset:]:
+            if token.text == targetName:
+                token.update(token, Token.Number, templateParameterId)
+
+        for parameters in typename.templateParameters:
+            for token in parameters:
+                if token.text == targetName:
+                    token.update(token, Token.Number, templateParameterId)
+
+    def __init__(self, kind, obj, name, *, templateParameterOffset=0, templateTypeParameters=None, dims=None, parameters=None, returnTypename=None, extensionTypename=None):
+        # Normalize with extension template args
+        templateParameterId = templateParameterOffset
+        if extensionTypename:
+            extensionTypename = deepcopy(extensionTypename)
+            parameters = deepcopy(parameters)
+
+            # Go through the extension, look at every open template argument and normalize
+            for i, extParameters in enumerate(extensionTypename.templateParameters):
+                for extToken in extParameters:
+                    if extToken.kind == Token.Name:
+                        targetName = extToken.text
+
+                        GUID.normalize_typename_by_template(extensionTypename, targetName, templateParameterId, scopeOffset=1)
+                        GUID.normalize_typename_by_template(returnTypename, targetName, templateParameterId)
+                        for parameter in parameters:
+                            GUID.normalize_typename_by_template(parameter.typename, targetName, templateParameterId)
+
+                        templateParameterId += 1
+
         self.kind = kind
         self.obj = obj
-        self.isAnonymous = scope[-1].text == ''
-        self.returnType = '{0} '.format('.'.join(Symto.strlist(returnTypenameScope))) if returnTypenameScope is not None else ''
-        self.scope = '.'.join(Symto.strlist(scope)) if not self.isAnonymous else '@{0}'.format(id(obj))
-        self.template = '<{0}>'.format(numTemplateArgs) if numTemplateArgs > 0 else ''
+        self.isAnonymous = name == ''
+        self.returnTypename = str(returnTypename) + ' ' if returnTypename is not None else ''
+        self.name = '@{0}'.format(id(obj)) if self.isAnonymous else name
+        self.template = '<{0}>'.format(', '.join(str(i) for i, _ in enumerate(templateTypeParameters))) if templateTypeParameters else ''
         self.dims = '[{0}]'.format(', '.join(Symto.strlist(dims, none=Template.Wildcard))) if dims is not None else ''
-        self.parameters = '({0})'.format(', '.join(['ref ' + parameter.typename.scopeString if parameter.isRef else parameter.typename.scopeString for parameter in parameters])) if parameters is not None else ''
-        self.extending = ' extending {0}'.format('.'.join(Symto.strlist(extensionTargetScope))) if extensionTargetScope is not None else ''
+        self.parameters = '({0})'.format(', '.join('ref ' + str(parameter.typename) if parameter.isRef else str(parameter.typename) for parameter in parameters)) if parameters is not None else ''
+        self.extending = 'Extending {0} with '.format(str(extensionTypename)) if extensionTypename is not None else ''
         self.libName = ' from {0}'.format(obj.token.libName)
-        self.typeName = ' as {0}'.format(kind.name)
+        self.typename = ' as {0}'.format(kind.name)
 
         # Build namespace string
         self.namespace = ''
@@ -40,10 +70,10 @@ class GUID:
             parent = parent.parent
 
         if namespaceStrings:
-            self.namespace = ' in {0}'.format('::'.join(reversed(namespaceStrings)))
+            self.namespace = ' in {0}'.format(' > '.join(reversed(namespaceStrings)))
 
         # Pre-compute string representation
-        self.value = self.returnType + self.scope + self.template + self.dims + self.parameters + self.typeName + self.namespace + self.libName
+        self.value = self.extending + self.returnTypename + self.name + self.template + self.dims + self.parameters + self.typename + self.namespace + self.libName
 
     def __str__(self):
         return self.value
@@ -64,6 +94,9 @@ class TemplateObject(Named):
     def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body):
         Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
         self.body = body
+
+    def template_typename(self):
+        return Typename([self.token])
 
 class InstructionKind(Enum):
     Expression = 0
@@ -90,7 +123,7 @@ class Instruction(Named):
         self.forStep = forStep
 
     def guid(self):
-        return GUID(GUIDKind.Instruction, self, [self.token])
+        return GUID(GUIDKind.Instruction, self, self.token.text)
 
     @staticmethod
     def expect_expression(parser, endDelim):
@@ -412,7 +445,7 @@ class Namespace(Named):
             raise UnsupportedSystemAnnotationsError(self.token, 'Namespace', sysAnnotations)
 
     def guid(self):
-        return GUID(GUIDKind.Namespace, self, [self.token])
+        return GUID(GUIDKind.Namespace, self, self.token.text)
 
     @staticmethod
     def parse(parser, args):
@@ -495,14 +528,12 @@ class Parameter(Named):
         return Parameter(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, typename, isRef)
 
 class Function(TemplateObject, Namespace):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body, kind, returnTypename, extensionTargetName, parameters):
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body, kind, returnTypename, extensionTypename, parameters):
         Namespace.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
         TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body)
         self.kind = kind
         self.returnTypename = returnTypename
-        self.scope = extensionTargetName + [token] if kind == FunctionKind.Extension else [token]
-        self.extensionTargetName = extensionTargetName
-        self.extensionName = '.'.join([t.text for t in extensionTargetName] + [token.text]) if extensionTargetName is not None else None
+        self.extensionTypename = extensionTypename
         self.parameters = parameters
 
         if kind == FunctionKind.Extension:
@@ -515,17 +546,20 @@ class Function(TemplateObject, Namespace):
             raise UnsupportedSystemAnnotationsError(self.token, 'Function', sysAnnotations)
 
     def guid(self):
-        return GUID(GUIDKind.Function, self, self.scope, parameters=self.parameters, returnTypenameScope=self.returnTypename.scope, extensionTargetScope=self.extensionTargetName)
+        return GUID(GUIDKind.Function, self, self.token.text, parameters=self.parameters, returnTypename=self.returnTypename, extensionTypename=self.extensionTypename)
+
+    def template_typename(self):
+        return self.extensionTypename if self.extensionTypename else TemplateObject.template_typename(self)
 
     @staticmethod
     def parse_template(parser, isTemplate):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         kind = FunctionKind.Regular
-        name = Symto(parser.token.kind, parser.token.libName, parser.token.fileName, '', parser.token.line, parser.token.column)
-        extensionTargetName = None
+        name = Symto.from_token(parser.token, parser.token.kind, '')
+        extensionTypename = None
         parameters = []
-        returnTypename = Typename.try_parse(parser)
+        returnTypename = Typename.try_parse(parser, allowPartialMask=True)
         hasExplicitReturnType = returnTypename is not None
 
         # If the next token is not an ID then returnTypename
@@ -533,26 +567,48 @@ class Function(TemplateObject, Namespace):
         if parser.token.kind != Token.Name:
             if hasExplicitReturnType:
                 name = returnTypename.scope[-1]
-            returnTypenameToken = Symto(Token.Name, parser.token.libName, parser.token.fileName, 'void', parser.token.line, parser.token.column)
-            returnTypename = Typename([returnTypenameToken], [], [])
+            returnTypenameToken = Symto.from_token(parser.token, Token.Name, 'void')
+            returnTypename = Typename([returnTypenameToken])
         
         if hasExplicitReturnType:
             # Extensions can be explicitly scoped
-            scope = Namespace.parse_explicit_scoping(parser)
-            if len(scope) >= 2:
-                # Looks like an extension
-                kind = FunctionKind.Extension
-                name = scope[-1]
-                extensionTargetName = scope[:-1]
-            else:
-                if len(scope) == 1:
-                    # Regular function or operator
-                    name = scope[0]
+            extensionTypename = Typename.try_parse(parser, allowPartialMask=True)
 
-                # Operators require 1 extra token
-                if name.text == 'operator':
-                    kind = FunctionKind.Operator
-                    name = parser.expect_kind(Token.Operator)
+            # None: implicit return value
+            # 1: Regular function or operator
+            # 2 or more: extension
+            if extensionTypename is not None:
+                if len(extensionTypename.scope) >= 2:
+                    # There should be no array specifications in the typename
+                    if any(dim for dim in extensionTypename.dims):
+                        return None
+
+                    # The last token should not have template args
+                    if extensionTypename.templateParameters[-1]:
+                        return None
+
+                    # Looks like an extension
+                    kind = FunctionKind.Extension
+                    name = extensionTypename.scope[-1]
+                    extensionTypename = Typename(extensionTypename.scope[:-1], templateParameters=extensionTypename.templateParameters[:-1], dims=extensionTypename.dims[:-1]) if extensionTypename else None
+                else:
+                    # Make sure the return type, if it's not an extension, does not contain any template parameters
+                    for typename in returnTypename:
+                        if typename.templateParameters:
+                            return None
+
+                    if len(extensionTypename.scope) == 1:
+                        # Regular function or operator
+                        name = extensionTypename.scope[0]
+
+                    # Zero out the extension guess
+                    extensionTypename = None
+
+                    # Operators require 1 extra token
+                    if name.text == 'operator':
+                        kind = FunctionKind.Operator
+                        name = parser.expect_kind(Token.Operator)
+
 
             if parser.match('('):
                 parameters = parser.gather_objects([Parameter], ',')
@@ -562,7 +618,7 @@ class Function(TemplateObject, Namespace):
 
         # Register the function with the current namespace
         parent = parser.namespaceStack[-1]
-        func = Function(userAnnotations, sysAnnotations, semantic, parent, name, None, kind, returnTypename, extensionTargetName, parameters)
+        func = Function(userAnnotations, sysAnnotations, semantic, parent, name, None, kind, returnTypename, extensionTypename, parameters)
         parser.namespaceStack.append(func)
         try:
             if isTemplate:
@@ -611,7 +667,7 @@ class Function(TemplateObject, Namespace):
                     prettyString += Annotation.syslist_to_str(p.sysAnnotations)
                     if p.isRef:
                         prettyString += 'ref'
-                    prettyString += p.typename.scopeString
+                    prettyString += str(p.typename)
                     prettyString += p.token.text
                     if p.semantic is not None:
                         prettyString += ': ' + p.semantic.text
@@ -630,7 +686,7 @@ class Member(Named):
             raise UnsupportedSystemAnnotationsError(self.token, 'Member', sysAnnotations)
 
     def guid(self):
-        return GUID(GUIDKind.Type, self, self.typename.scope, numTemplateArgs=len(self.typename.templateArgs), dims=self.typename.dims)
+        return GUID(GUIDKind.Type, self, str(self.typename), templateTypeParameters=self.typename.templateParameters, dims=self.typename.dims)
 
     @staticmethod
     def parse(parser, args):
@@ -657,7 +713,7 @@ class MemberList:
             raise UnsupportedSystemAnnotationsError(self.token, 'Member', sysAnnotations)
 
     def guid(self):
-        return GUID(GUIDKind.Type, self, self.typename.scope, numTemplateArgs=len(self.typename.templateArgs), dims=self.typename.dims)
+        return GUID(GUIDKind.Type, self, str(self.typename), templateTypeParameters=self.typename.templateParameters, dims=self.typename.dims)
 
     @staticmethod
     def parse(parser, args):
@@ -693,7 +749,7 @@ class Struct(TemplateObject, Namespace):
             raise UnsupportedSystemAnnotationsError(self.token, 'Struct', sysAnnotations)
 
     def guid(self):
-        return GUID(GUIDKind.Type, self, [self.token])
+        return GUID(GUIDKind.Type, self, self.token.text)
 
     @staticmethod
     def parse_template(parser, isTemplate):
@@ -743,7 +799,7 @@ class Alias(TemplateObject):
             raise UnsupportedSystemAnnotationsError(self.token, 'Alias', sysAnnotations)
 
     def guid(self):
-        return GUID(GUIDKind.Type, self, [self.token])
+        return GUID(GUIDKind.Type, self, self.token.text)
 
     @staticmethod
     def parse_template(parser, isTemplate):
@@ -894,31 +950,67 @@ class Annotation:
                     raise MissingAnnotationArgsError(annotation.token, signatures)
 
 class Typename:
-    def __init__(self, scope, templateArgs, dims):
+    def __init__(self, scope, *, templateParameters=None, dims=None):
         self.scope = scope
-        self.templateArgs = templateArgs
+
+        # Generate args if necessary
+        if templateParameters is None:
+            templateParameters = [[] for _ in scope]
+
+        # Generate args if necessary
+        if dims is None:
+            dims = [[] for _ in scope]
+
+        self.templateParameters = templateParameters
         self.dims = dims
-        self.scopeString = '.'.join([tok.text for tok in scope])
+
+    def to_string(self, templateWildcardStrings=None):
+        strings = []
+        for i in range(len(self.scope)):
+            templateParameters = self.templateParameters[i]
+            dims = self.dims[i]
+
+            # Base
+            token = self.scope[i]
+            if templateWildcardStrings is not None:
+                raise DevError()
+            
+            s = token.text
+
+            # Template args
+            if templateParameters:
+                s += '<'
+                s += ', '.join(parameter.text for parameter in templateParameters)
+                s += '>'
+
+            # Array dims
+            if dims:
+                s += '['
+                s += ', '.join(arg.text if arg is not None else ' ' for arg in dims)
+                s += ']'
+
+            strings.append(s)
+        return '.'.join(strings)
+
+    def __str__(self):
+        return self.to_string()
 
     @staticmethod
-    def try_parse(parser):
-        # Typenames can be explicitly scoped
-        scope = Namespace.parse_explicit_scoping(parser)
-        if not scope:
-            return None
-
-        # Template args
-        templateArgs = []
+    def parse_template_parameters(parser, allowPartialMask=False):
+        templateParameters = []
+        parameterMask = [Token.Name, Token.Literal.String] if allowPartialMask else [Token.Literal.String]
         if parser.match('<'):
             while True:
-                token = parser.match_kind(Token.Literal.String)
+                token = parser.match_any_kind(parameterMask)
                 if token is None:
                     break
-                templateArgs += [token]
+                templateParameters += [token]
                 parser.match(',')
             parser.expect('>')
+        return templateParameters
 
-        # Array
+    @staticmethod
+    def parse_array_dimensions(parser):
         dims = []
         if parser.match('['):
             missingBounds = True
@@ -940,8 +1032,28 @@ class Typename:
                     else:
                         break
             parser.expect(']')
+        return dims
 
-        return Typename(scope, templateArgs, dims)
+    @staticmethod
+    def try_parse(parser, allowPartialMask=False):
+        # Explicit scoping
+        token = parser.match_kind(Token.Name)
+        if token is None:
+            return None
+
+        scope = [token]
+        templateParameters = [Typename.parse_template_parameters(parser, allowPartialMask)]
+        dims = [Typename.parse_array_dimensions(parser)]
+        while True:
+            token = parser.token
+            if parser.match('.'):
+                scope += [parser.expect_kind(Token.Name)]
+                templateParameters += [Typename.parse_template_parameters(parser, allowPartialMask)]
+                dims += [Typename.parse_array_dimensions(parser)]
+            else:
+                break
+
+        return Typename(scope, templateParameters=templateParameters, dims=dims)
 
     @staticmethod
     def parse(parser):
@@ -949,9 +1061,6 @@ class Typename:
         if typename is None:
             raise TypenameExpectedError(parser.token)
         return typename
-
-    def __str__(self):
-        return self.scopeString
 
 class TemplateParameter(Named):
     def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token):
@@ -968,6 +1077,15 @@ class TemplateParameter(Named):
         semantic = Annotation.parse_semantic(parser)
         return TemplateParameter(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name)
 
+    def __str__(self):
+        return self.token.text
+
+    def  __hash__(self):
+        return hash(self.__str__())
+
+    def __eq__(self, other):
+        return self.token.text == other.token.text
+
 class Template(Named):
     # The template substitution wildcard
     Wildcard = '*'
@@ -980,43 +1098,33 @@ class Template(Named):
         self.namespaceList.pop(0)
         self.references = references
 
+        # Make sure that the template parameters are unique
+        if len(set(self.parameters)) != len(self.parameters):
+            raise DuplicateTemplateParameterError(self.token)
+
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
             raise UnsupportedSystemAnnotationsError(self.token, 'Template', sysAnnotations)
 
     def guid(self):
-        parameters = getattr(self.obj, "parameters", None)
-        returnTypename = getattr(self.obj, "returnTypename", None)
-        returnTypenameScope = returnTypename.scope if returnTypename else None
+        funcParameters = getattr(self.obj, "parameters", None)
+        funcReturnTypename = getattr(self.obj, "returnTypename", None)
+        typename = self.obj.template_typename()
 
-        # Deduce parameter typename strings
-        parameterStrings = [p.typename.scopeString for p in parameters] if parameters is not None else None
-
-        # Substitute template parameters
-        if returnTypenameScope:
-            returnTypenameScope = [Symto.from_token(token, Token.Operator, Template.Wildcard) if token.text in parameterStrings else token for token in returnTypenameScope]
-
-        # Substitute parameter types
+        # Normalize
+        parameters = deepcopy(self.parameters)
         if parameters:
-            newParameters = []
-            for parameter in parameters:
-                # Substitute tokens in the parameter typename
-                newTypenameScope = []
-                for token in parameter.typename.scope:
-                    if token.text in parameterStrings:
-                        newTypenameScope.append(Symto.from_token(token, Token.Operator, Template.Wildcard))
-                    else:
-                        newTypenameScope.append(token)
+            funcParameters = deepcopy(funcParameters)
+            funcReturnTypename = deepcopy(funcReturnTypename)
+            typename = deepcopy(typename)
 
-                # Substitute the typename
-                newTypename = Typename(newTypenameScope, [], [])
+            for templateParameterId, parameter in enumerate(parameters):
+                targetName = parameter.token.text
+                GUID.normalize_typename_by_template(typename, targetName, templateParameterId)
+                GUID.normalize_typename_by_template(funcReturnTypename, targetName, templateParameterId)
+                for parameter in funcParameters:
+                    GUID.normalize_typename_by_template(parameter.typename, targetName, templateParameterId)
 
-                # Create the substituted parameter
-                unnamedToken = Symto.from_token(token, Token.Text, '')
-                clonedParameter = Parameter(parameter.userAnnotations, parameter.sysAnnotations, parameter.semantic, parameter.parent, unnamedToken, newTypename, False)
-                newParameters.append(clonedParameter)
-            parameters = newParameters
-
-        return GUID(GUIDKind.Template, self, [self.token], parameters=parameters, numTemplateArgs=len(self.parameters), returnTypenameScope=returnTypenameScope)
+        return GUID(GUIDKind.Template, self, self.obj.token.text, templateParameterOffset=len(parameters), templateTypeParameters=parameters, parameters=funcParameters, returnTypename=funcReturnTypename, extensionTypename=typename)
 
     def generate_translation_unit(self):
         result = PrettyString()

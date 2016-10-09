@@ -84,3 +84,7 @@ class InvalidArrayTypeError(SymbolicError):
 class ExpectedEOFError(SymbolicError):
     def __str__(self):
         return SymbolicError.__str__(self) + "Expected EOF."
+
+class DuplicateTemplateParameterError(SymbolicError):
+    def __str__(self):
+        return SymbolicError.__str__(self) + "Duplicate template parameter name detected."

@@ -14,6 +14,10 @@ class Symto:
         return map(lambda t: t.text if t is not None else none, l)
 
     @staticmethod
+    def join(l, c='.'):
+        return c.join(Symto.strlist(l))
+
+    @staticmethod
     def is_left_associtative(op):
         return (definitions[op][1])
 
@@ -37,10 +41,10 @@ class Symto:
         self.kind = kind
         self.libName = libName
         self.fileName = fileName
-        self.text = text
+        self.text = str(text)
         self.line = line
         self.column = column
-        self.columnEnd = column + len(text)
+        self.columnEnd = column + len(self.text)
         self.isTerminal = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex, Token.Name, Token.Literal.String]
         self.isNumber = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex]
         
@@ -68,6 +72,9 @@ class Symto:
         self.isCloseBracket = text in SymbolicLexer.closeBrackets
         if self.isCloseBracket:
             self.matchingOpenBracket = SymbolicLexer.openBrackets[SymbolicLexer.closeBrackets.index(text)]
+
+    def update(self, other, kind, text):
+        self.__init__(kind, other.libName, other.fileName, text, other.line, other.column)
 
     def __str__(self):
         return self.text
