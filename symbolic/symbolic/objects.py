@@ -792,9 +792,9 @@ class Struct(TemplateObject, Namespace):
         prettyString += 'struct ' + self.token.text
 
 class Alias(TemplateObject):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body, targetType):
+    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body, targetTypename):
         TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body)
-        self.targetType = targetType
+        self.targetTypename = targetTypename
 
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
             raise UnsupportedSystemAnnotationsError(self.token, 'Alias', sysAnnotations)
@@ -810,19 +810,19 @@ class Alias(TemplateObject):
 
         token = parser.match_kind_optional(Token.Name, Token.Text, '')
         semantic = Annotation.parse_semantic(parser)
-        targetType = None
+        targetTypename = None
         body = None
         if isTemplate:
             body = parser.fetch_block('{', '}')
         else:
             parser.expect('{')
-            targetType = Typename.parse(parser)
+            targetTypename = Typename.parse(parser)
             parser.expect('}')
         parser.match(';')
 
         # Register the struct with the current namespace
         parent = parser.namespaceStack[-1]
-        alias = Alias(userAnnotations, sysAnnotations, semantic, parent, token, body, targetType)
+        alias = Alias(userAnnotations, sysAnnotations, semantic, parent, token, body, targetTypename)
         if not isTemplate:
             parent.objects.append(alias)
 

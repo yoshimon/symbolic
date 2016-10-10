@@ -20,6 +20,7 @@ class UnitDependencyGraph:
 
         # Create a dependency for every object
         objs = [(obj, None) for obj in self.rootNamespace.objects]
+        unresolvedNodes = []
         while objs:
             tuple = objs.pop()
             obj = tuple[0]
@@ -40,20 +41,25 @@ class UnitDependencyGraph:
 
             # Connect immediate dependencies
             if isinstance(obj, Instruction):
+                # Nothing to do. The expressions are handled after everything else is resolved
                 pass
             elif isinstance(obj, Function):
+                # TODO: create unresolved typeref for every parameter type
                 pass
             elif isinstance(obj, MemberList):
                 # Handled above
                 pass
             elif isinstance(obj, Alias):
+                # TODO: create unresolved typeref for targetType
                 pass
             elif isinstance(obj, Template):
+                # Templates don't have members
                 pass
             elif isinstance(obj, Struct):
                 # Handled above
                 pass
             elif isinstance(obj, Namespace):
+                # Handled above
                 pass
             else:
                 assert False
