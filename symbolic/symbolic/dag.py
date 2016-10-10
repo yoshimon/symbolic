@@ -19,9 +19,11 @@ class UnitDependencyGraph:
         self.dependencies = nx.DiGraph()
 
         # Create a dependency for every object
-        objs = list(self.rootNamespace.objects)
+        objs = [(obj, None) for obj in self.rootNamespace.objects]
         while objs:
-            obj = objs.pop()
+            tuple = objs.pop()
+            obj = tuple[0]
+            parentGuidStr = tuple[1]
 
             # Generate a GUID for the object
             guid = obj.guid()
@@ -30,7 +32,11 @@ class UnitDependencyGraph:
 
             # Recursive objects (Namespaces, Functions)
             children = getattr(obj, "objects", None)
-            objs += children if children is not None else []
+            objs += [(child, guidStr) for child in  children] if children is not None else []
+
+            # Connect the dependencies
+            if parentGuidStr is not None:
+                self.dependencies.add_edge(parentGuidStr, guidStr)
 
             # Connect immediate dependencies
             if isinstance(obj, Instruction):
@@ -38,14 +44,14 @@ class UnitDependencyGraph:
             elif isinstance(obj, Function):
                 pass
             elif isinstance(obj, MemberList):
-                for member in obj.members:
-                    pass
+                # Handled above
+                pass
             elif isinstance(obj, Alias):
                 pass
             elif isinstance(obj, Template):
                 pass
             elif isinstance(obj, Struct):
-                # Handled in MemberList
+                # Handled above
                 pass
             elif isinstance(obj, Namespace):
                 pass
@@ -54,7 +60,7 @@ class UnitDependencyGraph:
                 
         print("Nodes of graph: ")
         print(self.dependencies.nodes())
-        nx.draw(self.dependencies)
+        nx.draw(self.dependencies, with_labels=True)
         plt.show()
 
     @staticmethod

@@ -55,7 +55,7 @@ class GUID:
         self.returnTypename = str(returnTypename) + ' ' if returnTypename is not None else ''
         self.name = '@{0}'.format(id(obj)) if self.isAnonymous else name
         self.template = '<{0}>'.format(', '.join(str(i) for i, _ in enumerate(templateTypeParameters))) if templateTypeParameters else ''
-        self.dims = '[{0}]'.format(', '.join(Symto.strlist(dims, none=Template.Wildcard))) if dims is not None else ''
+        self.dims = '[{0}]'.format(', '.join(Symto.strlist(dims, none=Template.Wildcard))) if dims else ''
         self.parameters = '({0})'.format(', '.join('ref ' + str(parameter.typename) if parameter.isRef else str(parameter.typename) for parameter in parameters)) if parameters is not None else ''
         self.extending = 'Extending {0} with '.format(str(extensionTypename)) if extensionTypename is not None else ''
         self.libName = ' from {0}'.format(obj.token.libName)
@@ -686,7 +686,7 @@ class Member(Named):
             raise UnsupportedSystemAnnotationsError(self.token, 'Member', sysAnnotations)
 
     def guid(self):
-        return GUID(GUIDKind.Type, self, str(self.typename), templateTypeParameters=self.typename.templateParameters, dims=self.typename.dims)
+        return GUID(GUIDKind.Type, self, str(self.typename), templateTypeParameters=self.typename.templateParameters[-1], dims=self.typename.dims)
 
     @staticmethod
     def parse(parser, args):
@@ -713,7 +713,7 @@ class MemberList:
             raise UnsupportedSystemAnnotationsError(self.token, 'Member', sysAnnotations)
 
     def guid(self):
-        return GUID(GUIDKind.Type, self, str(self.typename), templateTypeParameters=self.typename.templateParameters, dims=self.typename.dims)
+        return GUID(GUIDKind.Type, self, str(self.typename), templateTypeParameters=self.typename.templateParameters[-1], dims=self.typename.dims)
 
     @staticmethod
     def parse(parser, args):
@@ -730,7 +730,8 @@ class MemberList:
             names.append(name)
 
         semantic = Annotation.parse_semantic(parser)
-        parser.match(';')
+        if not parser.match(';'):
+            return None
         
         members = []
         for name in names:
@@ -1119,9 +1120,13 @@ class Template(Named):
             for templateParameterId, parameter in enumerate(parameters):
                 targetName = parameter.token.text
                 GUID.normalize_typename_by_template(typename, targetName, templateParameterId)
-                GUID.normalize_typename_by_template(funcReturnTypename, targetName, templateParameterId)
-                for parameter in funcParameters:
-                    GUID.normalize_typename_by_template(parameter.typename, targetName, templateParameterId)
+
+                if funcReturnTypename:
+                    GUID.normalize_typename_by_template(funcReturnTypename, targetName, templateParameterId)
+
+                if funcParameters:
+                    for parameter in funcParameters:
+                        GUID.normalize_typename_by_template(parameter.typename, targetName, templateParameterId)
 
         return GUID(GUIDKind.Template, self, self.obj.token.text, templateParameterOffset=len(parameters), templateTypeParameters=parameters, parameters=funcParameters, returnTypename=funcReturnTypename, extensionTypename=typename)
 
