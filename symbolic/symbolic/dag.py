@@ -1,5 +1,6 @@
 from symbolic.objects import *
 import networkx as nx
+from networkx.drawing.nx_agraph import graphviz_layout
 import matplotlib.pyplot as plt
 
 class Dependency:
@@ -13,6 +14,12 @@ class Dependency:
         self.isDeprecated = Annotation.has('deprecated', obj.sysAnnotations) if obj is isinstance(obj, Annotateable) else False
 
 class UnitDependencyGraph:
+    def _create_dependency(self, unresolvedNodes, obj, guidObj, parentGuid):
+        guid = str(guidObj.guid())
+        self.dependencies.add_node(guid, dependency=Dependency(obj))
+        self.dependencies.add_edge(parentGuid, guid)
+        unresolvedNodes.append(guid)
+
     def __init__(self, references, rootNamespace):
         self.references = references
         self.rootNamespace = rootNamespace
@@ -21,52 +28,43 @@ class UnitDependencyGraph:
         # Create a dependency for every object
         objs = [(obj, None) for obj in self.rootNamespace.objects]
         unresolvedNodes = []
+
         while objs:
             tuple = objs.pop()
-            obj = tuple[0]
-            parentGuidStr = tuple[1]
+            obj, parentGuid = tuple[0], tuple[1]
 
             # Generate a GUID for the object
-            guid = obj.guid()
-            guidStr = str(guid)
-            self.dependencies.add_node(guidStr, dependency=Dependency(obj))
+            guid = str(obj.guid())
+            self.dependencies.add_node(guid, dependency=Dependency(obj))
 
             # Recursive objects (Namespaces, Functions)
             children = getattr(obj, "objects", None)
-            objs += [(child, guidStr) for child in  children] if children is not None else []
+            objs += [(child, guid) for child in children] if children is not None else []
 
             # Connect the dependencies
-            if parentGuidStr is not None:
-                self.dependencies.add_edge(parentGuidStr, guidStr)
+            if parentGuid is not None:
+                self.dependencies.add_edge(parentGuid, guid)
 
             # Connect immediate dependencies
-            if isinstance(obj, Instruction):
-                # Nothing to do. The expressions are handled after everything else is resolved
-                pass
-            elif isinstance(obj, Function):
-                # TODO: create unresolved typeref for every parameter type
-                pass
-            elif isinstance(obj, MemberList):
-                # Handled above
-                pass
+            if isinstance(obj, Function):
+                # Return type
+                self._create_dependency(unresolvedNodes, obj, obj.returnTypename, guid)
+
+                # Parameters
+                for parameter in obj.parameters:
+                    self._create_dependency(unresolvedNodes, obj, parameter, guid)
             elif isinstance(obj, Alias):
-                # TODO: create unresolved typeref for targetType
-                pass
-            elif isinstance(obj, Template):
-                # Templates don't have members
-                pass
-            elif isinstance(obj, Struct):
-                # Handled above
-                pass
-            elif isinstance(obj, Namespace):
-                # Handled above
+                # Create unresolved typeref for targetType
+                self._create_dependency(unresolvedNodes, obj, obj.targetTypename, guid)
+            elif any(isinstance(obj, classType) for classType in [Instruction, MemberList, Alias, Template, Struct, Namespace]):
                 pass
             else:
                 assert False
                 
         print("Nodes of graph: ")
         print(self.dependencies.nodes())
-        nx.draw(self.dependencies, with_labels=True)
+        layout = nx.spectral_layout(self.dependencies)
+        nx.draw_networkx(self.dependencies, pos=layout, arrows=True, with_labels=True, node_size=10000)
         plt.show()
 
     @staticmethod

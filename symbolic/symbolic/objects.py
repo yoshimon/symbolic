@@ -58,16 +58,17 @@ class GUID:
         self.dims = '[{0}]'.format(', '.join(Symto.strlist(dims, none=Template.Wildcard))) if dims else ''
         self.parameters = '({0})'.format(', '.join('ref ' + str(parameter.typename) if parameter.isRef else str(parameter.typename) for parameter in parameters)) if parameters is not None else ''
         self.extending = 'Extending {0} with '.format(str(extensionTypename)) if extensionTypename is not None else ''
-        self.libName = ' from {0}'.format(obj.token.libName)
+        self.libName = ' from {0}'.format(obj.token.libName) if hasattr(obj, 'token') else ''
         self.typename = ' as {0}'.format(kind.name)
 
         # Build namespace string
         self.namespace = ''
         namespaceStrings = []
-        parent = self.obj.parent
-        while parent.parent:
-            namespaceStrings += [parent.token.text] if parent.token.text != '' else ['@{0}'.format(id(parent))]
-            parent = parent.parent
+        parent = getattr(obj, 'parent', None)
+        if parent:
+            while parent.parent:
+                namespaceStrings += [parent.token.text] if parent.token.text != '' else ['@{0}'.format(id(parent))]
+                parent = parent.parent
 
         if namespaceStrings:
             self.namespace = ' in {0}'.format(' > '.join(reversed(namespaceStrings)))
@@ -230,10 +231,10 @@ class ExpressionAtom:
         self.kind = kind
 
 class ExpressionAST:
-    def __init__(self, atom, parent, children=[]):
+    def __init__(self, atom, parent, children=None):
         self.atom = atom
         self.parent = parent
-        self.children = children
+        self.children = [] if children is None else children
 
 class Expression(Annotateable):
     def __init__(self, userAnnotations, sysAnnotations, parent, tokens):
@@ -506,6 +507,9 @@ class Parameter(Named):
         Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
         self.typename = typename
         self.isRef = isRef
+
+    def guid(self):
+        return GUID(GUIDKind.Type, self, str(self.typename), templateTypeParameters=self.typename.templateParameters[-1], dims=self.typename.dims)
 
     @staticmethod
     def parse(parser, args):
@@ -964,6 +968,9 @@ class Typename:
 
         self.templateParameters = templateParameters
         self.dims = dims
+
+    def guid(self):
+        return GUID(GUIDKind.Type, self, str(self), templateTypeParameters=self.templateParameters[-1], dims=self.dims)
 
     def to_string(self, templateWildcardStrings=None):
         strings = []
