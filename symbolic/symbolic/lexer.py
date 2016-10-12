@@ -1,7 +1,6 @@
 import re
 
 from pygments.lexer import RegexLexer, include, bygroups, using, this, default, words
-from pygments.util import get_bool_opt
 from pygments.token import Token, Text, Operator, Name, String, Number, Punctuation, Error
 from pygments.filter import simplefilter
 from jinja2 import Template

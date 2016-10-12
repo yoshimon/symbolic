@@ -36,6 +36,9 @@
     <Compile Include="symbolic\formatter.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="symbolic\language.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="symbolic\lexer.py">
       <SubType>Code</SubType>
     </Compile>

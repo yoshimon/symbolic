@@ -8,14 +8,16 @@ from symbolic.exceptions import *
 from symbolic.lexer import SymbolicLexer, Symto
 from symbolic.formatter import PrettyString
 from symbolic.algorithm import Algorithm
+from symbolic.language import Language
 from builtins import AssertionError
 
 class GUIDKind(Enum):
-    Function = 0
-    Type = 1
-    Template = 2
-    Instruction = 3
-    Namespace = 4
+    Unresolved = 0
+    Function = 1
+    Type = 2
+    Template = 3
+    Instruction = 4
+    Namespace = 5
 
 class GUID:
     @staticmethod
@@ -58,20 +60,21 @@ class GUID:
         self.dims = '[{0}]'.format(', '.join(Symto.strlist(dims, none=Template.Wildcard))) if dims else ''
         self.parameters = '({0})'.format(', '.join('ref ' + str(parameter.typename) if parameter.isRef else str(parameter.typename) for parameter in parameters)) if parameters is not None else ''
         self.extending = 'Extending {0} with '.format(str(extensionTypename)) if extensionTypename is not None else ''
-        self.libName = ' from {0}'.format(obj.token.libName) if hasattr(obj, 'token') else ''
+        self.libName = ' from {0}'.format(obj.token.libName) if (kind != GUIDKind.Unresolved) and (hasattr(obj, 'token')) else ''
         self.typename = ' as {0}'.format(kind.name)
 
-        # Build namespace string
+        # Build namespace declaration
         self.namespace = ''
-        namespaceStrings = []
-        parent = getattr(obj, 'parent', None)
-        if parent:
-            while parent.parent:
-                namespaceStrings += [parent.token.text] if parent.token.text != '' else ['@{0}'.format(id(parent))]
-                parent = parent.parent
+        if kind != GUIDKind.Unresolved:
+            namespaceStrings = []
+            parent = getattr(obj, 'parent', None)
+            if parent:
+                while parent.parent:
+                    namespaceStrings += [parent.token.text] if parent.token.text != '' else ['@{0}'.format(id(parent))]
+                    parent = parent.parent
 
-        if namespaceStrings:
-            self.namespace = ' in {0}'.format(' > '.join(reversed(namespaceStrings)))
+            if namespaceStrings:
+                self.namespace = ' in {0}'.format(' > '.join(reversed(namespaceStrings)))
 
         # Pre-compute string representation
         self.value = self.extending + self.returnTypename + self.name + self.template + self.dims + self.parameters + self.typename + self.namespace + self.libName
@@ -90,6 +93,10 @@ class Named(Annotateable):
     def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token):
         Annotateable.__init__(self, userAnnotations, sysAnnotations, semantic, parent)
         self.token = token
+
+        # Validate the name
+        if self.token.text in Language.invalidNames:
+            raise InvalidNameError(self.token)
 
 class TemplateObject(Named):
     def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body):
@@ -509,7 +516,7 @@ class Parameter(Named):
         self.isRef = isRef
 
     def guid(self):
-        return GUID(GUIDKind.Type, self, str(self.typename), templateTypeParameters=self.typename.templateParameters[-1], dims=self.typename.dims)
+        return GUID(GUIDKind.Unresolved, self, str(self.typename), templateTypeParameters=self.typename.templateParameters[-1], dims=self.typename.dims)
 
     @staticmethod
     def parse(parser, args):
@@ -540,14 +547,14 @@ class Function(TemplateObject, Namespace):
         self.extensionTypename = extensionTypename
         self.parameters = parameters
 
-        if kind == FunctionKind.Extension:
-            fail = Annotation.is_not_compatible(['static', 'private', 'deprecate'], sysAnnotations)
-        elif kind == FunctionKind.Operator:
-            fail = Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations)
-        elif kind == FunctionKind.Regular:
-            fail = Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations)
+        if self.kind == FunctionKind.Extension:
+            fail = Annotation.is_not_compatible(['static', 'private', 'deprecate'], self.sysAnnotations)
+        elif self.kind == FunctionKind.Operator:
+            fail = Annotation.is_not_compatible(['private', 'deprecate'], self.sysAnnotations)
+        elif self.kind == FunctionKind.Regular:
+            fail = Annotation.is_not_compatible(['private', 'deprecate'], self.sysAnnotations)
         if fail:
-            raise UnsupportedSystemAnnotationsError(self.token, 'Function', sysAnnotations)
+            raise UnsupportedSystemAnnotationsError(self.token, 'Function', self.sysAnnotations)
 
     def guid(self):
         return GUID(GUIDKind.Function, self, self.token.text, parameters=self.parameters, returnTypename=self.returnTypename, extensionTypename=self.extensionTypename)
@@ -686,11 +693,16 @@ class Member(Named):
         Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
         self.typename = typename
 
+        # Make sure that the typename is not void
+        for token in typename.scope:
+            if token.text == 'void':
+                raise InvalidTypenameError(token)
+
         if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
             raise UnsupportedSystemAnnotationsError(self.token, 'Member', sysAnnotations)
 
     def guid(self):
-        return GUID(GUIDKind.Type, self, str(self.typename), templateTypeParameters=self.typename.templateParameters[-1], dims=self.typename.dims)
+        return GUID(GUIDKind.Unresolved, self, str(self.typename), templateTypeParameters=self.typename.templateParameters[-1], dims=self.typename.dims)
 
     @staticmethod
     def parse(parser, args):
@@ -707,7 +719,7 @@ class Member(Named):
 
         return Member(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, typename)
 
-class MemberList:
+class MemberList(Named):
     def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, members, typename):
         Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
         self.members = members
@@ -717,7 +729,7 @@ class MemberList:
             raise UnsupportedSystemAnnotationsError(self.token, 'Member', sysAnnotations)
 
     def guid(self):
-        return GUID(GUIDKind.Type, self, str(self.typename), templateTypeParameters=self.typename.templateParameters[-1], dims=self.typename.dims)
+        return GUID(GUIDKind.Unresolved, self, str(self.typename), templateTypeParameters=self.typename.templateParameters[-1], dims=self.typename.dims)
 
     @staticmethod
     def parse(parser, args):
@@ -957,7 +969,7 @@ class Annotation:
 class Typename:
     def __init__(self, scope, *, templateParameters=None, dims=None):
         self.scope = scope
-
+        
         # Generate args if necessary
         if templateParameters is None:
             templateParameters = [[] for _ in scope]
@@ -969,8 +981,39 @@ class Typename:
         self.templateParameters = templateParameters
         self.dims = dims
 
+        # Make sure the typename is valid
+        self.validate()
+
+    def validate(self):
+        firstToken = self.scope[0]
+
+        # Validate the first scope token
+        if firstToken.text in Language.systemTypenameStrings:
+            # The scope has to be exactly 1
+            if len(self.scope) > 1:
+                raise InvalidTypenameError(firstToken)
+
+            # Default typenames are never templated
+            if self.templateParameters[0]:
+                raise InvalidTypenameError(firstToken)
+
+            # void does not have array bounds
+            if firstToken.text == 'void':
+                if len(self.dims) > 0:
+                    raise InvalidTypenameError(firstToken)
+
+        # Validate the entire scope
+        if len(self.scope) > 0:
+            for token in self.scope[1:]:
+                if token.text in Language.systemTypenameStrings:
+                    raise InvalidTypenameError(token)
+
+        # Should not be a keyword
+        if any(token.text in Language.keywords for token in self.scope):
+            raise InvalidTypenameError(self.scope[0])
+
     def guid(self):
-        return GUID(GUIDKind.Type, self, str(self), templateTypeParameters=self.templateParameters[-1], dims=self.dims)
+        return GUID(GUIDKind.Unresolved, self, str(self), templateTypeParameters=self.templateParameters[-1], dims=self.dims)
 
     def to_string(self, templateWildcardStrings=None):
         strings = []

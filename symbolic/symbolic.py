@@ -8,7 +8,7 @@ from jinja2 import Environment
 
 from symbolic.parsers import UnitParser
 from symbolic.lexer import SymbolicLexer, Symto
-from symbolic.dag import UnitDependencyGraph
+from symbolic.dag import *
 
 # Loads a pre-processor table from file
 def load_ppt(filePath):
@@ -119,8 +119,8 @@ if __name__ == "__main__":
         for node in libDepGraph.nodes(data=True):
             # Update lexer state
             lexer.libName = node[0]
-
             absLibPath = node[1]['absLibPath']
+            libDAG = LibraryDependencyGraph()
 
             # Load the per-library pre-processor table
             libPPT = load_ppt(absLibPath + '\\.lib.pp')
@@ -145,10 +145,7 @@ if __name__ == "__main__":
                     references, globalNamespace = unitParser.parse()
 
                     # Create a dependency graph for the unit
-                    unitDAG = UnitDependencyGraph(references, globalNamespace)
-
-                    # Dump the sorted DAG to disk
-                    
-                    # TODO: if an error occurs: show the expanded context
+                    libDAG.insert_unit(references, globalNamespace)
+                    libDAG.dump()
 
         print('Done.')

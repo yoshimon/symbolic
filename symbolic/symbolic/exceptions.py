@@ -88,3 +88,11 @@ class ExpectedEOFError(SymbolicError):
 class DuplicateTemplateParameterError(SymbolicError):
     def __str__(self):
         return SymbolicError.__str__(self) + "Duplicate template parameter name detected."
+
+class InvalidTypenameError(SymbolicError):
+    def __str__(self):
+        return SymbolicError.__str__(self) + "Invalid typename."
+
+class InvalidNameError(SymbolicError):
+    def __str__(self):
+        return SymbolicError.__str__(self) + "Invalid name."
