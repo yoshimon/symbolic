@@ -41,7 +41,7 @@ class Location:
         Initialize the object.
 
         Args:
-            kidn (LocationKind): The location type specifier.
+            kind (LocationKind): The location type specifier.
             scope (list(str)): The scope strings.
             name (str): The object name.
         '''
@@ -52,8 +52,12 @@ class Location:
     @staticmethod
     def from_parent(kind, location, name):
         '''
-        Extend a location by one level.
+        Create a location from an existing parent.
 
+        Args:
+            kind (LocationKind): The location kind.
+            location (Location): The parent location.
+            name (str): The name of the new location leaf.
         Returns:
             Location: The new location object.
         '''

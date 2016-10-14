@@ -20,7 +20,7 @@ def load_ppt(filePath):
     Loads a pre-processor table.
 
     Args:
-        filePath: The file path.
+        filePath (str): The file path.
     Returns:
         dict: The pre-processor tokens.
     '''
@@ -37,7 +37,7 @@ def merge_ppts(tables):
     Merges a collection of pre-processor tables.
 
     Args:
-        tables (dict): The pre-processor tables.
+        tables (list(dict)): The pre-processor tables.
     Returns:
         dict: The pre-processor table.
     '''

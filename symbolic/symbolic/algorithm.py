@@ -4,7 +4,7 @@ class Algorithm:
     def pop_while(stack, func, action=None):
         '''
         Pop all elements from a stack until a predicate returns
-        falls and invoke an optional action after each iteration.
+        false and invoke an optional action after each iteration.
 
         Returns:
             bool: True, if the stack is empty when returning. Otherwise, false.
