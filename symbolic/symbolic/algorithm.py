@@ -1,6 +1,14 @@
 class Algorithm:
+    '''Custom algorithms on Python data structures.'''
     @staticmethod
     def pop_while(stack, func, action=None):
+        '''
+        Pop all elements from a stack until a predicate returns
+        falls and invoke an optional action after each iteration.
+
+        Returns:
+            bool: True, if the stack is empty when returning. Otherwise, false.
+        '''
         isEmpty = True
         while stack:
             if func(stack[-1]):
@@ -11,11 +19,3 @@ class Algorithm:
                 isEmpty = False
                 break
         return isEmpty
-
-    @staticmethod
-    def split_where(l, func):
-        idx = -1
-        for i, e in enumerate(l):
-            if func(e):
-                return l[:i], l[i:]
-        return l, []

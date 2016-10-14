@@ -1,19 +1,46 @@
-import networkx as nx
-from pygments.token import Token, Name
-
-from symbolic.objects import Namespace, Expression, Reference, Annotation, Struct, Function, Alias, Template
-from symbolic.exceptions import *
-from symbolic.lexer import TokenValue, Symto, SymbolicLexer
+# Built-in
 import re
 
+# Library
+from pygments.token import Token, Name
+
+# Project
+from symbolic.exceptions import *
+from symbolic.objects import Namespace, Expression, Reference, Annotation, Struct, Function, Alias, Template
+from symbolic.lexer import TokenValue, Symto, SymbolicLexer
+
 class BaseParser:
+    '''A base class for all parsers.'''
     def __init__(self, lexer, tokens):
+        '''
+        Initialize the object.
+
+        Args:
+            lexer (SymbolicLexer): The lexer to use.
+            tokens (list(Symto)): The token list.
+        '''
         self.reset(lexer, tokens)
 
     def is_eof(self):
+        '''
+        Return whether the EOF is reached.
+
+        Args:
+            lexer (SymbolicLexer): The lexer to use.
+            tokens (list(Symto)): The token list.
+        Returns:
+            bool: True, if the EOF is reached. Otherwise false.
+        '''
         return self.tokenIdx >= len(self.tokens)
 
     def reset(self, lexer, tokens):
+        '''
+        Reset the parser.
+
+        Args:
+            lexer (SymbolicLexer): The lexer to use.
+            tokens (list(Symto)): The token stream.
+        '''
         self.lexer = lexer
         self.tokens = list(tokens)
 
@@ -74,7 +101,7 @@ class BaseParser:
 
         return None
 
-    def match_map(self, default, kvList):
+    def match_map(self, kvList, default):
         for (k, v) in kvList:
             if self.match(k):
                 return v
@@ -124,7 +151,7 @@ class BaseParser:
 
     def until_any(self, endDelims):
         if not endDelims:
-            raise AssertionError()
+            raise DevError()
 
         bracketStack = []
         result = []
@@ -230,11 +257,6 @@ class BaseParser:
         return tokens
 
 class UnitParser(BaseParser):
-    def __init__(self, lexer, tokens):
-        BaseParser.__init__(self, lexer, tokens)
-        self.unitGraph = nx.DiGraph()
-        self.unitGraph.add_node('') # Global namespace
-
     def try_parse_any(self, classes, args):
         ''' Parses all object types in the supplied list. '''
         if self.is_eof():
@@ -296,7 +318,7 @@ class UnitParser(BaseParser):
         return references
 
     def parse(self):
-        ''' Converts the token stream to an AST. '''
+        '''Parses the active token stream.'''
         # Reset stream position
         self.reset(self.lexer, self.tokens)
 

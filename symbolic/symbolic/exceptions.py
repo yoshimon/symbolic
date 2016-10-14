@@ -1,98 +1,218 @@
-class SymbolicError(Exception):
+class TokenError(Exception):
+    '''An exception base class, that indicates an error that can be located in the source.'''
     def __init__(self, token):
-        Exception.__init__(self)
+        '''
+        Initializes the object.
+
+        Args:
+            token (Symto): The token to associate with this error.
+        '''
+        super().__init__()
         self.token = token
     def __str__(self):
-        return "{0} @ ({1}, {2}): ".format(repr(self.token.fileName), self.token.line, self.token.column)
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return "'{0}' @ ({1}, {2}): ".format(self.token.fileName, self.token.line, self.token.column)
 
 class DevError(Exception):
+    '''An exception class, that indicates a developer error (bug).'''
     def __str__(self):
-        return SymbolicError.__str__(self) + "Developer error."
+        '''
+        Return a string representation of the object.
 
-class UnexpectedTokenError(SymbolicError):
+        Returns:
+            str: The string representation.
+        '''
+        return TokenError.__str__(self) + "Developer error."
+
+class UnexpectedTokenError(TokenError):
+    '''An exception class, that indicates a mismatch between an expected token and the current token in the token stream.'''
     def __init__(self, token, expected, found):
-        SymbolicError.__init__(self, token)
+        '''
+        Initializes the object.
+
+        Args:
+            token (Symto): The token to associate with this error.
+            expected (Symto): The expected token.
+            found (Symto): The current token in the token stream.
+        '''
+        super().__init__(token)
         self.expected = expected
         self.found = found
     def __str__(self):
-        return SymbolicError.__str__(self) + "Found {0} but expected {1}.".format(repr(self.found), repr(self.expected))
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Found '{0}' but expected '{1}'.".format(str(self.found), str(self.expected))
 
 class UnexpectedEOFError(Exception):
+    '''An exception class, that indicates an unexpected EOF token in the token stream.'''
     def __str__(self):
-        return SymbolicError.__str__(self) + "Unexpected EOF."
+        '''
+        Return a string representation of the object.
 
-class UnsupportedSystemAnnotationsError(SymbolicError):
-    def __init__(self, token, what, sysAnnotations):
-        SymbolicError.__init__(self, token)
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Unexpected EOF."
+
+class UnsupportedSystemAnnotationError(TokenError):
+    '''An exception class, that indicates an unsupported system annotation.'''
+    def __init__(self, what, sysAnnotation):
+        '''
+        Initializes the object.
+
+        Args:
+            token (Symto): The token to associate with this error.
+            what (Symto): The expected token.
+            sysAnnotation (list(Annotation)): The system annotation.
+        '''
+        super().__init__(sysAnnotation.token)
         self.what = what
-        self.sysAnnotations = sysAnnotations
-    def __str__(self):
-        if len(self.sysAnnotations) > 1:
-            return SymbolicError.__str__(self) + "{0}s do not support {1} system annotations.".format(self.what, repr([e.token.text for e in self.sysAnnotations]))
-        else:
-            return SymbolicError.__str__(self) + "{0}s do not support the {1} system annotation.".format(self.what, repr(self.sysAnnotations[0].token.text))
-
-class UnknownSystemAnnotationError(SymbolicError):
-    def __init__(self, token, sysAnnotation):
-        SymbolicError.__init__(SymbolicError, token)
         self.sysAnnotation = sysAnnotation
     def __str__(self):
-        return SymbolicError.__str__(self) + "{0} is not a known system annotation.".format(repr(self.sysAnnotation))
+        '''
+        Return a string representation of the object.
 
-class MissingScopeError(SymbolicError):
-    def __str__(self):
-        return SymbolicError.__str__(self) + "Missing scope."
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "{0}s do not support the '{1}' system annotation.".format(self.what, str(self.sysAnnotation.token))
 
-class TypenameExpectedError(SymbolicError):
-    def __str__(self):
-        return SymbolicError.__str__(self) + "Typename expected."
+class UnknownSystemAnnotationError(TokenError):
+    '''An exception class, that indicates an unknown system annotation.'''
+    def __init__(self, token, sysAnnotation):
+        '''
+        Initializes the object.
 
-class MissingAnnotationArgsError(SymbolicError):
-    def __init__(self, token, *args):
-        SymbolicError.__init__(self, token)
-        self.args = args
+        Args:
+            token (Symto): The token to associate with this error.
+            sysAnnotation (Annotation): The system annotation.
+        '''
+        super().__init__(token)
+        self.sysAnnotation = sysAnnotation
     def __str__(self):
-        if len(self.args) == 1:
-            return SymbolicError.__str__(self) + "Missing parameters for system annotation {0}. Possible overloads: {1}.".format(repr(self.token.text), self.args)
-        else:
-            return SymbolicError.__str__(self) + "Missing parameters for system annotation {0}. Possible overloads: {1}.".format(repr(self.token.text), self.args)
+        '''
+        Return a string representation of the object.
 
-class MissingReturnTypeError(SymbolicError):
-    def __str__(self):
-        return SymbolicError.__str__(self) + "Missing return type."
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "{0} is not a known system annotation.".format(str(self.sysAnnotation))
 
-class MissingExpressionError(SymbolicError):
+class MissingScopeError(TokenError):
+    '''An exception class, that indicates a missing scope.'''
     def __str__(self):
-        return SymbolicError.__str__(self) + "Missing expression."
+        '''
+        Return a string representation of the object.
 
-class MissingBracketsError(SymbolicError):
-    def __str__(self):
-        return SymbolicError.__str__(self) + "Missing brackets."
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Missing scope."
 
-class InvalidExpressionError(SymbolicError):
+class TypenameExpectedError(TokenError):
+    '''An exception class, that indicates a missing typename.'''
     def __str__(self):
-        return SymbolicError.__str__(self) + "Invalid expression."
+        '''
+        Return a string representation of the object.
 
-class MissingArrayTypeError(SymbolicError):
-    def __str__(self):
-        return SymbolicError.__str__(self) + "Missing array accessor type."
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Typename expected."
 
-class InvalidArrayTypeError(SymbolicError):
+class MissingExpressionError(TokenError):
+    '''An exception class, that indicates a missing expression.'''
     def __str__(self):
-        return SymbolicError.__str__(self) + "Invalid array accessor type."
+        '''
+        Return a string representation of the object.
 
-class ExpectedEOFError(SymbolicError):
-    def __str__(self):
-        return SymbolicError.__str__(self) + "Expected EOF."
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Missing expression."
 
-class DuplicateTemplateParameterError(SymbolicError):
+class MissingBracketsError(TokenError):
+    '''An exception class, that indicates missing brackets.'''
     def __str__(self):
-        return SymbolicError.__str__(self) + "Duplicate template parameter name detected."
+        '''
+        Return a string representation of the object.
 
-class InvalidTypenameError(SymbolicError):
-    def __str__(self):
-        return SymbolicError.__str__(self) + "Invalid typename."
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Missing brackets."
 
-class InvalidNameError(SymbolicError):
+class InvalidExpressionError(TokenError):
+    '''An exception class, that indicates an invalid expression.'''
     def __str__(self):
-        return SymbolicError.__str__(self) + "Invalid name."
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Invalid expression."
+
+class MissingArrayTypeError(TokenError):
+    '''An exception class, that indicates a missing array accessor type.'''
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Missing array accessor type."
+
+class ExpectedEOFError(TokenError):
+    '''An exception class, that indicates an expected EOF.'''
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Expected EOF."
+
+class DuplicateTemplateParameterError(TokenError):
+    '''An exception class, that indicates duplicate template parameters.'''
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Duplicate template parameter detected."
+
+class InvalidTypenameError(TokenError):
+    '''An exception class, that indicates an invalid typename.'''
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Invalid typename."
+
+class InvalidNameError(TokenError):
+    '''An exception class, that indicates an invalid name.'''
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Invalid name."

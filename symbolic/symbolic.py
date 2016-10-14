@@ -1,17 +1,29 @@
+# Built-in
 import sys
 import json
 import os
 import glob
 import io
+
+# Library
 import networkx as nx
 from jinja2 import Environment
 
+# Project
 from symbolic.parsers import UnitParser
 from symbolic.lexer import SymbolicLexer, Symto
 from symbolic.dag import *
 
 # Loads a pre-processor table from file
 def load_ppt(filePath):
+    '''
+    Loads a pre-processor table.
+
+    Args:
+        filePath: The file path.
+    Returns:
+        dict: The pre-processor tokens.
+    '''
     try:
         with open(filePath) as filePath:
             jsonFile = json.load(filePath)
@@ -21,6 +33,14 @@ def load_ppt(filePath):
 
 # Merges pre-processor tables
 def merge_ppts(tables):
+    '''
+    Merges a collection of pre-processor tables.
+
+    Args:
+        tables (dict): The pre-processor tables.
+    Returns:
+        dict: The pre-processor table.
+    '''
     result = {}
     for t in tables:
         for p in t:
@@ -32,7 +52,7 @@ def merge_ppts(tables):
 if __name__ == "__main__":
     # Info
     print('Symbolic (C) 2016, WOZ')
-    print('Version 1.0.0.0 (DEBUG)')
+    print('Version 1.0.0.0')
 
     # Make sure we have a JSON filename for the project
     if len(sys.argv) < 2:
@@ -115,12 +135,17 @@ if __name__ == "__main__":
 
             sys.exit('Library dependency cycle found: [{:s}].'.format(dependencyChain))
 
+        # Create a new dependency collection for this project
+        dependencyCollection = ProjectDependencyCollection()
+
         # Translate each library by going through all *.sym files
         for node in libDepGraph.nodes(data=True):
             # Update lexer state
             lexer.libName = node[0]
             absLibPath = node[1]['absLibPath']
-            libDAG = LibraryDependencyGraph()
+
+            # Signal the dependency collection that a new library is being processed
+            dependencyCollection.begin_library(lexer.libName)
 
             # Load the per-library pre-processor table
             libPPT = load_ppt(absLibPath + '\\.lib.pp')
@@ -145,7 +170,12 @@ if __name__ == "__main__":
                     references, globalNamespace = unitParser.parse()
 
                     # Create a dependency graph for the unit
-                    libDAG.insert_unit(references, globalNamespace)
-                    libDAG.dump()
+                    dependencyCollection.insert_unit(references, globalNamespace)
+
+            # Resolve the library dependencies
+            dependencyCollection.end_library()
+
+        # Convert to resolved collection to dependency graph
+        dependencyGraph = dependencyCollection.to_graph()
 
         print('Done.')

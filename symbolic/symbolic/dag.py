@@ -1,81 +1,103 @@
 from symbolic.objects import *
 from symbolic.language import *
+from collections import deque
 import networkx as nx
-from networkx.drawing.nx_agraph import graphviz_layout
 import matplotlib.pyplot as plt
 
 class Dependency:
     def __init__(self, references, obj):
-        self.references = references
         self.obj = obj
-        self.target = None
+        self.references = references
 
         # Two system annotations are valid for all dependencies: private, deprecate
         self.isPrivate = Annotation.has('private', obj.sysAnnotations) if obj is isinstance(obj, Annotateable) else True
         self.isDeprecated = Annotation.has('deprecated', obj.sysAnnotations) if obj is isinstance(obj, Annotateable) else False
 
-class LibraryDependencyGraph:
+class ProjectDependencyCollection:
     def __init__(self):
-        self.unresolvedNodes = set()
-        self.dependencies = nx.DiGraph()
+        self.libName = ''
+        self.unresolvedDependencies = set()
+        self.resolvedObjects = {}
+
+    def navigate(self, scopeStrings):
+        lookup = self.resolvedObjects
+        for ns in scopeStrings:
+            # The namespace has to exist
+            if ns not in lookup:
+                raise EOFError()
+                
+            # Step down this namespace    
+            lookup = lookup[ns][1]
+
+        return lookup
+
+    def insert(self, references, obj):
+        dependency = Dependency(references, obj)
+        if obj.guid.kind == GUIDKind.Unresolved:
+            # Only register, if not a native type
+            if obj.guid.name not in Language.systemTypenameStrings:
+                self.unresolvedDependencies.add(dependency)
+        else:
+            lookup = self.navigate(obj.guid.namespaceStrings)
+
+            # Make sure that no duplicate object in this namespace exists
+            if obj.guid.name in lookup:
+                raise EOFError()
+
+            lookup[obj.guid.name] = (dependency, {})
 
     def insert_unit(self, references, rootNamespace):
         # Create a dependency for every object
-        objs = [(obj, None) for obj in rootNamespace.objects]
+        objs = deque(rootNamespace.objects)
         while objs:
-            tuple = objs.pop()
-            obj, parentGuid = tuple[0], tuple[1]
+            obj = objs.popleft()
 
-            # Create a node and connect the parent -> child dependency
-            guid = self.__insert_dependency(references, obj, obj, parentGuid)
+            # Register it
+            self.insert(references, obj)
 
             # Recursive objects (Namespaces, Functions)
             children = getattr(obj, "objects", None)
-            objs += ((child, guid) for child in children) if children is not None else []
+            objs += children if children is not None else []
 
-            # Connect immediate dependencies
+            # Connect immediate unresolved dependencies
             if isinstance(obj, Function):
-                # Return type
-                self.__insert_dependency(references, obj, obj.returnTypename, guid)
+                self.insert(references, obj.returnTypename)
 
-                # Parameters
                 for parameter in obj.parameters:
-                    self.__insert_dependency(references, obj, parameter, guid)
+                    self.insert(references, parameter)
             elif isinstance(obj, Alias):
-                # Create unresolved typeref for targetType
-                self.__insert_dependency(references, obj, obj.targetTypename, guid)
+                self.insert(references, obj.targetTypename)
 
-    def dump(self):
-        print("Nodes of graph: ")
-        print(self.dependencies.nodes())
-        layout = nx.spring_layout(self.dependencies)
-        nx.draw_networkx(self.dependencies, pos=layout, arrows=True, with_labels=True, node_size=100)
-        plt.show()
+    def begin_library(self, libName):
+        self.libName = libName
 
-    def __insert_dependency(self, references, obj, guidObj, parentGuid):
-        guid = guidObj.guid()
-        guidStr = str(guid)
+    def end_library(self):
+        print(self.unresolvedDependencies)
+        self.resolve()
 
-        # Add the dependency node
-        if guid.name not in Language.systemTypenameStrings:
-            self.__add_node(references, guidStr, obj)
+    def resolve(self):
+        if self.unresolvedDependencies:
+            # Traverse from top to bottom
+            unresolvedDependencies = deque(self.unresolvedDependencies)
+            while unresolvedDependencies:
+                dependency = unresolvedDependencies.popleft()
 
-            # Register it as unresolved
-            if guid.kind == GUIDKind.Unresolved:
-                self.unresolvedNodes.add(guidStr)
+                # Expand tuple
+                dependencies, objects = tuple[0], tuple[1] 
 
-        isValidDependency = self.dependencies.has_node(guidStr)
+                # The name has to be resolvable by now
+                match = self.navigate(path)
+            
+                # Register link to entry in resolvedObjects via linkedObjects
 
-        # Connect the parent to the node
-        if (parentGuid is not None) and (isValidDependency):
-            self.__add_edge(parentGuid, guidStr)
+                # Go wide!
 
-        return guidStr if isValidDependency else None
 
-    def __add_edge(self, parentGuid, guid):
-        self.dependencies.add_edge(parentGuid, guid)
+            # Everything was resolved
+            self.unresolvedDependencies = {}
 
-    def __add_node(self, references, guid, obj):
-        # Make sure that no node with the same scope exists
+    def to_graph(self):
+        pass
 
-        self.dependencies.add_node(guid, dependency=Dependency(references, obj))
+class ProjectDependencyGraph:
+    pass
