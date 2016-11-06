@@ -75,18 +75,6 @@ class Symto:
         return definitions[op][0]
 
     @staticmethod
-    def has_unary(op):
-        '''
-        Return whether an operator has a unary equivalent.
-        
-        Args:
-            op (str): The operator.
-        Returns:
-            bool: True, if the operator has a unary counterpart. Otherwise false.
-        '''
-        return definitions[op][0]
-
-    @staticmethod
     def from_token(other, kind, text):
         '''
         Create a token from an existing token.
