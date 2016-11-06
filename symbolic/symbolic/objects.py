@@ -1,4 +1,4 @@
-# Built-in
+﻿# Built-in
 import io
 from enum import Enum
 from copy import deepcopy
@@ -16,12 +16,12 @@ from symbolic.language import Language
 
 class Decorators:
     @staticmethod
-    def validated():
+    def validated(f):
         '''Validate the object after initialization.'''
-        def wrapper(f):
-            @wraps(f)
-            def wrapped(self):
-                return self.validate()
+        @wraps(f)
+        def wrapper(self, *args, **kwargs):
+            f(self, *args, **kwargs)
+            self.validate()
         return wrapper
 
 class LocationKind(Enum):
@@ -34,34 +34,31 @@ class LocationKind(Enum):
     Namespace = 5
     Reference = 6
 
+class RelativeLocation:
+    '''A relative location specifier.'''
+    def __init__(self, kind, name, *, templateParameters=0, parameterSignature=None):
+        '''Initialize the object.
+        Args:
+            kind (LocationKind): The location type specifier.
+            name (str): The location name.
+            templateParameters (list(TemplateParameter)): The template parameters.
+            parameterSignature (list(Typename)): The signature.
+        '''
+        self.kind = kind
+        self.name = name
+        self.templateParameters = templateParameters
+        self.parameterSignature = parameterSignature if parameterSignature is not None else []
+
 class Location:
-    '''A location within a library.'''
-    def __init__(self, kind, scope, name):
+    '''An (absolute) location within a library.'''
+    def __init__(self, path):
         '''
         Initialize the object.
 
         Args:
-            kind (LocationKind): The location type specifier.
-            scope (list(str)): The scope strings.
-            name (str): The object name.
+            path (list(RelativeLocation)): A list of relative location specifiers.
         '''
-        self.kind = kind
-        self.scope = scope
-        self.name = name
-
-    @staticmethod
-    def from_parent(kind, location, name):
-        '''
-        Create a location from an existing parent.
-
-        Args:
-            kind (LocationKind): The location kind.
-            location (Location): The parent location.
-            name (str): The name of the new location leaf.
-        Returns:
-            Location: The new location object.
-        '''
-        return Location(kind, location.scope + [location.name], name)
+        self.path = path
 
 class Locatable:
     '''A locatable object within a library.'''
@@ -118,6 +115,9 @@ class Named(Locatable):
         # Validate the name
         if self.token.text in Language.invalidNames:
             raise InvalidNameError(self.token)
+        elif self.token.text == '':
+            # Generate an anonymous name
+            self.token.text = '@{0}'.format(id(self))
 
     def validate(self):
         '''Validate the object.'''
@@ -130,10 +130,10 @@ class Named(Locatable):
         Returns:
             Location: A location within the library.
         '''
-        if self.parent:
-            return Location.from_parent(kind, self.parent.location(), self.token.text)
+        if (self.parent) and (self.parent.parent):
+            return Location(self.parent.location().path + [RelativeLocation(kind, self.token.text)])
         else:
-            return Location(kind, [], self.token.text)
+            return Location([RelativeLocation(kind, self.token.text)])
 
     def validate_no_system_annotations(self):
         '''
@@ -538,7 +538,8 @@ class Expression(Named):
             sysAnnotations (list(Annotation)): The system annotations.
             tokens (list(Symto)): The expression token list.
         '''
-        super().__init__(parent, Symto.from_token(tokens[0], Token.Text, ''), userAnnotations, sysAnnotations)
+        token = Symto.from_token(tokens[0], Token.Text, '')
+        super().__init__(parent, token, userAnnotations, sysAnnotations, None)
         self.tokens = tokens
         self.postfixAtoms = Expression.to_postfix(tokens) # Convert to RPN
         self.ast = Expression.to_ast(self.postfixAtoms) # RPN to AST
@@ -554,7 +555,7 @@ class Expression(Named):
         Returns:
             Location: A location within the library.
         '''
-        return self.default_location(LocationKind.Unresolved)
+        return Location([RelativeLocation(LocationKind.Unresolved, self.token.text)])
 
     @staticmethod
     def to_postfix(tokens):
@@ -813,8 +814,7 @@ class Parameter(Named):
         Returns:
             Location: A location within the library.
         '''
-        # The typename specifies the location in the source
-        return Location(LocationKind.Unresolved, [token.text for token in self.typename.scope], self.typename.)
+        return self.typename.location()
 
     @staticmethod
     def parse(parser, args):
@@ -864,12 +864,13 @@ class Function(TemplateObject, Namespace):
             extensionTypename (Typename): The extension typename.
             parameters (list(Parameter)): The parameters.
         '''
-        Namespace.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
-        TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body)
+        # Has to be bound first for validation
         self.kind = kind
         self.returnTypename = returnTypename
         self.extensionTypename = extensionTypename
         self.parameters = parameters
+        Namespace.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic)
+        TemplateObject.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body)
 
     def validate(self):
         '''Validate the object.'''
@@ -885,6 +886,7 @@ class Function(TemplateObject, Namespace):
         Returns:
             Location: A location within the library.
         '''
+        # TODO: RelativeLocation with parameter signature
         return self.default_location(LocationKind.Function)
 
     @staticmethod
@@ -958,7 +960,7 @@ class Function(TemplateObject, Namespace):
 
         # Register the function with the current namespace
         parent = parser.namespaceStack[-1]
-        func = Function(userAnnotations, sysAnnotations, semantic, parent, name, None, kind, returnTypename, extensionTypename, parameters)
+        func = Function(parent, name, userAnnotations, sysAnnotations, semantic, None, kind, returnTypename, extensionTypename, parameters)
         parser.namespaceStack.append(func)
         try:
             if isTemplate:
@@ -1034,6 +1036,7 @@ class Function(TemplateObject, Namespace):
 
 class Member(Named):
     '''A structure member.'''
+    @Decorators.validated
     def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, typename):
         '''
         Initialize the object.
@@ -1046,7 +1049,7 @@ class Member(Named):
             semantic (Symto): The semantic annotation.
             typename (Typename): The member typename.
         '''
-        Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
+        super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
         self.typename = typename
 
         # Make sure that the typename is not void
@@ -1055,15 +1058,28 @@ class Member(Named):
                 raise InvalidTypenameError(token)
 
     def validate(self):
+        '''Validate the object.'''
         self.validate_system_annotations('private', 'deprecate')
 
     def location(self):
-        return Location(LocationKind.Unresolved, )
+        '''
+        Return the location within the library.
+
+        Returns:
+            Location: A location within the library.
+        '''
+        return self.typename.location()
 
     @staticmethod
     def parse(parser, args):
         '''
+        Parse an member.
 
+        Args:
+            parser (UnitParser): The parser to use.
+            args: Unused.
+        Returns:
+            Expression: The parameter or None, if no parameter was parsed.
         '''
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         typename = Typename.try_parse()
@@ -1076,23 +1092,52 @@ class Member(Named):
         semantic = Annotation.parse_semantic(parser)
         parser.match(';')
 
-        return Member(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, typename)
+        return Member(parser.namespaceStack[-1], name, userAnnotations, sysAnnotations, semantic, typename)
 
 class MemberList(Named):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, members, typename):
-        Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
+    '''A list of members, that share the same typename.'''
+    @Decorators.validated
+    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, members, typename):
+        '''
+        Initialize the object.
+
+        Args:
+            parent (Locatable): The parent object.
+            token (Symto): A token which holds the name.
+            userAnnotations (list(Annotation)): The user annotations.
+            sysAnnotations (list(Annotation)): The system annotations.
+            semantic (Symto): The semantic annotation.
+            members (list(Member)): A list of members.
+            typename (Typename): The member typename.
+        '''
+        super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
         self.members = members
         self.typename = typename
-        self.guid = self.__guid()
 
-        if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
-            raise UnsupportedSystemAnnotationsError(self.token, 'Member', sysAnnotations)
+    def validate(self):
+        '''Validate the object.'''
+        self.validate_system_annotations('private', 'deprecate')
 
-    def __guid(self):
-        return GUID(GUIDKind.Unresolved, self, str(self.typename), templateTypeParameters=self.typename.templateParameters[-1], dims=self.typename.dims)
+    def location(self):
+        '''
+        Return the location within the library.
+
+        Returns:
+            Location: A location within the library.
+        '''
+        return self.typename.location()
 
     @staticmethod
     def parse(parser, args):
+        '''
+        Parse a list of members.
+
+        Args:
+            parser (UnitParser): The parser to use.
+            args: Unused.
+        Returns:
+            Expression: The parameter or None, if no member was parsed.
+        '''
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         typename = Typename.try_parse(parser)
         if typename is None:
@@ -1112,25 +1157,51 @@ class MemberList(Named):
         members = []
         for name in names:
             name = Symto.from_token(parser.token, Token.Text, '') if name is None else name
-            members.append(Member(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, typename))
+            members.append(Member(parser.namespaceStack[-1], name, userAnnotations, sysAnnotations, semantic, typename))
         
-        return MemberList(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name, members, typename)
+        return MemberList(parser.namespaceStack[-1], name, userAnnotations, sysAnnotations, semantic, members, typename)
 
 class Struct(TemplateObject, Namespace):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body):
-        Namespace.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
-        TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body)
-        self.members = None
-        self.guid = self.__guid()
+    '''A structure.'''
+    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body):
+        '''
+        Initialize the object.
 
-        if Annotation.is_not_compatible(['private', 'deprecate'], sysAnnotations):
-            raise UnsupportedSystemAnnotationsError(self.token, 'Struct', sysAnnotations)
+        Args:
+            parent (Locatable): The parent object.
+            token (Symto): A token which holds the name.
+            userAnnotations (list(Annotation)): The user annotations.
+            sysAnnotations (list(Annotation)): The system annotations.
+            semantic (Symto): The semantic annotation.
+            body (list(Symto)): The template body.
+        '''
+        Namespace.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic)
+        TemplateObject.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body)
 
-    def __guid(self):
-        return GUID(GUIDKind.Type, self, self.token.text)
+    def validate(self):
+        '''Validate the object.'''
+        self.validate_system_annotations('private', 'deprecate')
+
+    def location(self):
+        '''
+        Return the location within the library.
+
+        Returns:
+            Location: A location within the library.
+        '''
+        return self.default_location(LocationKind.Type)
 
     @staticmethod
     def parse_template(parser, isTemplate):
+        '''
+        Parse a structure.
+
+        Args:
+            parser (UnitParser): The parser to use.
+            args: Unused.
+        Returns:
+            Expression: The parameter or None, if no struct was parsed.
+        '''
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         if not parser.match('struct'):
@@ -1141,7 +1212,7 @@ class Struct(TemplateObject, Namespace):
 
         # Register the struct with the current namespace
         parent = parser.namespaceStack[-1]
-        struct = Struct(userAnnotations, sysAnnotations, semantic, parent, token, None)
+        struct = Struct(parent, token, userAnnotations, sysAnnotations, semantic, None)
         parser.namespaceStack.append(struct)
         try:
             if isTemplate:
@@ -1163,6 +1234,15 @@ class Struct(TemplateObject, Namespace):
 
     @staticmethod
     def parse(parser, args):
+        '''
+        Parse a structure.
+
+        Args:
+            parser (UnitParser): The parser to use.
+            args: Unused.
+        Returns:
+            Expression: The parameter or None, if no struct was parsed.
+        '''
         return Struct.parse_template(parser, False)
 
     def generate_from_template(self, prettyString):
@@ -1171,18 +1251,46 @@ class Struct(TemplateObject, Namespace):
 class Alias(TemplateObject):
     '''A type alias.'''
     @Decorators.validated
-    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body, targetTypename):
-        TemplateObject.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token, body)
+    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body, targetTypename):
+        '''
+        Initialize the object.
+
+        Args:
+            parent (Locatable): The parent object.
+            token (Symto): A token which holds the name.
+            userAnnotations (list(Annotation)): The user annotations.
+            sysAnnotations (list(Annotation)): The system annotations.
+            semantic (Symto): The semantic annotation.
+            body (list(Symto)): The template body.
+            targetTypename (Typename): The target typename.
+        '''
+        TemplateObject.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body)
         self.targetTypename = targetTypename
     
     def validate(self):
+        '''Validate the object.'''
         self.validate_system_annotations('private', 'deprecate')
 
     def location(self):
+        '''
+        Return the location within the library.
+
+        Returns:
+            Location: A location within the library.
+        '''
         return self.default_location(LocationKind.Type)
 
     @staticmethod
     def parse_template(parser, isTemplate):
+        '''
+        Parse the template.
+
+        Args:
+            parser (UnitParser): The parser to use.
+            isTemplate (bool): True, if this is a template. Otherwise false.
+        Returns:
+            Alias: The alias or None, if no alias was parsed.
+        '''
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         if not parser.match('using'):
             return None
@@ -1201,7 +1309,7 @@ class Alias(TemplateObject):
 
         # Register the struct with the current namespace
         parent = parser.namespaceStack[-1]
-        alias = Alias(userAnnotations, sysAnnotations, semantic, parent, token, body, targetTypename)
+        alias = Alias(parent, token, userAnnotations, sysAnnotations, semantic, body, targetTypename)
         if not isTemplate:
             parent.objects.append(alias)
 
@@ -1209,9 +1317,27 @@ class Alias(TemplateObject):
 
     @staticmethod
     def parse(parser, args):
+        '''
+        Parse a structure.
+
+        Args:
+            parser (UnitParser): The parser to use.
+            args: Unused.
+        Returns:
+            Alias: The parameter or None, if no alias was parsed.
+        '''
         return Alias.parse_template(parser, False)
 
     def generate_from_template(self, prettyString):
+        '''
+        Parse a structure.
+
+        Args:
+            parser (UnitParser): The parser to use.
+            args: Unused.
+        Returns:
+            Alias: The parameter or None, if no alias was parsed.
+        '''
         prettyString += 'using ' + self.token.text
 
 class Annotation:
@@ -1229,6 +1355,16 @@ class Annotation:
 
     @staticmethod
     def list_to_str(collection, open, close=None):
+        '''
+        Convert an annotation list to a string list.
+        
+        Args:
+            collection (list(Annotation)): The annotation list.
+            open (str): The opening string.
+            close (str): The closing string.
+        Returns:
+            list(str): The string list.
+        '''
         result = ''
         for annotation in collection:
             result += open + annotation.token.text
@@ -1241,14 +1377,38 @@ class Annotation:
 
     @staticmethod
     def usrlist_to_str(collection):
+        '''
+        Convert a user annotation list to a string-list.
+
+        Args:
+            collection (list(str)): The user annotation list.
+        Returns:
+            list(str): The string list.
+        '''
         return Annotation.list_to_str(collection, '[', ']')
 
     @staticmethod
     def syslist_to_str(collection):
+        '''
+        Convert a system annotation list to a string-list.
+
+        Args:
+            collection (list(str)): The system annotation list.
+        Returns:
+            list(str): The string list.
+        '''
         return Annotation.list_to_str(collection, '@')
 
     @staticmethod
     def parse_annotation_interior(parser):
+        '''
+        Parse the interior of an annotation.
+
+        Args:
+            parser (UnitParser): The parser to use.
+        Returns:
+            Annotation: The annotation.
+        '''
         token = parser.expect_kind(Token.Name)
         parameters = parser.fetch_block('(', ')')
         parameters = [p for p in parameters if p.text != ',']
@@ -1346,9 +1506,18 @@ class Annotation:
         return any(e.token.text == name for e in collection)
 
 class Typename(Locatable):
+    '''A typename.'''
     @Decorators.validated
     def __init__(self, scope, *, templateParameters=None, dims=None):
-        super().__init__(self, None)
+        '''
+        Initialize the object.
+
+        Args:
+            scope (list(Symto)): The scope token list.
+            templateParameters (list(list(Symto))): A template parameter list for each entry in the scope.
+            dims (list(int)): The array dimensions. A value of None inside the list denotes an unbounded array.
+        '''
+        super().__init__(None)
         self.scope = scope
         
         # Overwrite the scope strings
@@ -1364,12 +1533,9 @@ class Typename(Locatable):
 
         self.templateParameters = templateParameters
         self.dims = dims
-        self.guid = self.__guid()
-
-        # Make sure the typename is valid
-        self.validate()
 
     def validate(self):
+        '''Validate the object.'''
         firstToken = self.scope[0]
 
         # Validate the first scope token
@@ -1397,10 +1563,24 @@ class Typename(Locatable):
         if any(token.text in Language.keywords for token in self.scope):
             raise InvalidTypenameError(self.scope[0])
 
-    def __guid(self):
-        return GUID(GUIDKind.Unresolved, self, str(self), templateTypeParameters=self.templateParameters[-1], dims=self.dims)
+    def location(self):
+        '''
+        Return the location within the library.
+
+        Returns:
+            Location: A location within the library.
+        '''
+        return Location([RelativeLocation(LocationKind.Unresolved, s, templateParameters=self.templateParameters[i]) for i, s in enumerate(self.scopeStrings)])
 
     def to_string(self, templateWildcardStrings=None):
+        '''
+        Convert the typename to a string.
+
+        Args:
+            templateWildcardStrings (list(str)): The list of template wildcard strings.
+        Returns:
+            str: The typename string.
+        '''
         strings = []
         for i in range(len(self.scope)):
             templateParameters = self.templateParameters[i]
@@ -1429,10 +1609,25 @@ class Typename(Locatable):
         return '.'.join(strings)
 
     def __str__(self):
+        '''
+        Convert the typename to a string.
+
+        Returns:
+            str: The typename string.
+        '''
         return self.to_string()
 
     @staticmethod
     def parse_template_parameters(parser, allowPartialMask=False):
+        '''
+        Parse the template parameters of the typename.
+
+        Args:
+            parser (UnitParser): The parser to use.
+            allowPartialMask (bool): Specifies whether partial masks are allowed, containing strings and identifiers.
+        Returns:
+            list(TemplateParameter): The template parameter list.
+        '''
         templateParameters = []
         parameterMask = [Token.Name, Token.Literal.String] if allowPartialMask else [Token.Literal.String]
         if parser.match('<'):
@@ -1447,6 +1642,14 @@ class Typename(Locatable):
 
     @staticmethod
     def parse_array_dimensions(parser):
+        '''
+        Parse the array dimensions.
+
+        Args:
+            parser (UnitParser): The parser to use.
+        Returns:
+            list(int): The array dimensions.
+        '''
         dims = []
         if parser.match('['):
             missingBounds = True
@@ -1472,37 +1675,74 @@ class Typename(Locatable):
 
     @staticmethod
     def try_parse(parser, allowPartialMask=False):
+        '''
+        Parse a typename.
+
+        Args:
+            parser (UnitParser): The parser to use.
+            allowPartialMask (bool): Specifies whether partial masks are allowed, containing strings and identifiers.
+        Returns:
+            list(Typename): The typename or None, if no typename was parsed.
+        '''
         # Explicit scoping
         token = parser.match_kind(Token.Name)
         if token is None:
             return None
 
         scope = [token]
-        templateParameters = [Typename.parse_template_parameters(parser, allowPartialMask)]
+        templateParams = [Typename.parse_template_parameters(parser, allowPartialMask)]
         while True:
             token = parser.token
             if parser.match('.'):
                 scope += [parser.expect_kind(Token.Name)]
-                templateParameters += [Typename.parse_template_parameters(parser, allowPartialMask)]
+                templateParams += [Typename.parse_template_parameters(parser, allowPartialMask)]
             else:
                 break
 
-        dims = Typename.parse_array_dimensions(parser)
-        return Typename(scope, templateParameters=templateParameters, dims=dims)
+        dim = Typename.parse_array_dimensions(parser)
+        return Typename(scope, templateParameters=templateParams, dims=dim)
 
     @staticmethod
     def parse(parser):
+        '''
+        Parse a typename.
+
+        Args:
+            parser (UnitParser): The parser to use.
+        Returns:
+            Typename: The typename.
+        '''
         typename = Typename.try_parse(parser)
         if typename is None:
             raise TypenameExpectedError(parser.token)
         return typename
 
 class TemplateParameter(Named):
-    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, token):
-        Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, token)
+    '''A template parameter.'''
+    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic):
+        '''
+        Initialize the object.
+
+        Args:
+            userAnnotations (list(Annotation)): The user annotations.
+            sysAnnotations (list(Annotation)): The system annotations.
+            semantic (Symto): The semantic annotation.
+            parent (Locatable): The parent object.
+            token (Symto): A token which holds the name.
+        '''
+        super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
 
     @staticmethod
     def parse(parser, args):
+        '''
+        Parse a template parameter.
+
+        Args:
+            parser (UnitParser): The parser to use.
+            args: Unused.
+        Returns:
+            TemplateParameter: The template parameter.
+        '''
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         name = parser.match_kind(Token.Name)
@@ -1510,62 +1750,93 @@ class TemplateParameter(Named):
             return None
 
         semantic = Annotation.parse_semantic(parser)
-        return TemplateParameter(userAnnotations, sysAnnotations, semantic, parser.namespaceStack[-1], name)
+        return TemplateParameter(parser.namespaceStack[-1], name, userAnnotations, sysAnnotations, semantic)
 
     def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
         return self.token.text
 
     def  __hash__(self):
+        '''
+        Return a hash value for this object.
+
+        Returns:
+            int: The hash value.
+        '''
         return hash(self.__str__())
 
     def __eq__(self, other):
+        '''
+        Compare for equality with another object.
+
+        Args:
+            other (TemplateParameter): The other object.
+        Returns:
+            bool: True, if both template parameters are equal. Otherwise false.
+        '''
         return self.token.text == other.token.text
 
 class Template(Named):
-    # The template substitution wildcard
-    Wildcard = '*'
+    @Decorators.validated
+    def __init__(self, parent, userAnnotations, sysAnnotations, semantic, parameters, obj, namespaceList, references):
+        '''
+        Initialize the object.
 
-    def __init__(self, userAnnotations, sysAnnotations, semantic, parent, parameters, obj, namespaceList, references):
-        Named.__init__(self, userAnnotations, sysAnnotations, semantic, parent, obj.token)
+        Args:
+            parent (Locatable): The parent object.
+            token (Symto): A token which holds the name.
+            userAnnotations (list(Annotation)): The user annotations.
+            sysAnnotations (list(Annotation)): The system annotations.
+            semantic (Symto): The semantic annotation.
+            parameters (list(TemplateParameter)): The template parameter list.
+            obj (TemplateObject): The template object attached to this template.
+            namespaceList: The namespace list to locate this template.
+            references (list(str)): The references to use when instantiating this template.
+        '''
+        super().__init__(parent, obj.token, userAnnotations, sysAnnotations, semantic)
         self.obj = obj
         self.parameters = parameters
         self.namespaceList = namespaceList
         self.namespaceList.pop(0)
         self.references = references
-        self.guid = self.__guid()
 
         # Make sure that the template parameters are unique
         if len(set(self.parameters)) != len(self.parameters):
             raise DuplicateTemplateParameterError(self.token)
 
-        self.check_annotations(self.__class__.__name__, ['private', 'deprecate'])
+    def validate(self):
+        '''Validate the object.'''
+        self.validate_system_annotations('private', 'deprecate')
 
-    def __guid(self):
-        funcParameters = getattr(self.obj, "parameters", None)
-        funcReturnTypename = getattr(self.obj, "returnTypename", None)
-        typename = self.obj.template_typename()
+    def location(self):
+        '''
+        Return the location within the library.
 
-        # Normalize
-        parameters = deepcopy(self.parameters)
-        if parameters:
-            funcParameters = deepcopy(funcParameters)
-            funcReturnTypename = deepcopy(funcReturnTypename)
-            typename = deepcopy(typename)
+        Returns:
+            Location: A location within the library.
+        '''
+        # Return the location of the underlying object, but add the template parameters
+        loc = deepcopy(self.obj.location())
 
-            for templateParameterId, parameter in enumerate(parameters):
-                targetName = parameter.token.text
-                GUID.normalize_typename_by_template(typename, targetName, templateParameterId)
+        # Change the last relative location to a template
+        lastRelLoc = loc.path[-1]
+        lastRelLoc.kind = LocationKind.Template
+        lastRelLoc.templateParameters = self.parameters
 
-                if funcReturnTypename:
-                    GUID.normalize_typename_by_template(funcReturnTypename, targetName, templateParameterId)
-
-                if funcParameters:
-                    for parameter in funcParameters:
-                        GUID.normalize_typename_by_template(parameter.typename, targetName, templateParameterId)
-
-        return GUID(GUIDKind.Template, self, self.obj.token.text, templateParameterOffset=len(parameters), templateTypeParameters=parameters, parameters=funcParameters, returnTypename=funcReturnTypename, extensionTypename=typename)
+        return loc
 
     def generate_translation_unit(self):
+        '''
+        Generate a translation unit from the template.
+        
+        Returns:
+            PrettyString: The pretty-formatted string.
+        '''
         result = PrettyString()
 
         # Namespace

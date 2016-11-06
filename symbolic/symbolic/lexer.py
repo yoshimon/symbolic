@@ -1,4 +1,4 @@
-# Built-in
+﻿# Built-in
 import re
 
 # Library
@@ -267,7 +267,7 @@ class SymbolicLexer(RegexLexer):
         column = 1
         for index, token, value in RegexLexer.get_tokens_unprocessed(self, text):
             txt = self.subs[value] if (self.subs is not None) and (value in self.subs) else value
-            yield index, token, TokenValue(text, line, column)
+            yield index, token, TokenValue(txt, line, column)
             if value == '\n':
                 line += 1
                 column = 1

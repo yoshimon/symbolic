@@ -12,10 +12,10 @@
     <OutputPath>.</OutputPath>
     <Name>symbolic</Name>
     <RootNamespace>symbolic</RootNamespace>
-    <InterpreterId>{b124f622-b660-48fa-a289-1db733b932f9}</InterpreterId>
+    <InterpreterId>{9a7a9026-48c1-4688-9d5d-e5699d47d074}</InterpreterId>
     <InterpreterVersion>3.5</InterpreterVersion>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>"D:\Projekte\Delphi\DSL\JSON\My Project.json"</CommandLineArguments>
+    <CommandLineArguments>"D:\DSL\project.json"</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
@@ -57,7 +57,7 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
-    <InterpreterReference Include="{b124f622-b660-48fa-a289-1db733b932f9}\3.5" />
+    <InterpreterReference Include="{9a7a9026-48c1-4688-9d5d-e5699d47d074}\3.5" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="symbolic\" />

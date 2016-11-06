@@ -1,4 +1,4 @@
-# Built-in
+﻿# Built-in
 import re
 
 # Library
@@ -49,7 +49,7 @@ class BaseParser:
         self.token = self.advance()
         
         self.tokenStateStack = []
-        self.namespaceStack = [Namespace([], [], '', None, Symto(Token.Text, self.token.libName, self.token.fileName, '', 1, 1))] # Global namespace
+        self.namespaceStack = [Namespace(None, Symto(Token.Text, self.token.libName, self.token.fileName, '', 1, 1), [], [], None)] # Global namespace
 
     def advance(self):
         if self.is_eof():
@@ -129,6 +129,14 @@ class BaseParser:
         return token
 
     def expect(self, val):
+        '''
+        Expect the next token to have a given text value.
+
+        Args:
+            val (str): The expected text value.
+        Returns:
+            Symto: The next token.
+        '''
         if not self.match(val):
             raise UnexpectedTokenError(self.token, val, self.token.text)
         return self.token
@@ -147,6 +155,9 @@ class BaseParser:
         self.advance()
 
     def remove_state(self):
+        '''
+        Remove
+        '''
         return self.tokenStateStack.pop()
 
     def until_any(self, endDelims):
@@ -242,6 +253,16 @@ class BaseParser:
         return success
 
     def fetch_block(self, startDelim, endDelim):
+        '''
+        Fetch everything between two delimiters.
+        Respects nested brackets.
+
+        Args:
+            startDelim (str): The starting delimiter.
+            endDelim (str): The ending delimiter.
+        Returns:
+            list(Symto): The block tokens.
+        '''
         tokens = []
         if self.match(startDelim):
             bracketStack = []
@@ -258,7 +279,12 @@ class BaseParser:
 
 class UnitParser(BaseParser):
     def try_parse_any(self, classes, args):
-        ''' Parses all object types in the supplied list. '''
+        '''
+        Parses all object types in the supplied list.
+        
+        Args:
+            classes (list(class)): 
+        '''
         if self.is_eof():
             return None
 
@@ -273,6 +299,16 @@ class UnitParser(BaseParser):
         return None
 
     def gather_objects(self, classes, matchAfterSuccess = None, args = []):
+        '''
+        Gather a list of parsable objects.
+
+        Args:
+            classes (list(class)): The list of parsable objects.
+            matchAfterSuccess (str): The symbol to match after a successful gather.
+            args: Arguments to forward to the class.
+        Returns:
+            Class: The first match or None, if no object was gathered.
+        '''
         result = []
         while True:
             o = self.try_parse_any(classes, args)
@@ -285,11 +321,22 @@ class UnitParser(BaseParser):
         return result
 
     def gather_namespace_objects(self):
+        '''
+        Gather all objects in a namespace.
+        
+        Returns:
+            list(object): The gathered objects.
+        '''
         # NOTE: Function should always come last
         return self.gather_objects([Namespace, Struct, Alias, Template, Function])
 
     def parse_all_references(self):
-        ''' Parses all library references. '''
+        '''
+        Parse all library references.
+        
+        Returns:
+            list(Reference): The reference list.
+        '''
         # using statements
         references = []
 
@@ -318,7 +365,12 @@ class UnitParser(BaseParser):
         return references
 
     def parse(self):
-        '''Parses the active token stream.'''
+        '''
+        Parses the active token stream.
+        
+        Returns:
+            list(Reference), Namespace: The list of references and the global (root) namespace object.
+        '''
         # Reset stream position
         self.reset(self.lexer, self.tokens)
 

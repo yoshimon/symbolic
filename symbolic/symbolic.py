@@ -1,4 +1,4 @@
-# Built-in
+﻿# Built-in
 import sys
 import json
 import os
@@ -90,8 +90,12 @@ if __name__ == "__main__":
         projectPPT = load_ppt(projFilePath + '.pp')
 
         # Load all library descriptors
-        for p in jsonProjFile['project']['libraries']:
-            relLibPath = p['library']
+        for p in jsonProjFile['project']['libraries'].items():
+            if p[0] != 'library':
+                continue
+
+            # Grab the relative path
+            relLibPath = p[1]
 
             # Combine to get the absolute library path
             absLibPath = os.path.normpath(os.path.join(projDirPath, relLibPath))
@@ -170,7 +174,8 @@ if __name__ == "__main__":
                     references, globalNamespace = unitParser.parse()
 
                     # Create a dependency graph for the unit
-                    dependencyCollection.insert_unit(references, globalNamespace)
+                    # The lexer is provided for template processing
+                    # dependencyCollection.insert_unit(lexer, references, globalNamespace)
 
             # Resolve the library dependencies
             dependencyCollection.end_library()

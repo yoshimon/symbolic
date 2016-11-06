@@ -1,4 +1,4 @@
-class TokenError(Exception):
+﻿class TokenError(Exception):
     '''An exception base class, that indicates an error that can be located in the source.'''
     def __init__(self, token):
         '''
@@ -216,3 +216,36 @@ class InvalidNameError(TokenError):
             str: The string representation.
         '''
         return super().__str__() + "Invalid name."
+
+class TemplateMismatchError(TokenError):
+    '''An exception class, that indicates an invalid template usage.'''
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Invalid template invocation."
+
+class UnknownIdentifierError(TokenError):
+    '''An exception class, that indicates the reference to an unknown identifier.'''
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Unknown identifier."
+
+class OverloadNotFoundError(TokenError):
+    '''An exception class, that indicates a missing overload.'''
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Could not find a matching overload."
