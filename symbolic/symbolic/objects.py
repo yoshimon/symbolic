@@ -36,7 +36,7 @@ class LocationKind(Enum):
 
 class RelativeLocation:
     '''A relative location specifier.'''
-    def __init__(self, kind, name, *, templateParameters=0, parameterSignature=None):
+    def __init__(self, kind, name, *, templateParameters=None, parameterSignature=None):
         '''Initialize the object.
         Args:
             kind (LocationKind): The location type specifier.
@@ -46,7 +46,7 @@ class RelativeLocation:
         '''
         self.kind = kind
         self.name = name
-        self.templateParameters = templateParameters
+        self.templateParameters = templateParameters if templateParameters is not None else []
         self.parameterSignature = parameterSignature if parameterSignature is not None else []
 
 class Location:

@@ -140,7 +140,7 @@ if __name__ == "__main__":
             sys.exit('Library dependency cycle found: [{:s}].'.format(dependencyChain))
 
         # Create a new dependency collection for this project
-        dependencyCollection = ProjectDependencyCollection()
+        dependencyCollection = ProjectDependencyCollection(lexer)
 
         # Translate each library by going through all *.sym files
         for node in libDepGraph.nodes(data=True):
@@ -149,7 +149,7 @@ if __name__ == "__main__":
             absLibPath = node[1]['absLibPath']
 
             # Signal the dependency collection that a new library is being processed
-            dependencyCollection.begin_library(lexer.libName)
+            dependencyCollection.begin_library()
 
             # Load the per-library pre-processor table
             libPPT = load_ppt(absLibPath + '\\.lib.pp')
@@ -175,7 +175,7 @@ if __name__ == "__main__":
 
                     # Create a dependency graph for the unit
                     # The lexer is provided for template processing
-                    # dependencyCollection.insert_unit(lexer, references, globalNamespace)
+                    dependencyCollection.insert_unit(references, globalNamespace)
 
             # Resolve the library dependencies
             dependencyCollection.end_library()

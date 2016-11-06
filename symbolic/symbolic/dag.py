@@ -30,9 +30,9 @@ class Dependency:
         self.isDeprecated = Annotation.has('deprecated', obj.sysAnnotations) if obj is isinstance(obj, Named) else False
 
 class ProjectDependencyCollection:
-    def __init__(self):
+    def __init__(self, lexer):
         '''Initialize the object.'''
-        self.libName = ''
+        self.lexer = lexer
         self.unresolvedDependencies = set()
         self.libraries = {} # The libraries lookup table
         self.resolvedObjects = {} # Maps each library to a list of resolved objects
@@ -62,7 +62,7 @@ class ProjectDependencyCollection:
                 break
 
         # Implicit lookup
-        libNameGen = chain((ref.token.text for ref in references), [self.libName]) if offset == -1 else ['.'.join(path[:offset].name)]
+        libNameGen = chain((ref.token.text for ref in references), [self.lexer.libName]) if offset == -1 else ['.'.join(path[:offset].name)]
         offset = max(0, offset)
 
         # Iterate to the object in the library
@@ -95,14 +95,14 @@ class ProjectDependencyCollection:
                     # Generate the translation unit for the template
                     templateSrc = dependencyObj.generate_translation_unit()
 
-                    # Modify the PPT of the lexer
-                    lexer.ppt
+                    # Modify the template substitutions of the lexer
+                    self.lexer.subs = { dependencyRL.templateParameters[i].token.text: parameter.text[1:-1] for i, parameter in enumerate(rl.templateParameters) }
 
                     # Lex the generated unit
-                    srcFileTokens = lexer.tokenize(templateSrc)
+                    srcFileTokens = self.lexer.tokenize(templateSrc)
 
                     # Parse the unit
-                    parser = UnitParser(lexer, srcFileTokens)
+                    parser = UnitParser(self.lexer, srcFileTokens)
                     templateReferences, templateRootNamespace = parser.parse()
                     
                     # Insert it into the collection
@@ -135,11 +135,17 @@ class ProjectDependencyCollection:
             lookup = self.navigate(obj.token, references, dependencyPath[:-1])
 
             # Make sure that no duplicate object in this namespace exists
+            newState = ([dependency], {})
             if rl.name in lookup:
-                # TODO: make sure the parameter signature or template is different
-                raise EOFError()
+                # See if parameter signature and template parameter count matches
+                for i, parameter in enumerate(rl.templateParameters):
+                    raise EOFError()
 
-            lookup[rl.name] = ([dependency], {})
+                # Combine states
+                oldState = lookup[rl.name]
+                newState = (oldState[0] + newState[0], oldState[1])
+
+            lookup[rl.name] = newState
 
     def insert_unit(self, references, rootNamespace):
         '''
@@ -170,20 +176,13 @@ class ProjectDependencyCollection:
             elif isinstance(obj, Alias):
                 self.insert(references, obj.targetTypename)
 
-    def begin_library(self, libName):
-        '''
-        Begin collecting dependencies for a new library.
-
-        Args:
-            libName (str): The name of the new library.
-        '''
-        self.libName = libName
-
+    def begin_library(self):
+        '''Begin collecting dependencies for a new library.'''
         # Create an empty entry in the global dict
         # Breakup the library name and insert it
         # Each part of the library name is its own subspace
         # e.g. std.types and std.math would share the std subspace
-        strings = libName.split('.')
+        strings = self.lexer.libName.split('.')
         lookup = self.libraries
         for s in strings:
             if s not in lookup:
@@ -192,7 +191,7 @@ class ProjectDependencyCollection:
             # Step down
             lookup = lookup[s]
 
-        self.resolvedObjects[libName] = {}
+        self.resolvedObjects[self.lexer.libName] = {}
 
     def end_library(self):
         '''End collecting dependencies for the current library.'''
