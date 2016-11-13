@@ -1,14 +1,14 @@
-﻿class TokenError(Exception):
+﻿class SourceError(Exception):
     '''An exception base class, that indicates an error that can be located in the source.'''
-    def __init__(self, token):
+    def __init__(self, anchor):
         '''
-        Initializes the object.
+        Initialize the object.
 
         Args:
-            token (Symto): The token to associate with this error.
+            anchor (Anchor): The source code anchor.
         '''
         super().__init__()
-        self.token = token
+        self.anchor = anchor
     def __str__(self):
         '''
         Return a string representation of the object.
@@ -16,7 +16,7 @@
         Returns:
             str: The string representation.
         '''
-        return "'{0}' @ ({1}, {2}): ".format(self.token.fileName, self.token.line, self.token.column)
+        return "{0}: ".format(str(self.anchor))
 
 class DevError(Exception):
     '''An exception class, that indicates a developer error (bug).'''
@@ -29,18 +29,18 @@ class DevError(Exception):
         '''
         return TokenError.__str__(self) + "Developer error."
 
-class UnexpectedTokenError(TokenError):
+class UnexpectedTokenError(SourceError):
     '''An exception class, that indicates a mismatch between an expected token and the current token in the token stream.'''
-    def __init__(self, token, expected, found):
+    def __init__(self, anchor, expected, found):
         '''
-        Initializes the object.
+        Initialize the object.
 
         Args:
             token (Symto): The token to associate with this error.
             expected (Symto): The expected token.
             found (Symto): The current token in the token stream.
         '''
-        super().__init__(token)
+        super().__init__(anchor)
         self.expected = expected
         self.found = found
     def __str__(self):
@@ -50,7 +50,7 @@ class UnexpectedTokenError(TokenError):
         Returns:
             str: The string representation.
         '''
-        return super().__str__() + "Found '{0}' but expected '{1}'.".format(str(self.found), str(self.expected))
+        return super().__str__() + "Expected '{1}' but found '{0}'.".format(str(self.expected), str(self.found))
 
 class UnexpectedEOFError(Exception):
     '''An exception class, that indicates an unexpected EOF token in the token stream.'''
@@ -63,18 +63,18 @@ class UnexpectedEOFError(Exception):
         '''
         return super().__str__() + "Unexpected EOF."
 
-class UnsupportedSystemAnnotationError(TokenError):
+class UnsupportedSystemAnnotationError(SourceError):
     '''An exception class, that indicates an unsupported system annotation.'''
     def __init__(self, what, sysAnnotation):
         '''
-        Initializes the object.
+        Initialize the object.
 
         Args:
-            token (Symto): The token to associate with this error.
+            anchor (Anchor): The anchor to associate with this error.
             what (Symto): The expected token.
             sysAnnotation (list(Annotation)): The system annotation.
         '''
-        super().__init__(sysAnnotation.token)
+        super().__init__(sysAnnotation.token.anchor)
         self.what = what
         self.sysAnnotation = sysAnnotation
     def __str__(self):
@@ -86,17 +86,17 @@ class UnsupportedSystemAnnotationError(TokenError):
         '''
         return super().__str__() + "{0}s do not support the '{1}' system annotation.".format(self.what, str(self.sysAnnotation.token))
 
-class UnknownSystemAnnotationError(TokenError):
+class UnknownSystemAnnotationError(SourceError):
     '''An exception class, that indicates an unknown system annotation.'''
-    def __init__(self, token, sysAnnotation):
+    def __init__(self, anchor, sysAnnotation):
         '''
-        Initializes the object.
+        Initialize the object.
 
         Args:
-            token (Symto): The token to associate with this error.
+            anchor (Anchor): The anchor to associate with this error.
             sysAnnotation (Annotation): The system annotation.
         '''
-        super().__init__(token)
+        super().__init__(anchor)
         self.sysAnnotation = sysAnnotation
     def __str__(self):
         '''
@@ -107,7 +107,7 @@ class UnknownSystemAnnotationError(TokenError):
         '''
         return super().__str__() + "{0} is not a known system annotation.".format(str(self.sysAnnotation))
 
-class MissingScopeError(TokenError):
+class MissingScopeError(SourceError):
     '''An exception class, that indicates a missing scope.'''
     def __str__(self):
         '''
@@ -118,7 +118,7 @@ class MissingScopeError(TokenError):
         '''
         return super().__str__() + "Missing scope."
 
-class TypenameExpectedError(TokenError):
+class TypenameExpectedError(SourceError):
     '''An exception class, that indicates a missing typename.'''
     def __str__(self):
         '''
@@ -129,7 +129,7 @@ class TypenameExpectedError(TokenError):
         '''
         return super().__str__() + "Typename expected."
 
-class MissingExpressionError(TokenError):
+class MissingExpressionError(SourceError):
     '''An exception class, that indicates a missing expression.'''
     def __str__(self):
         '''
@@ -140,7 +140,7 @@ class MissingExpressionError(TokenError):
         '''
         return super().__str__() + "Missing expression."
 
-class MissingBracketsError(TokenError):
+class MissingBracketsError(SourceError):
     '''An exception class, that indicates missing brackets.'''
     def __str__(self):
         '''
@@ -151,7 +151,7 @@ class MissingBracketsError(TokenError):
         '''
         return super().__str__() + "Missing brackets."
 
-class InvalidExpressionError(TokenError):
+class InvalidExpressionError(SourceError):
     '''An exception class, that indicates an invalid expression.'''
     def __str__(self):
         '''
@@ -162,7 +162,7 @@ class InvalidExpressionError(TokenError):
         '''
         return super().__str__() + "Invalid expression."
 
-class MissingArrayTypeError(TokenError):
+class MissingArrayTypeError(SourceError):
     '''An exception class, that indicates a missing array accessor type.'''
     def __str__(self):
         '''
@@ -173,7 +173,7 @@ class MissingArrayTypeError(TokenError):
         '''
         return super().__str__() + "Missing array accessor type."
 
-class ExpectedEOFError(TokenError):
+class ExpectedEOFError(SourceError):
     '''An exception class, that indicates an expected EOF.'''
     def __str__(self):
         '''
@@ -184,7 +184,7 @@ class ExpectedEOFError(TokenError):
         '''
         return super().__str__() + "Expected EOF."
 
-class DuplicateTemplateParameterError(TokenError):
+class DuplicateTemplateParameterError(SourceError):
     '''An exception class, that indicates duplicate template parameters.'''
     def __str__(self):
         '''
@@ -195,7 +195,7 @@ class DuplicateTemplateParameterError(TokenError):
         '''
         return super().__str__() + "Duplicate template parameter detected."
 
-class InvalidTypenameError(TokenError):
+class InvalidTypenameError(SourceError):
     '''An exception class, that indicates an invalid typename.'''
     def __str__(self):
         '''
@@ -206,7 +206,7 @@ class InvalidTypenameError(TokenError):
         '''
         return super().__str__() + "Invalid typename."
 
-class InvalidNameError(TokenError):
+class InvalidNameError(SourceError):
     '''An exception class, that indicates an invalid name.'''
     def __str__(self):
         '''
@@ -217,7 +217,7 @@ class InvalidNameError(TokenError):
         '''
         return super().__str__() + "Invalid name."
 
-class TemplateMismatchError(TokenError):
+class TemplateMismatchError(SourceError):
     '''An exception class, that indicates an invalid template usage.'''
     def __str__(self):
         '''
@@ -228,7 +228,7 @@ class TemplateMismatchError(TokenError):
         '''
         return super().__str__() + "Invalid template invocation."
 
-class UnknownIdentifierError(TokenError):
+class UnknownIdentifierError(SourceError):
     '''An exception class, that indicates the reference to an unknown identifier.'''
     def __str__(self):
         '''
@@ -239,7 +239,7 @@ class UnknownIdentifierError(TokenError):
         '''
         return super().__str__() + "Unknown identifier."
 
-class OverloadNotFoundError(TokenError):
+class OverloadNotFoundError(SourceError):
     '''An exception class, that indicates a missing overload.'''
     def __str__(self):
         '''
@@ -249,3 +249,77 @@ class OverloadNotFoundError(TokenError):
             str: The string representation.
         '''
         return super().__str__() + "Could not find a matching overload."
+
+class DuplicateParameterSignatureError(SourceError):
+    '''An exception class, that indicates a duplicate parameter signature.'''
+    def __init__(self, anchor, parameters):
+        '''
+        Initialize the object.
+
+        Args:
+            anchor (Anchor): The anchor to associate with this error.
+            parameters (list(Parameter)): The parameter signature.
+        '''
+        super().__init__(anchor)
+        self.parameters = parameters
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Duplicate signature detected: [{0}].".format(str(self.parameters))
+
+class DuplicateNameError(SourceError):
+    '''An exception class, that indicates a duplicate name.'''
+    def __init__(self, firstAnchor, secondAnchor):
+        '''
+        Initialize the object.
+
+        Args:
+            firstAnchor (Anchor): The base anchor.
+            secondAnchor (Anchor): The anchor that triggered the error.
+        '''
+        super().__init__(firstAnchor)
+        self.secondAnchor = secondAnchor
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Duplicate name detected, conflicting with {0}.".format(str(self.secondAnchor))
+
+class InvalidReferenceUsageError(SourceError):
+    '''An exception class, that indicates an invalid reference usage.'''
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Invalid reference usage."
+
+class DependencyNotFoundError(SourceError):
+    '''An exception class, that indicates an invalid dependency location.'''
+    def __init__(self, anchor, location):
+        '''
+        Initialize the object.
+
+        Args:
+            anchor (Anchor): The source code anchor.
+            location (Location): The dependency location.
+        '''
+        super().__init__(anchor)
+        self.location = location
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return super().__str__() + "Could not find dependency location '{0}'.".format(str(self.location))

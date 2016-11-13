@@ -36,18 +36,42 @@ class LocationKind(Enum):
 
 class RelativeLocation:
     '''A relative location specifier.'''
-    def __init__(self, kind, name, *, templateParameters=None, parameterSignature=None):
+    def __init__(self, kind, name, *, templateParameters=None, parameters=None):
         '''Initialize the object.
         Args:
             kind (LocationKind): The location type specifier.
             name (str): The location name.
             templateParameters (list(TemplateParameter)): The template parameters.
-            parameterSignature (list(Typename)): The signature.
+            parameters (list(Parameter)): The signature.
         '''
         self.kind = kind
         self.name = name
         self.templateParameters = templateParameters if templateParameters is not None else []
-        self.parameterSignature = parameterSignature if parameterSignature is not None else []
+        self.parameters = parameters if parameters is not None else []
+
+    def is_plain(self):
+        '''Return whether the relative location is plain.'''
+        return (not self.templateParameters) and (not self.parameters)
+
+    def __str__(self):
+        templateStr = "<{0}>".format(Algorithm.join_comma(self.templateParameters)) if self.templateParameters else ""
+        parameterStr = "({0})".format(Algorithm.join_comma(self.parameters)) if self.parameters else ""
+        kindStr = " as {0}".format(str(self.kind)) if self.kind != LocationKind.Unresolved else ""
+        return self.name + templateStr + parameterStr + kindStr
+
+    def __eq__(self, other):
+        '''
+        Compare for equality with another relative location.
+        
+        Args:
+            other (Location): The other relative location.
+        Returns:
+            bool: True, if the two locations are equal. Otherwise False.
+        '''
+        return (self.kind == other.kind) and \
+            (self.name == other.name) and \
+            (self.parameters == other.parameters) and \
+            (self.templateParameters == other.templateParameters)
 
 class Location:
     '''An (absolute) location within a library.'''
@@ -60,16 +84,79 @@ class Location:
         '''
         self.path = path
 
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return Algorithm.join_dot(self.path)
+
+    def __eq__(self, other):
+        '''
+        Compare for equality with another location.
+        
+        Args:
+            other (Location): The other location.
+        Returns:
+            bool: True, if the two locations are equal. Otherwise False.
+        '''
+        return self.path == other.path
+
+    def __getitem__(self, key):
+        '''
+        Return a relative location in the location path.
+
+        Args:
+            key: The path key.
+        Returns:
+            RelativeLocation: The relative location.
+        '''
+        return self.path.__getitem__(key)
+
+    def __setitem__(self, key, value):
+        '''
+        Change a relative location in the location path.
+
+        Args:
+            key: The path key.
+            value (RelativeLocation): The value to set.
+        Returns:
+            RelativeLocation: The relative location.
+        '''
+        return self.path.__setitem__(key, value)
+
+    def __iter__(self):
+        '''
+        Return an iterator for the location path.
+
+        Returns:
+            RelativeLocation: The relative location.
+        '''
+        return self.path.__iter__()
+
+    def __delitem__(self, key):
+        '''
+        Delete a relative location in the location path.
+
+        Args:
+            key: The key to delete.
+        '''
+        return self.path.__delitem__(key)
+
 class Locatable:
     '''A locatable object within a library.'''
-    def __init__(self, parent):
+    def __init__(self, parent, anchor):
         '''
         Initialize the object.
         
         Args:
             parent (Locatable): The parent object.
+            anchor (Token): The anchor in the source code.
         '''
         self.parent = parent
+        self.anchor = anchor
 
     def location(self):
         '''
@@ -103,7 +190,7 @@ class Named(Locatable):
             sysAnnotations (list(Annotation)): The system annotations.
             semantic (Symto): The semantic annotation.
         '''
-        super().__init__(parent)
+        super().__init__(parent, token.anchor)
         assert token is not None
         assert userAnnotations is not None
         assert sysAnnotations is not None
@@ -114,7 +201,7 @@ class Named(Locatable):
 
         # Validate the name
         if self.token.text in Language.invalidNames:
-            raise InvalidNameError(self.token)
+            raise InvalidNameError(self.token.anchor)
         elif self.token.text == '':
             # Generate an anonymous name
             self.token.text = '@{0}'.format(id(self))
@@ -123,17 +210,18 @@ class Named(Locatable):
         '''Validate the object.'''
         raise DevError()
 
-    def default_location(self, kind):
+    def default_location(self, kind, templateParameters=None, parameters=None):
         '''
         Return the default location within the library.
 
         Returns:
             Location: A location within the library.
         '''
+        rl = [RelativeLocation(kind, self.token.text, templateParameters=templateParameters, parameters=parameters)]
         if (self.parent) and (self.parent.parent):
-            return Location(self.parent.location().path + [RelativeLocation(kind, self.token.text)])
+            return Location(self.parent.location().path + rl)
         else:
-            return Location([RelativeLocation(kind, self.token.text)])
+            return Location(rl)
 
     def validate_no_system_annotations(self):
         '''
@@ -353,7 +441,7 @@ class Instruction(Named):
 
         # Throw an error if no expression was parsed or if it is the empty expression
         if (expression is None) or (not expression.postfixAtoms):
-            raise MissingExpressionError(parser.token)
+            raise MissingExpressionError(parser.token.anchor)
         
         # Consume the end delimiter
         parser.consume()
@@ -586,7 +674,7 @@ class Expression(Named):
 
             if t.isTerminal:
                 if wasLastTerminal:
-                    raise InvalidExpressionError(t)
+                    raise InvalidExpressionError(t.anchor)
 
                 # Set state for next cycle
                 wasLastTerminal = True
@@ -620,16 +708,16 @@ class Expression(Named):
                 if t.text == ',':
                     # Tuples > 1 are not allowed
                     if states[-1] == State.Tuple:
-                        raise InvalidExpressionError(t)
+                        raise InvalidExpressionError(t.anchor)
 
                     # Keep track of how many ops were added
                     if Algorithm.pop_while(stack, lambda atom: not atom.token.isOpenBracket, lambda atom: out.append(atom)):
-                        raise MissingBracketsError(t)
+                        raise MissingBracketsError(t.anchor)
                 
                     # If there were no ops added, the comma might be invalid if this is not an unbounded array
                     if states[-1] != State.Array:
                         if out[-1].kind in [ExpressionAtomKind.Delimiter, ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.TemplateBegin]:
-                            raise InvalidExpressionError(t)
+                            raise InvalidExpressionError(t.anchor)
 
                     # Add comma as delimiter
                     out.append(ExpressionAtom(t, ExpressionAtomKind.Delimiter))
@@ -642,13 +730,13 @@ class Expression(Named):
                             isNextOpenParenFunction = False
                     elif t.text == '[':
                         if states[-1] != State.Array:
-                            raise MissingArrayTypeError(t)
+                            raise MissingArrayTypeError(t.anchor)
 
                     stack.append(ExpressionAtom(t, -1))
                 elif (t.isCloseBracket and t.text != '>') or (t.text == '>' and states[-1] == State.Template): # Special case for template >
                     # Keep track of how many parameters were added
                     if Algorithm.pop_while(stack, lambda atom: not atom.token.text == t.matchingOpenBracket, lambda atom: out.append(atom)):
-                        raise MissingBracketsError(t)
+                        raise MissingBracketsError(t.anchor)
 
                     # Pop open bracket and state
                     stack.pop()
@@ -670,11 +758,11 @@ class Expression(Named):
                 
                     stack.append(ExpressionAtom(o1, kind))
                 else:
-                    raise InvalidExpressionError(t)
+                    raise InvalidExpressionError(t.anchor)
 
         # Remaining tokens to output
         if not Algorithm.pop_while(stack, lambda atom: not atom.token.text == '(', lambda atom: out.append(atom)):
-            raise MissingBracketsError(stack[-1].token)
+            raise MissingBracketsError(stack[-1].token.anchor)
 
         return out
 
@@ -708,7 +796,7 @@ class Expression(Named):
             elif atom.kind in [ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.ArrayEnd, ExpressionAtomKind.TemplateEnd]:
                 numArgs = argCount+1
                 if len(argStack) < numArgs:
-                    raise InvalidExpressionError(atom.token)
+                    raise InvalidExpressionError(atom.token.anchor)
 
                 args = list(argStack[-numArgs:])
 
@@ -724,7 +812,7 @@ class Expression(Named):
                 argCount = argCountStack.pop()
             elif atom.kind == ExpressionAtomKind.UnaryOp:
                 if len(argStack) < 1:
-                    raise InvalidExpressionError(atom.token)
+                    raise InvalidExpressionError(atom.token.anchor)
 
                 argCount += 1 if argCount == 0 else 0
                 child = argStack[-1]
@@ -734,7 +822,7 @@ class Expression(Named):
                 parent = root.parent
             elif atom.kind == ExpressionAtomKind.BinaryOp:
                 if len(argStack) < 2:
-                    raise InvalidExpressionError(atom.token)
+                    raise InvalidExpressionError(atom.token.anchor)
 
                 argCount += 1 if argCount == 0 else 0
                 lhs = argStack[-2]
@@ -754,7 +842,7 @@ class Expression(Named):
 
         # Invalid expression
         if len(argStack) > 1:
-            raise InvalidExpressionError(argStack[0].atom.token)
+            raise InvalidExpressionError(argStack[0].atom.token.anchor)
 
         # Just right!
         return argStack[0]
@@ -816,6 +904,26 @@ class Parameter(Named):
         '''
         return self.typename.location()
 
+    def __eq__(self, other):
+        '''
+        Compare for equality with another parameter.
+        
+        Args:
+            other (Parameter): The other parameter.
+        Returns:
+            bool: True, if the two parameters are equal. Otherwise False.
+        '''
+        return (self.isRef == other.isRef) and (self.location() == other.location())
+
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return str(self.typename)
+
     @staticmethod
     def parse(parser, args):
         '''
@@ -843,7 +951,7 @@ class Parameter(Named):
         # Semantic
         semantic = Annotation.parse_semantic(parser)
 
-        return Parameter(parser.namespaceStack[-1], name, userAnnotations, sysAnnotations, semantic, typename, isRef)
+        return Parameter(parser.namespaceStack[-1], token, userAnnotations, sysAnnotations, semantic, typename, isRef)
 
 class Function(TemplateObject, Namespace):
     '''A function.'''
@@ -886,8 +994,8 @@ class Function(TemplateObject, Namespace):
         Returns:
             Location: A location within the library.
         '''
-        # TODO: RelativeLocation with parameter signature
-        return self.default_location(LocationKind.Function)
+        location = self.default_location(LocationKind.Function, parameters=self.parameters)
+        return location
 
     @staticmethod
     def parse_template(parser, isTemplate):
@@ -1055,7 +1163,7 @@ class Member(Named):
         # Make sure that the typename is not void
         for token in typename.scope:
             if token.text == 'void':
-                raise InvalidTypenameError(token)
+                raise InvalidTypenameError(token.anchor)
 
     def validate(self):
         '''Validate the object.'''
@@ -1221,7 +1329,7 @@ class Struct(TemplateObject, Namespace):
             else:
                 parent.objects.append(struct)
                 if parser.match('{'):
-                    struct.objects = parser.gather_objects([MemberList, Namespace, Struct, Alias, Template, Function], args=['}'])
+                    struct.objects = parser.gather_objects([Namespace, Struct, Alias, Template, MemberList, Function], args=['}'])
                     parser.expect('}')
                     parser.match(';')
                 elif not parser.match(';'):
@@ -1475,7 +1583,7 @@ class Annotation:
 
                 # Make sure the system annotation exists
                 if not annotation.token.text in Annotation.sys_annotations():
-                    raise UnknownSystemAnnotationError(annotation.token, annotation.token.text)
+                    raise UnknownSystemAnnotationError(annotation.token.anchor, annotation.token.text)
 
                 sysAnnotations.append(annotation)
             else:
@@ -1517,7 +1625,9 @@ class Typename(Locatable):
             templateParameters (list(list(Symto))): A template parameter list for each entry in the scope.
             dims (list(int)): The array dimensions. A value of None inside the list denotes an unbounded array.
         '''
-        super().__init__(None)
+        assert scope
+
+        super().__init__(None, scope[-1].anchor)
         self.scope = scope
         
         # Overwrite the scope strings
@@ -1542,26 +1652,26 @@ class Typename(Locatable):
         if firstToken.text in Language.systemTypenameStrings:
             # The scope has to be exactly 1
             if len(self.scope) > 1:
-                raise InvalidTypenameError(firstToken)
+                raise InvalidTypenameError(firstToken.anchor)
 
             # Default typenames are never templated
             if self.templateParameters[0]:
-                raise InvalidTypenameError(firstToken)
+                raise InvalidTypenameError(firstToken.anchor)
 
             # void does not have array bounds
             if firstToken.text == 'void':
                 if len(self.dims) > 0:
-                    raise InvalidTypenameError(firstToken)
+                    raise InvalidTypenameError(firstToken.anchor)
 
         # Validate the entire scope
         if len(self.scope) > 0:
             for token in self.scope[1:]:
                 if token.text in Language.systemTypenameStrings:
-                    raise InvalidTypenameError(token)
+                    raise InvalidTypenameError(token.anchor)
 
         # Should not be a keyword
         if any(token.text in Language.keywords for token in self.scope):
-            raise InvalidTypenameError(self.scope[0])
+            raise InvalidTypenameError(self.scope[0].anchor)
 
     def location(self):
         '''
@@ -1572,14 +1682,12 @@ class Typename(Locatable):
         '''
         return Location([RelativeLocation(LocationKind.Unresolved, s, templateParameters=self.templateParameters[i]) for i, s in enumerate(self.scopeStrings)])
 
-    def to_string(self, templateWildcardStrings=None):
+    def __str__(self):
         '''
-        Convert the typename to a string.
+        Return a string representation of the object.
 
-        Args:
-            templateWildcardStrings (list(str)): The list of template wildcard strings.
         Returns:
-            str: The typename string.
+            str: The string representation.
         '''
         strings = []
         for i in range(len(self.scope)):
@@ -1587,9 +1695,6 @@ class Typename(Locatable):
 
             # Base
             token = self.scope[i]
-            if templateWildcardStrings is not None:
-                raise DevError()
-            
             s = token.text
 
             # Template args
@@ -1603,19 +1708,10 @@ class Typename(Locatable):
         # Array dims
         if self.dims:
             s += '['
-            s += ', '.join(arg.text if arg is not None else ' ' for arg in self.dims)
+            s += ', '.join(arg.text if arg is not None else ':' for arg in self.dims)
             s += ']'
 
         return '.'.join(strings)
-
-    def __str__(self):
-        '''
-        Convert the typename to a string.
-
-        Returns:
-            str: The typename string.
-        '''
-        return self.to_string()
 
     @staticmethod
     def parse_template_parameters(parser, allowPartialMask=False):
@@ -1714,7 +1810,7 @@ class Typename(Locatable):
         '''
         typename = Typename.try_parse(parser)
         if typename is None:
-            raise TypenameExpectedError(parser.token)
+            raise TypenameExpectedError(parser.token.anchor)
         return typename
 
 class TemplateParameter(Named):
@@ -1807,7 +1903,7 @@ class Template(Named):
 
         # Make sure that the template parameters are unique
         if len(set(self.parameters)) != len(self.parameters):
-            raise DuplicateTemplateParameterError(self.token)
+            raise DuplicateTemplateParameterError(self.token.anchor)
 
     def validate(self):
         '''Validate the object.'''
@@ -1824,7 +1920,7 @@ class Template(Named):
         loc = deepcopy(self.obj.location())
 
         # Change the last relative location to a template
-        lastRelLoc = loc.path[-1]
+        lastRelLoc = loc[-1]
         lastRelLoc.kind = LocationKind.Template
         lastRelLoc.templateParameters = self.parameters
 

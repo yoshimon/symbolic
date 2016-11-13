@@ -49,7 +49,7 @@ class BaseParser:
         self.token = self.advance()
         
         self.tokenStateStack = []
-        self.namespaceStack = [Namespace(None, Symto(Token.Text, self.token.libName, self.token.fileName, '', 1, 1), [], [], None)] # Global namespace
+        self.namespaceStack = [Namespace(None, Symto(Token.Text, self.token.anchor.libName, self.token.anchor.fileName, '', 1, 1), [], [], None)] # Global namespace
 
     def advance(self):
         if self.is_eof():
@@ -138,13 +138,13 @@ class BaseParser:
             Symto: The next token.
         '''
         if not self.match(val):
-            raise UnexpectedTokenError(self.token, val, self.token.text)
+            raise UnexpectedTokenError(self.token.anchor, val, self.token.text)
         return self.token
 
     def expect_kind(self, tokenType):
         token = self.match_kind(tokenType)
         if token is None:
-            raise UnexpectedTokenError(self.token, tokenType, self.token.text)
+            raise UnexpectedTokenError(self.token.anchor, tokenType, self.token.text)
         return token
 
     def push_state(self):
@@ -381,6 +381,6 @@ class UnitParser(BaseParser):
         self.gather_namespace_objects()
 
         if not self.is_eof():
-            raise ExpectedEOFError(self.token)
+            raise ExpectedEOFError(self.token.anchor)
 
         return self.references, self.namespaceStack.pop()

@@ -9,6 +9,32 @@ from jinja2 import Template
 
 __all__ = ['SymbolicLexer']
 
+class Anchor:
+    '''An anchor in the source code.'''
+    def __init__(self, libName, fileName, line, column):
+        '''
+        Initialize the object.
+
+        Args:
+            libName (str): The library name.
+            fileName (str): The file name.
+            line (int): The line in the source code.
+            column (int): The column in the source code.
+        '''
+        self.libName = libName
+        self.fileName = fileName
+        self.line = line
+        self.column = column
+
+    def __str__(self):
+        '''
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        '''
+        return "'{0}' @ ({1}, {2})".format(self.fileName, self.line, self.column)
+
 class Symto:
     '''A Symbolic token.'''
     @staticmethod
@@ -86,7 +112,7 @@ class Symto:
         Returns:
             Symto: The token.
         '''
-        return Symto(kind, other.libName, other.fileName, text, other.line, other.column)
+        return Symto(kind, other.anchor.libName, other.anchor.fileName, text, other.anchor.line, other.anchor.column)
 
     @staticmethod
     def after_token(other, kind, text):
@@ -100,7 +126,7 @@ class Symto:
         Returns:
             Symto: The token.
         '''
-        return Symto(kind, other.libName, other.fileName, text, other.line, other.columnEnd + 1)
+        return Symto(kind, other.libName, other.anchor.fileName, text, other.anchor.line, other.anchor.columnEnd + 1)
 
     def __init__(self, kind, libName, fileName, text, line, column):
         '''
@@ -109,17 +135,14 @@ class Symto:
         Args:
             kinds (Token): The token kind.
             libName (str): The library name.
-            libName (str): The library name.
+            fileName (str): The file name.
             text (str): The text value.
             line (int): The line in which the token was lexed.
             column (int): The column in which the token was lexed.
         '''
         self.kind = kind
-        self.libName = libName
-        self.fileName = fileName
         self.text = str(text)
-        self.line = line
-        self.column = column
+        self.anchor = Anchor(libName, fileName, line, column)
         self.columnEnd = column + len(self.text)
         self.isTerminal = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex, Token.Name, Token.Literal.String]
         self.isNumber = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex]
@@ -158,7 +181,7 @@ class Symto:
             kind (Token): The token kind.
             text (str): The token text.
         '''
-        self.__init__(kind, other.libName, other.fileName, text, other.line, other.column)
+        self.__init__(kind, other.libName, other.anchor.fileName, text, other.anchor.line, other.anchor.column)
 
     def __str__(self):
         '''
