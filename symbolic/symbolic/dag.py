@@ -58,7 +58,7 @@ class ResolvedDependencyLocation:
 
 class NavigationResult:
     '''A result of a navigation operation.'''
-    def __init__(self, reference, resolvedDependencyLocation):
+    def __init__(self, libName, resolvedDependencyLocation):
         '''
         Initialize the object.
 
@@ -66,7 +66,7 @@ class NavigationResult:
             libName (str): The library name.
             resolvedDependencyLocation (list(ResolvedDependencyLocation)): The resolved dependency location.
         '''
-        self.reference = reference
+        self.libName = libName
         self.resolvedDependencyLocation = resolvedDependencyLocation
 
 class ProjectDependencyCollection:
@@ -187,9 +187,7 @@ class ProjectDependencyCollection:
         rl = dependencyLocation[-1]
 
         if rl.kind == LocationKind.Unresolved:
-            # Register, if not a native type
-            if rl.name not in Language.systemTypenameStrings:
-                self.unresolvedDependencies.add(dependency)
+            self.unresolvedDependencies.add(dependency)
         else:
             # Navigate to parent
             navResult = self.navigate(obj.token.anchor, references, dependencyLocation[:-1])
