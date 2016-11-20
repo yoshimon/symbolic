@@ -1,17 +1,27 @@
-﻿class Algorithm:
-    '''Custom algorithms on Python data structures.'''
-    @staticmethod
-    def pop_while(stack, func, action=None):
-        '''
-        Pop all elements from a stack until a predicate returns
-        false and invoke an optional action after each iteration.
+﻿"""@package symbolic.algorithm
+Contains common algorithms used throughout the project.
+"""
 
+class Algorithm:
+    """Custom algorithms on Python data structures."""
+
+    @staticmethod
+    def pop_while(stack, predicate, action=None):
+        """
+        Pop all elements from a stack until a predicate returns False.
+        
+        An optional action is invoked after each iteration.
+
+        Args:
+            stack (list): The list to modify.
+            predicate (function): The predicate to query.
+            action (function): The action to invoke after each iteration.
         Returns:
-            bool: True, if the stack is empty when returning. Otherwise, false.
-        '''
+            bool: True, if the stack is empty when returning. Otherwise, False.
+        """
         isEmpty = True
         while stack:
-            if func(stack[-1]):
+            if predicate(stack[-1]):
                 if not action is None:
                     action(stack[-1])
                 stack.pop()
@@ -22,7 +32,7 @@
 
     @staticmethod
     def all_sequence(a, b, predicate):
-        '''
+        """
         Compare two sequences for equality based on a predicate.
 
         Args:
@@ -31,7 +41,7 @@
             predicate (function): The predicate.
         Returns:
             bool: True, if the lists are equal. Otherwise False.
-        '''
+        """
         for i, e0 in enumerate(a):
             if not predicate(e0, b[i]):
                 return False
@@ -40,7 +50,7 @@
 
     @staticmethod
     def join(delimiter, l):
-        '''
+        """
         Return a joined list of strings.
 
         Args:
@@ -48,29 +58,29 @@
             l: The list to convert.
         Returns:
             str: The joined string values.
-        '''
+        """
         return delimiter.join(str(e) for e in l)
 
     @staticmethod
     def join_comma(l):
-        '''
+        """
         Return a comma-separated list of strings.
 
         Args:
             l: The list to convert.
         Returns:
             str: The comma-separated string values.
-        '''
+        """
         return Algorithm.join(", ", l)
 
     @staticmethod
     def join_dot(l):
-        '''
+        """
         Return a joined list of strings.
 
         Args:
             l: The list to convert.
         Returns:
             str: The joined string values.
-        '''
+        """
         return Algorithm.join(".", l)

@@ -1,52 +1,64 @@
+﻿"""@package symbolic.formatter
+Contains classes to generate formatted strings.
+"""
+
 from symbolic.lexer import SymbolicLexer
 
 class PrettyString:
-    '''A pretty-formatted string.'''
+    """
+    A pretty-formatted string.
+    
+    Attributes:
+        indentLevel (int): The indentation level.
+        indentSize (int): The indentation size in spaces.
+        value (str): The raw string value.
+    """
+
     def __init__(self):
-        '''Initialize the object.'''
+        """Initialize the object."""
         self.indentLevel = 0
         self.indentSize = 4 # in spaces
         self.value = ''
 
     def __iadd__(self, other):
-        '''
+        """
         Append another PrettyString to this object.
 
         Args:
-            others (PrettyString): The other PrettyString.
+            other (PrettyString): The other PrettyString.
         Returns:
             PrettyString: The combined string.
-        '''
+        """
         self.append(other)
         return self
 
     def __str__(self):
-        '''
+        """
         Return a string representation of the object.
 
         Returns:
             str: The string representation.
-        '''
+        """
         return self.value
 
     def indent_str(self):
-        '''
+        """
         Return the string that is used for indenting at the current level.
         
         Returns:
             str: The indentation string.
-        '''
+        """
         return ' ' * self.indentSize * self.indentLevel
 
     def append(self, text):
-        '''
+        """
         Append a textblock to the string, using pretty-formatting rules.
         
         Args:
             text (str): The text to append.
         Returns:
             PrettyString: The object itself.
-        '''
+        """
         if len(text) == 0:
             return self
 
@@ -76,15 +88,15 @@ class PrettyString:
 
     @staticmethod
     def from_tokens(tokens, firstLine=1):
-        '''
+        """
         Create a PrettyString from a token stream.
 
         Args:
-            tokens (listr(Symto)): The token stream.
+            tokens (list of symbolic.lexer.Symto): The token stream.
             firstLine (int): The first line.
         Returns:
             PrettyString: The PrettyString object.
-        '''
+        """
         result = ''
         previousLine = firstLine
         previousColumnEnd = 1

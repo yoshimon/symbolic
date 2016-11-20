@@ -1,4 +1,11 @@
-﻿# Built-in
+﻿"""@package symbolic.objects
+Contains all source code object types in symbolic.
+
+The types in this package are used to convert the textual representation of the symbolic source code to an in-memory representation.
+The objects in this package are then later passed onto the dependency solver to resolve library dependencies, see symbolic.dag.
+"""
+
+# Built-in
 import io
 from enum import Enum
 from copy import deepcopy
@@ -15,9 +22,17 @@ from symbolic.algorithm import Algorithm
 from symbolic.language import Language
 
 class Decorators:
+    """A collection of custom decorators."""
+
     @staticmethod
     def validated(f):
-        '''Validate the object after initialization.'''
+        """
+        Validate the object after initialization.
+        
+        Args:
+            f (function): The functor to invoke.
+        """
+
         @wraps(f)
         def wrapper(self, *args, **kwargs):
             f(self, *args, **kwargs)
@@ -25,7 +40,19 @@ class Decorators:
         return wrapper
 
 class LocationKind(Enum):
-    '''Enumeration of possible location kinds.'''
+    """
+    Enumeration of possible Location kinds.
+    
+    Attributes:
+        Unresolved (int): The location kind has not been resolved yet.
+        Function (int): The location is occupied by a Function.
+        Type (int): The location is occupied by a Struct or Alias.
+        Template (int): The location is occupied by a Template.
+        Instruction (int): The location is occupied by a Instruction.
+        Namespace (int): The location is occupied by a Namespace.
+        Reference (int): The location is occupied by a Reference.
+    """
+
     Unresolved = 0
     Function = 1
     Type = 2
@@ -35,88 +62,118 @@ class LocationKind(Enum):
     Reference = 6
 
 class RelativeLocation:
-    '''A relative location specifier.'''
+    """
+    A relative location specifier.
+    
+    Multiple RelativeLocation objects can represent an absolute path (see Location).
+
+    Attributes:
+        kind (LocationKind): The location type specifier.
+        name (str): The location name.
+        templateParameters (list of TemplateParameter): The template parameters.
+        parameters (list of Parameter): The signature.
+    """
+
     def __init__(self, kind, name, *, templateParameters=None, parameters=None):
-        '''Initialize the object.
+        """Initialize the object.
         Args:
             kind (LocationKind): The location type specifier.
             name (str): The location name.
-            templateParameters (list(TemplateParameter)): The template parameters.
-            parameters (list(Parameter)): The signature.
-        '''
+            templateParameters (list of TemplateParameter): The template parameters.
+            parameters (list of Parameter): The signature.
+        """
         self.kind = kind
         self.name = name
         self.templateParameters = templateParameters if templateParameters is not None else []
         self.parameters = parameters if parameters is not None else []
 
     def is_plain(self):
-        '''Return whether the relative location is plain.'''
+        """
+        Return whether the relative location is plain.
+        
+        A location is considered to be plain when it does not have any (template) parameters.
+
+        Returns:
+            bool: True, if the location is plain. Otherwise False.
+        """
         return (not self.templateParameters) and (not self.parameters)
 
     def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation of the object.
+        """
         templateStr = "<{0}>".format(Algorithm.join_comma(self.templateParameters)) if self.templateParameters else ""
         parameterStr = "({0})".format(Algorithm.join_comma(self.parameters)) if self.parameters else ""
         kindStr = " as {0}".format(str(self.kind)) if self.kind != LocationKind.Unresolved else ""
         return self.name + templateStr + parameterStr + kindStr
 
     def __eq__(self, other):
-        '''
+        """
         Compare for equality with another relative location.
         
         Args:
             other (Location): The other relative location.
         Returns:
             bool: True, if the two locations are equal. Otherwise False.
-        '''
+        """
         return (self.kind == other.kind) and \
             (self.name == other.name) and \
             (self.parameters == other.parameters) and \
             (self.templateParameters == other.templateParameters)
 
 class Location:
-    '''An (absolute) location within a library.'''
+    """
+    An (absolute) location within a library.
+    
+    Attributes:
+        path (list of RelativeLocation): A list of relative location specifiers.
+    """
+
     def __init__(self, path):
-        '''
+        """
         Initialize the object.
 
         Args:
-            path (list(RelativeLocation)): A list of relative location specifiers.
-        '''
+            path (list of RelativeLocation): A list of relative location specifiers.
+        """
         self.path = path
 
     def __str__(self):
-        '''
+        """
         Return a string representation of the object.
 
         Returns:
             str: The string representation.
-        '''
+        """
         return Algorithm.join_dot(self.path)
 
     def __eq__(self, other):
-        '''
+        """
         Compare for equality with another location.
         
         Args:
             other (Location): The other location.
         Returns:
             bool: True, if the two locations are equal. Otherwise False.
-        '''
+        """
         return self.path == other.path
 
     def __getitem__(self, key):
-        '''
+        """
         Return a relative location in the location path.
 
         Args:
             key: The path key.
         Returns:
             RelativeLocation: The relative location.
-        '''
+        """
         return self.path.__getitem__(key)
 
     def __setitem__(self, key, value):
-        '''
+        """
         Change a relative location in the location path.
 
         Args:
@@ -124,72 +181,91 @@ class Location:
             value (RelativeLocation): The value to set.
         Returns:
             RelativeLocation: The relative location.
-        '''
+        """
         return self.path.__setitem__(key, value)
 
     def __iter__(self):
-        '''
+        """
         Return an iterator for the location path.
 
         Returns:
             RelativeLocation: The relative location.
-        '''
+        """
         return self.path.__iter__()
 
     def __delitem__(self, key):
-        '''
+        """
         Delete a relative location in the location path.
 
         Args:
             key: The key to delete.
-        '''
+        """
         return self.path.__delitem__(key)
 
 class Locatable:
-    '''A locatable object within a library.'''
+    """
+    A locatable object within a library.
+
+    Multiple Locatable objects represent a hierarchy. An Anchor is used
+    to locate the object within a library.
+    
+    Attributes:
+        parent (Locatable): The parent object.
+        anchor (Token): The anchor in the source code.        
+    """
+
     def __init__(self, parent, anchor):
-        '''
+        """
         Initialize the object.
         
         Args:
             parent (Locatable): The parent object.
             anchor (Token): The anchor in the source code.
-        '''
+        """
         self.parent = parent
         self.anchor = anchor
 
     def location(self):
-        '''
+        """
         Return the location within the library.
 
         Returns:
             Location: A location within the library.
-        '''
+        """
         # Force this to be implemented by all derived classes
         raise DevError()
 
     def class_name(self):
-        '''
+        """
         Return the class name of the object.
 
         Returns:
             str: The class name.
-        '''
+        """
         return self.__class__.__name__
 
 class Named(Locatable):
-    '''A named object within a library.'''
+    """
+    A named object within a library.
+    
+    Attributes:
+        token (Symto): A token which holds the name.
+        userAnnotations (list of Annotation): The user annotations.
+        sysAnnotations (list of Annotation): The system annotations.
+        semantic (symbolic.lexer.Symto): The semantic annotation.
+    """
+
     def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic):
-        '''
+        """
         Initialize the object.
 
         Args:
             parent (Locatable): The parent object.
             token (Symto): A token which holds the name.
-            userAnnotations (list(Annotation)): The user annotations.
-            sysAnnotations (list(Annotation)): The system annotations.
-            semantic (Symto): The semantic annotation.
-        '''
+            userAnnotations (list of Annotation): The user annotations.
+            sysAnnotations (list of Annotation): The system annotations.
+            semantic (symbolic.lexer.Symto): The semantic annotation.
+        """
         super().__init__(parent, token.anchor)
         assert token is not None
         assert userAnnotations is not None
@@ -200,23 +276,25 @@ class Named(Locatable):
         self.token = token
 
         # Validate the name
-        if self.token.text in Language.invalidNames:
-            raise InvalidNameError(self.token.anchor)
-        elif self.token.text == '':
+        if self.token.text == '':
             # Generate an anonymous name
             self.token.text = '@{0}'.format(id(self))
 
     def validate(self):
-        '''Validate the object.'''
+        """Validate the object."""
         raise DevError()
 
     def default_location(self, kind, templateParameters=None, parameters=None):
-        '''
+        """
         Return the default location within the library.
-
+        
+        Args:
+            kind (LocationKind): The location kind of the final RelativeLocation.
+            templateParameters (list of TemplateParameter): The template parameters at the final RelativeLocation.
+            parameters (list of Parameter): The parameters at the final RelativeLocation.
         Returns:
             Location: A location within the library.
-        '''
+        """
         rl = [RelativeLocation(kind, self.token.text, templateParameters=templateParameters, parameters=parameters)]
         if (self.parent) and (self.parent.parent):
             return Location(self.parent.location().path + rl)
@@ -224,93 +302,98 @@ class Named(Locatable):
             return Location(rl)
 
     def validate_no_system_annotations(self):
-        '''
-        Ensure that there are no system annotation associated to this object.
-        '''
+        """Ensure that there are no system annotation associated to this object."""
         if self.sysAnnotations:
             raise UnsupportedSystemAnnotationError(self.class_name(), self.sysAnnotations[0])
 
     def validate_system_annotations(self, *compatibleNames):
-        '''
+        """
         Validate all system annotations.
 
         Args:
-            compatibleNames (list(str)): A list, containing the compatible annotation names.
-        '''
+            compatibleNames (list of str): A list, containing the compatible annotation names.
+        """
         for annotation in self.sysAnnotations:
             if annotation.token.text not in compatibleNames:
                 raise UnsupportedSystemAnnotationError(self.class_name(), annotation)
 
 class Reference(Named):
-    '''An external library reference.'''
+    """An external library reference."""
+
     @Decorators.validated
     def __init__(self, token, userAnnotations, sysAnnotations, semantic):
-        '''
+        """
         Initialize the object.
 
         Args:
             token (Symto): The reference text.
-            userAnnotations (list(Annotation)): The user annotations.
-            sysAnnotations (list(Annotation)): The system annotations.
+            userAnnotations (list of Annotation): The user annotations.
+            sysAnnotations (list of Annotation): The system annotations.
             semantic (Symto): The semantic annotation.
-        '''
+        """
         super().__init__(None, token, userAnnotations, sysAnnotations, semantic)
 
     def validate(self):
-        '''Validate the object.'''
+        """Validate the object."""
         self.validate_no_system_annotations()
 
     def location(self):
-        '''
+        """
         Return the location within the library.
 
         Returns:
             Location: A location within the library.
-        '''
+        """
         return self.default_location(LocationKind.Reference)
 
     def __str__(self):
-        '''
+        """
         Return a string representation of the object.
 
         Returns:
             str: The string representation.
-        '''
+        """
         return self.token.text
 
 class Namespace(Named):
-    '''A namespace within a library.'''
+    """
+    A namespace within a library.
+    
+    Attributes:
+        objects (list of Named): The Named object instances within the namespace.
+    """
+
     @Decorators.validated
     def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic):
-        '''
+        """
         Initialize the object.
 
         Args:
             parent (Locatable): The parent object.
             token (Symto): A token which holds the name.
-            userAnnotations (list(Annotation)): The user annotations.
-            sysAnnotations (list(Annotation)): The system annotations.
+            userAnnotations (list of Annotation): The user annotations.
+            sysAnnotations (list of Annotation): The system annotations.
             semantic (Symto): The semantic annotation.
-        '''
+        """
         Named.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic)
         self.objects = []
 
     def validate(self):
-        '''Validate the object.'''
+        """Validate the object."""
         self.validate_system_annotations('private', 'deprecate')
 
     def location(self):
-        '''
+        """
         Return the location within the library.
 
         Returns:
             Location: A location within the library.
-        '''
+        """
         return self.default_location(LocationKind.Namespace)
 
     @staticmethod
     def parse(parser, args):
-        '''
+        """
         Parse a namespace.
 
         Args:
@@ -318,7 +401,7 @@ class Namespace(Named):
             args: Unused.
         Returns:
             Namespace: The namespace object or None, if no namespace was parsed.
-        '''
+        """
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         if not parser.match('namespace'):
@@ -354,24 +437,44 @@ class Namespace(Named):
         return namespace
 
 class TemplateObject(Named):
-    '''A templateable object.'''
+    """
+    A templatable object.
+    
+    Attributes:
+        body (list of Symto): The template body, represented by a list of tokens.
+    """
+
     def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body):
-        '''
+        """
         Initialize the object.
 
         Args:
             parent (Locatable): The parent object.
             token (Symto): A token which holds the name.
-            userAnnotations (list(Annotation)): The user annotations.
-            sysAnnotations (list(Annotation)): The system annotations.
+            userAnnotations (list of Annotation): The user annotations.
+            sysAnnotations (list of Annotation): The system annotations.
             semantic (Symto): The semantic annotation.
-            body (list(Symto)): The template body, represented by a list of tokens.
-        '''
+            body (list of Symto): The template body, represented by a list of tokens.
+        """
         super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
         self.body = body
 
 class InstructionKind(Enum):
-    '''Enumeration of possible instruction types.'''
+    """
+    Enumeration of possible Instruction kinds.
+    
+    Attributes:
+        Expression (int): The Instruction is an Expression.
+        Break (int): The Instruction is a break statement.
+        Return (int): The Instruction is a return statement.
+        Continue (int): The Instruction is a continue statement.
+        If (int): The Instruction is a branch statement.
+        For (int): The Instruction is a for-loop.
+        While (int): The Instruction is a while-loop.
+        Elif (int): The Instruction is an else-if branch.
+        Else (int): The Instruction is an else branch.
+    """
+
     Expression = 0
     # Jmps
     Break = 1
@@ -386,24 +489,36 @@ class InstructionKind(Enum):
     Else = 9
 
 class Instruction(Named):
-    '''An instruction within a function.'''
+    """
+    An instruction within a function.
+    
+    Attributes:
+        kind (InstructionKind): The instruction type specifier.
+        expression (Expression): The expression within the instruction.
+        instructions (list of Instruction): The sub-instructions within the instruction (e.g. a for-loop body).
+        forInits (list of Expression): The expressions for the for-loop initialization.
+        forPredicates (list of Expression): The expressions for the for-loop predicates.
+        forSteps (list of Expression): The expressions for the for-loop step.
+    """
+
     @Decorators.validated
     def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, kind, *, expression=None, instructions=None, forInits=None, forPredicates=None, forSteps=None):
-        '''
+        """
         Initialize the object.
 
         Args:
             parent (Locatable): The parent object.
-            userAnnotations (list(Annotation)): The user annotations.
-            sysAnnotations (list(Annotation)): The system annotations.
+            token (Symto): An anomymous identifier for the object.
+            userAnnotations (list of Annotation): The user annotations.
+            sysAnnotations (list of Annotation): The system annotations.
             semantic (Symto): The semantic annotation.
             kind (InstructionKind): The instruction type specifier.
             expression (Expression): The expression within the instruction.
-            instructions (list(Instruction)): The sub-instructions within the instruction (e.g. a for-loop body).
-            forInits (list(Expression)): The expressions for the for-loop initialization.
-            forPredicates (list(Expression)): The expressions for the for-loop predicates.
-            forSteps (list(Expression)): The expressions for the for-loop step.
-        '''
+            instructions (list of Instruction): The sub-instructions within the instruction (e.g. a for-loop body).
+            forInits (list of Expression): The expressions for the for-loop initialization.
+            forPredicates (list of Expression): The expressions for the for-loop predicates.
+            forSteps (list of Expression): The expressions for the for-loop step.
+        """
         super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
         self.kind = kind
         self.expression = expression
@@ -413,21 +528,21 @@ class Instruction(Named):
         self.forSteps = forSteps
 
     def validate(self):
-        '''Validate the object.'''
+        """Validate the object."""
         self.validate_no_system_annotations()
 
     def location(self):
-        '''
+        """
         Return the location within the library.
 
         Returns:
             Location: A location within the library.
-        '''
+        """
         return self.default_location(LocationKind.Instruction)
 
     @staticmethod
     def expect_expression(parser, endDelim):
-        '''
+        """
         Parse the next expression.
         
         Args:
@@ -435,7 +550,7 @@ class Instruction(Named):
             endDelim (str): The end delimiter.
         Returns:
             Expression: The expression.
-        '''
+        """
         # Parse the next expression with endDelim being the end delimiter
         expression = Expression.parse(parser, [endDelim])
 
@@ -450,14 +565,14 @@ class Instruction(Named):
 
     @staticmethod
     def parse_parenthesized_expression(parser):
-        '''
+        """
         Parse the next parenthesized expression.
         
         Args:
             parser (UnitParser): The parser to use.
         Returns:
             Expression, Annotation: The expression and semantic of the instruction.
-        '''
+        """
         parser.expect('(')
         
         # Require a non-empty expression
@@ -470,14 +585,14 @@ class Instruction(Named):
 
     @staticmethod
     def parse_instruction_body(parser):
-        '''
+        """
         Parse all instructions in the body.
         
         Args:
             parser (UnitParser): The parser to use.
         Returns:
-            list(Instruction): The list of instructions.
-        '''
+            list of Instruction: The list of instructions.
+        """
         parser.expect('{')
         # Parse all instructions in the body until } is found
         instructions = parser.gather_objects([Instruction], args=['}'])
@@ -486,15 +601,15 @@ class Instruction(Named):
 
     @staticmethod
     def parse(parser, args):
-        '''
+        """
         Parse an instruction.
 
         Args:
             parser (UnitParser): The parser to use.
-            args (list(str)): The end delimiter list.
+            args (list of str): The end delimiter list.
         Returns:
             Instruction: The instruction object or None, if no instruction was parsed.
-        '''
+        """
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         # Create a dummy token (anonymous) for the instruction
@@ -572,7 +687,23 @@ class Instruction(Named):
             return Instruction(parent, token, [], [], None, kind, expression=expression) 
 
 class ExpressionAtomKind(Enum):
-    '''Enumeration of all expression atom types.'''
+    """
+    Enumeration of all ExpressionAtom kinds.
+
+    Attributes:
+        Var (int): The ExpressionAtom is a variable.
+        Number (int): The ExpressionAtom is a number.
+        FunctionBegin (int): The ExpressionAtom is the start of a function invocation.
+        FunctionEnd (int): The ExpressionAtom is the end of a function invocation.
+        ArrayBegin (int): The ExpressionAtom is the start of an array.
+        ArrayEnd (int): The ExpressionAtom is the end of an array.
+        TemplateBegin (int): The ExpressionAtom is the start of a template.
+        TemplateEnd (int): The ExpressionAtom is the end of a template.
+        UnaryOp (int): The ExpressionAtom is a unary operator.
+        BinaryOp (int): The ExpressionAtom is a binary operator.
+        Delimiter (int): The ExpressionAtom is a delimiter.
+    """
+
     Var = 0
     Number = 1
     FunctionBegin = 2
@@ -586,46 +717,69 @@ class ExpressionAtomKind(Enum):
     Delimiter = 10
 
 class ExpressionAtom:
-    '''An atom within an expression.'''
+    """
+    An atom within an Expression.
+    
+    Attributes:
+        token (Symto): The atom token.
+        kind (ExpressionAtomKind): The atom kind.
+    """
+
     def __init__(self, token, kind):
-        '''
+        """
         Initialize the object.
 
         Args:
             token (Symto): The atom token.
             kind (ExpressionAtomKind): The atom kind.
-        '''
+        """
         self.token = token
         self.kind = kind
 
 class ExpressionAST:
-    '''An AST within an expression.'''
+    """
+    An AST within an Expression.
+    
+    Args:
+        atom (ExpressionAtom): The expression atom.
+        parent (ExpressionAST): The parent expression AST.
+        children (list of ExpressionAST): The child expression ASTs.
+    """
+
     def __init__(self, atom, parent, children=None):
-        '''
+        """
         Initialize the object.
 
         Args:
             atom (ExpressionAtom): The expression atom.
             parent (ExpressionAST): The parent expression AST.
-            children (ExpressionAST): The child expression ASTs.
-        '''
+            children (list of ExpressionAST): The child expression ASTs.
+        """
         self.atom = atom
         self.parent = parent
         self.children = [] if children is None else children
 
 class Expression(Named):
-    '''An expression.'''
+    """
+    An expression.
+    
+    Args:
+        tokens (list of Symto): The expression token list.
+        postfixAtoms (list of ExpressionAtom): The expression atoms.
+        ast (ExpressionAST): The expression AST.
+    """
+
     @Decorators.validated
     def __init__(self, parent, userAnnotations, sysAnnotations, tokens):
-        '''
+        """
         Initialize the object.
 
         Args:
             parent (Locatable): The parent object.
-            userAnnotations (list(Annotation)): The user annotations.
-            sysAnnotations (list(Annotation)): The system annotations.
-            tokens (list(Symto)): The expression token list.
-        '''
+            userAnnotations (list of Annotation): The user annotations.
+            sysAnnotations (list of Annotation): The system annotations.
+            tokens (list of Symto): The expression token list.
+        """
         token = Symto.from_token(tokens[0], Token.Text, '')
         super().__init__(parent, token, userAnnotations, sysAnnotations, None)
         self.tokens = tokens
@@ -633,30 +787,30 @@ class Expression(Named):
         self.ast = Expression.to_ast(self.postfixAtoms) # RPN to AST
 
     def validate(self):
-        '''Validate the object.'''
+        """Validate the object."""
         self.validate_no_system_annotations()
 
     def location(self):
-        '''
+        """
         Return the location within the library.
 
         Returns:
             Location: A location within the library.
-        '''
+        """
         return Location([RelativeLocation(LocationKind.Unresolved, self.token.text)])
 
     @staticmethod
     def to_postfix(tokens):
-        '''
+        """
         Convert a token list to a postfix expression.
 
         Args:
-            tokens (list(Symto)): The token list.
+            tokens (list of Symto): The token list.
         Returns:
-            list(ExpressionAtom): The expression atoms, in RPN.
-        '''
+            list of ExpressionAtom: The expression atoms, in RPN.
+        """
         class State(Enum):
-            '''Enumeration of all possible expression parser states.'''
+            """Enumeration of all possible expression parser states."""
             Default = 0
             Function = 1
             Array = 2
@@ -768,14 +922,14 @@ class Expression(Named):
 
     @staticmethod
     def to_ast(postfixAtoms):
-        '''
+        """
         Convert a postfix (RPN) expression to an AST.
 
         Args:
-            postfixAtoms (list(ExpressionAtom)): The postfix atoms.
+            postfixAtoms (list of ExpressionAtom): The postfix atoms.
         Returns:
             ExpressionAST: The AST.
-        '''
+        """
         argCount = 0
         argCountStack = []
         argStack = []
@@ -849,15 +1003,15 @@ class Expression(Named):
 
     @staticmethod
     def parse(parser, args):
-        '''
+        """
         Parse an expression.
 
         Args:
             parser (UnitParser): The parser to use.
-            args (list(str)): The end delimiter list.
+            args (list of str): The end delimiter list.
         Returns:
             Expression: The expression or None, if no expression was parsed.
-        '''
+        """
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         tokens = parser.until_any(args)
         try:
@@ -866,67 +1020,81 @@ class Expression(Named):
             return None
 
 class FunctionKind(Enum):
-    '''Enumeration of possible function kinds.'''
+    """
+    Enumeration of possible Function kinds.
+    
+    Regular (int): The Function is a regular function.
+    Operator (int): The Function is an operator.
+    Extension (int): The Function is an extension.
+    """
+
     Regular = 0
     Operator = 1
     Extension = 2
 
 class Parameter(Named):
-    '''A function parameter.'''
+    """
+    A parameter in a Function signature.
+    
+    Args:
+        typename (Typename): The typename.
+        isRef (bool): True, if the parameter is a reference. Otherwise False.
+    """
+
     @Decorators.validated
     def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, typename, isRef):
-        '''
+        """
         Initialize the object.
 
         Args:
             parent (Locatable): The parent object.
             token (Symto): A token which holds the name.
-            userAnnotations (list(Annotation)): The user annotations.
-            sysAnnotations (list(Annotation)): The system annotations.
+            userAnnotations (list of Annotation): The user annotations.
+            sysAnnotations (list of Annotation): The system annotations.
             semantic (Symto): The semantic annotation.
             typename (Typename): The typename.
-            isRef (bool): True, if the parameter is a reference. Otherwise false.
-        '''
+            isRef (bool): True, if the parameter is a reference. Otherwise False.
+        """
         super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
         self.typename = typename
         self.isRef = isRef
 
     def validate(self):
-        '''Validate the object.'''
+        """Validate the object."""
         self.validate_no_system_annotations()
 
     def location(self):
-        '''
+        """
         Return the location within the library.
 
         Returns:
             Location: A location within the library.
-        '''
+        """
         return self.typename.location()
 
     def __eq__(self, other):
-        '''
+        """
         Compare for equality with another parameter.
         
         Args:
             other (Parameter): The other parameter.
         Returns:
             bool: True, if the two parameters are equal. Otherwise False.
-        '''
+        """
         return (self.isRef == other.isRef) and (self.location() == other.location())
 
     def __str__(self):
-        '''
+        """
         Return a string representation of the object.
 
         Returns:
             str: The string representation.
-        '''
+        """
         return str(self.typename)
 
     @staticmethod
     def parse(parser, args):
-        '''
+        """
         Parse an expression.
 
         Args:
@@ -934,7 +1102,7 @@ class Parameter(Named):
             args: Unused.
         Returns:
             Expression: The parameter or None, if no parameter was parsed.
-        '''
+        """
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         # Reference prefix
@@ -954,24 +1122,33 @@ class Parameter(Named):
         return Parameter(parser.namespaceStack[-1], token, userAnnotations, sysAnnotations, semantic, typename, isRef)
 
 class Function(TemplateObject, Namespace):
-    '''A function.'''
+    """
+    A function.
+    
+    Attributes:
+        kind (FunctionKind): The function kind.
+        returnTypename (Typename): The return typename.
+        extensionTypename (Typename): The extension typename.
+        parameters (list of Parameter): The parameters.
+    """
+
     @Decorators.validated
     def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body, kind, returnTypename, extensionTypename, parameters):
-        '''
+        """
         Initialize the object.
 
         Args:
             parent (Locatable): The parent object.
             token (Symto): A token which holds the name.
-            userAnnotations (list(Annotation)): The user annotations.
-            sysAnnotations (list(Annotation)): The system annotations.
+            userAnnotations (list of Annotation): The user annotations.
+            sysAnnotations (list of Annotation): The system annotations.
             semantic (Symto): The semantic annotation.
-            body (list(Symto)): The template body.
+            body (list of Symto): The template body.
             kind (FunctionKind): The function kind.
             returnTypename (Typename): The return typename.
             extensionTypename (Typename): The extension typename.
-            parameters (list(Parameter)): The parameters.
-        '''
+            parameters (list of Parameter): The parameters.
+        """
         # Has to be bound first for validation
         self.kind = kind
         self.returnTypename = returnTypename
@@ -981,33 +1158,33 @@ class Function(TemplateObject, Namespace):
         TemplateObject.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body)
 
     def validate(self):
-        '''Validate the object.'''
+        """Validate the object."""
         if self.kind == FunctionKind.Extension:
             self.validate_system_annotations('static', 'private', 'deprecate')
         else:
             self.validate_system_annotations('private', 'deprecate')
 
     def location(self):
-        '''
+        """
         Return the location within the library.
 
         Returns:
             Location: A location within the library.
-        '''
+        """
         location = self.default_location(LocationKind.Function, parameters=self.parameters)
         return location
 
     @staticmethod
     def parse_template(parser, isTemplate):
-        '''
+        """
         Parse the template.
 
         Args:
             parser (UnitParser): The parser to use.
-            isTemplate (bool): True, if this is a template. Otherwise false.
+            isTemplate (bool): Indicates whether the object should be parsed as a template.
         Returns:
             Function: The function or None, if no function was parsed.
-        '''
+        """
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         kind = FunctionKind.Regular
@@ -1090,7 +1267,7 @@ class Function(TemplateObject, Namespace):
 
     @staticmethod
     def parse(parser, args):
-        '''
+        """
         Parse an expression.
 
         Args:
@@ -1098,16 +1275,16 @@ class Function(TemplateObject, Namespace):
             args: Unused.
         Returns:
             Expression: The parameter or None, if no parameter was parsed.
-        '''
+        """
         return Function.parse_template(parser, False)
 
     def generate_from_template(self, prettyString):
-        '''
-        Generate the string-representation from this template-object.
+        """
+        Generate a template string from the parsed object.
 
         Args:
-            prettyString (PrettyString): The string.
-        '''
+            prettyString (PrettyString): The string to append the Function to.
+        """
         # ReturnType
         prettyString += str(self.returnTypename)
 
@@ -1143,20 +1320,26 @@ class Function(TemplateObject, Namespace):
             prettyString += ')'
 
 class Member(Named):
-    '''A structure member.'''
+    """
+    A member inside a Structure object.
+    
+    Attributes:
+        typename (Typename): The member typename.
+    """
+
     @Decorators.validated
     def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, typename):
-        '''
+        """
         Initialize the object.
 
         Args:
             parent (Locatable): The parent object.
             token (Symto): A token which holds the name.
-            userAnnotations (list(Annotation)): The user annotations.
-            sysAnnotations (list(Annotation)): The system annotations.
+            userAnnotations (list of Annotation): The user annotations.
+            sysAnnotations (list of Annotation): The system annotations.
             semantic (Symto): The semantic annotation.
             typename (Typename): The member typename.
-        '''
+        """
         super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
         self.typename = typename
 
@@ -1166,21 +1349,21 @@ class Member(Named):
                 raise InvalidTypenameError(token.anchor)
 
     def validate(self):
-        '''Validate the object.'''
+        """Validate the object."""
         self.validate_system_annotations('private', 'deprecate')
 
     def location(self):
-        '''
+        """
         Return the location within the library.
 
         Returns:
             Location: A location within the library.
-        '''
+        """
         return self.typename.location()
 
     @staticmethod
     def parse(parser, args):
-        '''
+        """
         Parse an member.
 
         Args:
@@ -1188,7 +1371,7 @@ class Member(Named):
             args: Unused.
         Returns:
             Expression: The parameter or None, if no parameter was parsed.
-        '''
+        """
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         typename = Typename.try_parse()
         if typename is None:
@@ -1203,41 +1386,48 @@ class Member(Named):
         return Member(parser.namespaceStack[-1], name, userAnnotations, sysAnnotations, semantic, typename)
 
 class MemberList(Named):
-    '''A list of members, that share the same typename.'''
+    """
+    A collection of Member objects that share the same Typename.
+    
+    Attributes:
+        members (list of Member): A list of members.
+        typename (Typename): The member typename.
+    """
+
     @Decorators.validated
     def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, members, typename):
-        '''
+        """
         Initialize the object.
 
         Args:
             parent (Locatable): The parent object.
             token (Symto): A token which holds the name.
-            userAnnotations (list(Annotation)): The user annotations.
-            sysAnnotations (list(Annotation)): The system annotations.
+            userAnnotations (list of Annotation): The user annotations.
+            sysAnnotations (list of Annotation): The system annotations.
             semantic (Symto): The semantic annotation.
-            members (list(Member)): A list of members.
+            members (list of Member): A list of members.
             typename (Typename): The member typename.
-        '''
+        """
         super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
         self.members = members
         self.typename = typename
 
     def validate(self):
-        '''Validate the object.'''
+        """Validate the object."""
         self.validate_system_annotations('private', 'deprecate')
 
     def location(self):
-        '''
+        """
         Return the location within the library.
 
         Returns:
             Location: A location within the library.
-        '''
+        """
         return self.typename.location()
 
     @staticmethod
     def parse(parser, args):
-        '''
+        """
         Parse a list of members.
 
         Args:
@@ -1245,7 +1435,7 @@ class MemberList(Named):
             args: Unused.
         Returns:
             Expression: The parameter or None, if no member was parsed.
-        '''
+        """
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         typename = Typename.try_parse(parser)
         if typename is None:
@@ -1270,46 +1460,47 @@ class MemberList(Named):
         return MemberList(parser.namespaceStack[-1], name, userAnnotations, sysAnnotations, semantic, members, typename)
 
 class Struct(TemplateObject, Namespace):
-    '''A structure.'''
+    """A structure."""
+
     def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body):
-        '''
+        """
         Initialize the object.
 
         Args:
             parent (Locatable): The parent object.
             token (Symto): A token which holds the name.
-            userAnnotations (list(Annotation)): The user annotations.
-            sysAnnotations (list(Annotation)): The system annotations.
+            userAnnotations (list of Annotation): The user annotations.
+            sysAnnotations (list of Annotation): The system annotations.
             semantic (Symto): The semantic annotation.
-            body (list(Symto)): The template body.
-        '''
+            body (list of Symto): The template body.
+        """
         Namespace.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic)
         TemplateObject.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body)
 
     def validate(self):
-        '''Validate the object.'''
+        """Validate the object."""
         self.validate_system_annotations('private', 'deprecate')
 
     def location(self):
-        '''
+        """
         Return the location within the library.
 
         Returns:
             Location: A location within the library.
-        '''
+        """
         return self.default_location(LocationKind.Type)
 
     @staticmethod
     def parse_template(parser, isTemplate):
-        '''
+        """
         Parse a structure.
 
         Args:
             parser (UnitParser): The parser to use.
-            args: Unused.
+            isTemplate (bool): Indicates whether the object should be parsed as a template.
         Returns:
             Expression: The parameter or None, if no struct was parsed.
-        '''
+        """
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         if not parser.match('struct'):
@@ -1342,7 +1533,7 @@ class Struct(TemplateObject, Namespace):
 
     @staticmethod
     def parse(parser, args):
-        '''
+        """
         Parse a structure.
 
         Args:
@@ -1350,55 +1541,67 @@ class Struct(TemplateObject, Namespace):
             args: Unused.
         Returns:
             Expression: The parameter or None, if no struct was parsed.
-        '''
+        """
         return Struct.parse_template(parser, False)
 
     def generate_from_template(self, prettyString):
+        """
+        Generate a template string from the parsed object.
+
+        Args:
+            prettyString (PrettyString): The string to append the Struct to.
+        """
         prettyString += 'struct ' + self.token.text
 
 class Alias(TemplateObject):
-    '''A type alias.'''
+    """
+    A type alias.
+    
+    Attributes:
+        targetTypename (Typename): The target typename.
+    """
+
     @Decorators.validated
     def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body, targetTypename):
-        '''
+        """
         Initialize the object.
 
         Args:
             parent (Locatable): The parent object.
             token (Symto): A token which holds the name.
-            userAnnotations (list(Annotation)): The user annotations.
-            sysAnnotations (list(Annotation)): The system annotations.
+            userAnnotations (list of Annotation): The user annotations.
+            sysAnnotations (list of Annotation): The system annotations.
             semantic (Symto): The semantic annotation.
-            body (list(Symto)): The template body.
+            body (list of Symto): The template body.
             targetTypename (Typename): The target typename.
-        '''
+        """
         TemplateObject.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body)
         self.targetTypename = targetTypename
     
     def validate(self):
-        '''Validate the object.'''
+        """Validate the object."""
         self.validate_system_annotations('private', 'deprecate')
 
     def location(self):
-        '''
+        """
         Return the location within the library.
 
         Returns:
             Location: A location within the library.
-        '''
+        """
         return self.default_location(LocationKind.Type)
 
     @staticmethod
     def parse_template(parser, isTemplate):
-        '''
+        """
         Parse the template.
 
         Args:
             parser (UnitParser): The parser to use.
-            isTemplate (bool): True, if this is a template. Otherwise false.
+            isTemplate (bool): Indicates whether the object should be parsed as a template.
         Returns:
             Alias: The alias or None, if no alias was parsed.
-        '''
+        """
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         if not parser.match('using'):
             return None
@@ -1425,7 +1628,7 @@ class Alias(TemplateObject):
 
     @staticmethod
     def parse(parser, args):
-        '''
+        """
         Parse a structure.
 
         Args:
@@ -1433,46 +1636,50 @@ class Alias(TemplateObject):
             args: Unused.
         Returns:
             Alias: The parameter or None, if no alias was parsed.
-        '''
+        """
         return Alias.parse_template(parser, False)
 
     def generate_from_template(self, prettyString):
-        '''
-        Parse a structure.
+        """
+        Generate a template string from the parsed object.
 
         Args:
-            parser (UnitParser): The parser to use.
-            args: Unused.
-        Returns:
-            Alias: The parameter or None, if no alias was parsed.
-        '''
+            prettyString (PrettyString): The string to append the Alias to.
+        """
         prettyString += 'using ' + self.token.text
 
 class Annotation:
-    '''An object annotation.'''
+    """
+    An object annotation.
+    
+    Attributes:
+        token (Symto): The name token.
+        args (list of str): The annotation arguments.
+    """
+
     def __init__(self, token, args):
-        '''
+        """
         Initialize the object.
 
         Args:
             token (Symto): The name token.
-            args (list(str)): The annotation arguments.
-        '''
+            args (list of str): The annotation arguments.
+        """
         self.token = token
         self.args = args
 
     @staticmethod
     def list_to_str(collection, open, close=None):
-        '''
+        """
         Convert an annotation list to a string list.
         
         Args:
-            collection (list(Annotation)): The annotation list.
+            collection (list of Annotation): The annotation list.
             open (str): The opening string.
             close (str): The closing string.
         Returns:
-            list(str): The string list.
-        '''
+            list of str: The string list.
+        """
         result = ''
         for annotation in collection:
             result += open + annotation.token.text
@@ -1485,38 +1692,38 @@ class Annotation:
 
     @staticmethod
     def usrlist_to_str(collection):
-        '''
+        """
         Convert a user annotation list to a string-list.
 
         Args:
-            collection (list(str)): The user annotation list.
+            collection (list of str): The user annotation list.
         Returns:
-            list(str): The string list.
-        '''
+            list of str: The string list.
+        """
         return Annotation.list_to_str(collection, '[', ']')
 
     @staticmethod
     def syslist_to_str(collection):
-        '''
+        """
         Convert a system annotation list to a string-list.
 
         Args:
-            collection (list(str)): The system annotation list.
+            collection (list of str): The system annotation list.
         Returns:
-            list(str): The string list.
-        '''
+            list of str: The string list.
+        """
         return Annotation.list_to_str(collection, '@')
 
     @staticmethod
     def parse_annotation_interior(parser):
-        '''
+        """
         Parse the interior of an annotation.
 
         Args:
             parser (UnitParser): The parser to use.
         Returns:
             Annotation: The annotation.
-        '''
+        """
         token = parser.expect_kind(Token.Name)
         parameters = parser.fetch_block('(', ')')
         parameters = [p for p in parameters if p.text != ',']
@@ -1524,26 +1731,26 @@ class Annotation:
 
     @staticmethod
     def try_parse_sys(parser):
-        '''
+        """
         Parse the next system annotation.
         
         Args:
             parser (UnitParser): The parser to use.
         Returns:
             Annotation: The system annotation or None, if no user annotation was found.
-        '''
+        """
         return Annotation.parse_annotation_interior(parser) if parser.match('@') else None
 
     @staticmethod
     def try_parse_user(parser):
-        '''
+        """
         Parse the next user annotation.
         
         Args:
             parser (UnitParser): The parser to use.
         Returns:
             Annotation: The user annotation or None, if no user annotation was found.
-        '''
+        """
         if parser.match('['):
             annotation = Annotation.parse_annotation_interior(parser)
             parser.match(']')
@@ -1553,26 +1760,26 @@ class Annotation:
 
     @staticmethod
     def parse_semantic(parser):
-        '''
+        """
         Parse the next semantic.
         
         Args:
             parser (UnitParser): The parser to use.
         Returns:
             Annotation: The semantic annotation or None, if no semantic was found.
-        '''
+        """
         return Annotation.parse_annotation_interior(parser) if parser.match(':') else None
 
     @staticmethod
     def parse_annotations(parser):
-        '''
+        """
         Parse the next user and system annotations.
         
         Args:
             parser (UnitParser): The parser to use.
         Returns:
-            list(Annotation), list(Annotation): The user and system annotations.
-        '''
+            list of Annotation, list of Annotation: The user and system annotations.
+        """
         userAnnotations = []
         sysAnnotations = []
         while True:
@@ -1592,39 +1799,48 @@ class Annotation:
 
     @staticmethod
     def sys_annotations():
-        '''
+        """
         Return a list of system annotation names.
         
         Returns:
-            set(str): A set of annotation names. 
-        '''
+            set of str: A set of annotation names. 
+        """
         return { 'static', 'private', 'noconstructor', 'deprecate' }
 
     @staticmethod
     def has(name, collection):
-        '''
+        """
         Test whether a annotation collection contains an annotation with a given name.
 
         Args:
             name (str): The name to search for.
-            collection (list(Annotation)): The annotation collection.
+            collection (list of Annotation): The annotation collection.
         Returns:
-            bool: True, if an annotation with the specified name exists in the collection. Otherwise false.
-        '''
+            bool: True, if an annotation with the specified name exists in the collection. Otherwise False.
+        """
         return any(e.token.text == name for e in collection)
 
 class Typename(Locatable):
-    '''A typename.'''
+    """
+    A typename.
+    
+    Attributes:
+        dims (list of int): The array dimensions.
+        scope (list of Symto): The name scope.
+        scopeStrings (list of str): The token scope list as a string list.
+        templateParameters (list of list of Symto): A template parameter list for each entry in the scope.
+    """
+
     @Decorators.validated
     def __init__(self, scope, *, templateParameters=None, dims=None):
-        '''
+        """
         Initialize the object.
 
         Args:
-            scope (list(Symto)): The scope token list.
-            templateParameters (list(list(Symto))): A template parameter list for each entry in the scope.
-            dims (list(int)): The array dimensions. A value of None inside the list denotes an unbounded array.
-        '''
+            scope (list of Symto): The scope token list.
+            templateParameters (list of list of Symto): A template parameter list for each entry in the scope.
+            dims (list of int): The array dimensions. A value of None inside the list denotes an unbounded array.
+        """
         assert scope
 
         super().__init__(None, scope[-1].anchor)
@@ -1645,7 +1861,7 @@ class Typename(Locatable):
         self.dims = dims
 
     def validate(self):
-        '''Validate the object.'''
+        """Validate the object."""
         firstToken = self.scope[0]
 
         # Validate the first scope token
@@ -1674,21 +1890,21 @@ class Typename(Locatable):
             raise InvalidTypenameError(self.scope[0].anchor)
 
     def location(self):
-        '''
+        """
         Return the location within the library.
 
         Returns:
             Location: A location within the library.
-        '''
+        """
         return Location([RelativeLocation(LocationKind.Unresolved, s, templateParameters=self.templateParameters[i]) for i, s in enumerate(self.scopeStrings)])
 
     def __str__(self):
-        '''
+        """
         Return a string representation of the object.
 
         Returns:
             str: The string representation.
-        '''
+        """
         strings = []
         for i in range(len(self.scope)):
             templateParameters = self.templateParameters[i]
@@ -1715,15 +1931,15 @@ class Typename(Locatable):
 
     @staticmethod
     def parse_template_parameters(parser, allowPartialMask=False):
-        '''
+        """
         Parse the template parameters of the typename.
 
         Args:
             parser (UnitParser): The parser to use.
             allowPartialMask (bool): Specifies whether partial masks are allowed, containing strings and identifiers.
         Returns:
-            list(TemplateParameter): The template parameter list.
-        '''
+            list of TemplateParameter: The template parameter list.
+        """
         templateParameters = []
         parameterMask = [Token.Name, Token.Literal.String] if allowPartialMask else [Token.Literal.String]
         if parser.match('<'):
@@ -1738,14 +1954,14 @@ class Typename(Locatable):
 
     @staticmethod
     def parse_array_dimensions(parser):
-        '''
+        """
         Parse the array dimensions.
 
         Args:
             parser (UnitParser): The parser to use.
         Returns:
-            list(int): The array dimensions.
-        '''
+            list of int: The array dimensions.
+        """
         dims = []
         if parser.match('['):
             missingBounds = True
@@ -1771,15 +1987,15 @@ class Typename(Locatable):
 
     @staticmethod
     def try_parse(parser, allowPartialMask=False):
-        '''
+        """
         Parse a typename.
 
         Args:
             parser (UnitParser): The parser to use.
             allowPartialMask (bool): Specifies whether partial masks are allowed, containing strings and identifiers.
         Returns:
-            list(Typename): The typename or None, if no typename was parsed.
-        '''
+            list of Typename: The Typename or None, if no Typename was parsed.
+        """
         # Explicit scoping
         token = parser.match_kind(Token.Name)
         if token is None:
@@ -1800,37 +2016,38 @@ class Typename(Locatable):
 
     @staticmethod
     def parse(parser):
-        '''
+        """
         Parse a typename.
 
         Args:
             parser (UnitParser): The parser to use.
         Returns:
             Typename: The typename.
-        '''
+        """
         typename = Typename.try_parse(parser)
         if typename is None:
             raise TypenameExpectedError(parser.token.anchor)
         return typename
 
 class TemplateParameter(Named):
-    '''A template parameter.'''
+    """A template parameter."""
+
     def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic):
-        '''
+        """
         Initialize the object.
 
         Args:
-            userAnnotations (list(Annotation)): The user annotations.
-            sysAnnotations (list(Annotation)): The system annotations.
-            semantic (Symto): The semantic annotation.
             parent (Locatable): The parent object.
             token (Symto): A token which holds the name.
-        '''
+            userAnnotations (list of Annotation): The user annotations.
+            sysAnnotations (list of Annotation): The system annotations.
+            semantic (Symto): The semantic annotation.
+        """
         super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
 
     @staticmethod
     def parse(parser, args):
-        '''
+        """
         Parse a template parameter.
 
         Args:
@@ -1838,7 +2055,7 @@ class TemplateParameter(Named):
             args: Unused.
         Returns:
             TemplateParameter: The template parameter.
-        '''
+        """
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         name = parser.match_kind(Token.Name)
@@ -1849,51 +2066,60 @@ class TemplateParameter(Named):
         return TemplateParameter(parser.namespaceStack[-1], name, userAnnotations, sysAnnotations, semantic)
 
     def __str__(self):
-        '''
+        """
         Return a string representation of the object.
 
         Returns:
             str: The string representation.
-        '''
+        """
         return self.token.text
 
     def  __hash__(self):
-        '''
+        """
         Return a hash value for this object.
 
         Returns:
             int: The hash value.
-        '''
+        """
         return hash(self.__str__())
 
     def __eq__(self, other):
-        '''
+        """
         Compare for equality with another object.
 
         Args:
             other (TemplateParameter): The other object.
         Returns:
-            bool: True, if both template parameters are equal. Otherwise false.
-        '''
+            bool: True, if both template parameters are equal. Otherwise False.
+        """
         return self.token.text == other.token.text
 
 class Template(Named):
+    """
+    A template.
+
+    Attributes:
+        parameters (list of TemplateParameter): The template parameter list.
+        obj (TemplateObject): The template object attached to this template.
+        namespaceList: The namespace list to locate this template.
+        references (list of Reference): The references to use when instantiating this template.
+    """
+
     @Decorators.validated
     def __init__(self, parent, userAnnotations, sysAnnotations, semantic, parameters, obj, namespaceList, references):
-        '''
+        """
         Initialize the object.
 
         Args:
             parent (Locatable): The parent object.
-            token (Symto): A token which holds the name.
-            userAnnotations (list(Annotation)): The user annotations.
-            sysAnnotations (list(Annotation)): The system annotations.
+            userAnnotations (list of Annotation): The user annotations.
+            sysAnnotations (list of Annotation): The system annotations.
             semantic (Symto): The semantic annotation.
-            parameters (list(TemplateParameter)): The template parameter list.
+            parameters (list of TemplateParameter): The template parameter list.
             obj (TemplateObject): The template object attached to this template.
             namespaceList: The namespace list to locate this template.
-            references (list(str)): The references to use when instantiating this template.
-        '''
+            references (list of Reference): The references to use when instantiating this template.
+        """
         super().__init__(parent, obj.token, userAnnotations, sysAnnotations, semantic)
         self.obj = obj
         self.parameters = parameters
@@ -1906,16 +2132,16 @@ class Template(Named):
             raise DuplicateTemplateParameterError(self.token.anchor)
 
     def validate(self):
-        '''Validate the object.'''
+        """Validate the object."""
         self.validate_system_annotations('private', 'deprecate')
 
     def location(self):
-        '''
+        """
         Return the location within the library.
 
         Returns:
             Location: A location within the library.
-        '''
+        """
         # Return the location of the underlying object, but add the template parameters
         loc = deepcopy(self.obj.location())
 
@@ -1927,12 +2153,12 @@ class Template(Named):
         return loc
 
     def generate_translation_unit(self):
-        '''
+        """
         Generate a translation unit from the template.
         
         Returns:
             PrettyString: The pretty-formatted string.
-        '''
+        """
         result = PrettyString()
 
         # Namespace
@@ -1973,7 +2199,7 @@ class Template(Named):
 
     @staticmethod
     def parse(parser, args):
-        '''
+        """
         Parse an expression.
 
         Args:
@@ -1981,7 +2207,7 @@ class Template(Named):
             args: Unused.
         Returns:
             Expression: The expression or None, if no expression was parsed.
-        '''
+        """
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
         if not parser.match('template'):

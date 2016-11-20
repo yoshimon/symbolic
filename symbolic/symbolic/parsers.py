@@ -1,4 +1,8 @@
-﻿# Built-in
+﻿"""@package symbolic.parsers
+Contains classes that can be used to parse symbolic source code.
+"""
+
+# Built-in
 import re
 
 # Library
@@ -7,40 +11,48 @@ from pygments.token import Token, Name
 # Project
 from symbolic.exceptions import *
 from symbolic.objects import Namespace, Expression, Reference, Annotation, Struct, Function, Alias, Template
-from symbolic.lexer import TokenValue, Symto, SymbolicLexer
+from symbolic.lexer import Symto, SymbolicLexer
 
 class BaseParser:
-    '''A base class for all parsers.'''
+    """
+    A base class for all parsers.
+    
+    Attributes:
+        lexer (SymbolicLexer): The lexer.
+        tokens (list of Symto): The token list.
+        tokenIdx (int): The token index.
+        token (Symto): The symbolic token.
+        tokenStateStack (list of int): A state stack for token indices.
+        namespaceStack (list of Namespace): The namespace stack.
+    """
+
     def __init__(self, lexer, tokens):
-        '''
+        """
         Initialize the object.
 
         Args:
             lexer (SymbolicLexer): The lexer to use.
-            tokens (list(Symto)): The token list.
-        '''
+            tokens (list of Symto): The token list.
+        """
         self.reset(lexer, tokens)
 
     def is_eof(self):
-        '''
+        """
         Return whether the EOF is reached.
 
-        Args:
-            lexer (SymbolicLexer): The lexer to use.
-            tokens (list(Symto)): The token list.
         Returns:
-            bool: True, if the EOF is reached. Otherwise false.
-        '''
+            bool: True, if the EOF is reached. Otherwise False.
+        """
         return self.tokenIdx >= len(self.tokens)
 
     def reset(self, lexer, tokens):
-        '''
+        """
         Reset the parser.
 
         Args:
             lexer (SymbolicLexer): The lexer to use.
-            tokens (list(Symto)): The token stream.
-        '''
+            tokens (list of Symto): The token stream.
+        """
         self.lexer = lexer
         self.tokens = list(tokens)
 
@@ -52,6 +64,12 @@ class BaseParser:
         self.namespaceStack = [Namespace(None, Symto(Token.Text, self.token.anchor.libName, self.token.anchor.fileName, '', 1, 1), [], [], None)] # Global namespace
 
     def advance(self):
+        """
+        Advance the parser by one token.
+
+        Returns:
+            Symto: The new token.
+        """
         if self.is_eof():
             raise UnexpectedEOFError()
 
@@ -63,9 +81,21 @@ class BaseParser:
         return self.token
 
     def can_back(self):
+        """
+        Return whether the parser can go back one token.
+
+        Returns:
+            bool: True, if the parser can go back. Otherwise False.
+        """
         return self.tokenIdx > 0
 
     def back(self):
+        """
+        Step the parser back by one token.
+        
+        Returns:
+            Symto: The new token.
+        """
         if self.tokenIdx == 0:
             raise UnexpectedEOFError()
 
@@ -77,6 +107,12 @@ class BaseParser:
         return self.token
 
     def consume(self):
+        """
+        Return the current token and advance the parser.
+
+        Returns:
+            Symto: The current token.
+        """
         if self.is_eof():
             raise UnexpectedEOFError()
 
@@ -85,6 +121,14 @@ class BaseParser:
         return token
 
     def match(self, value):
+        """
+        Match the current token to a value.
+        
+        Args:
+            value (str): The value to match.
+        Returns:
+            Symto: The next token.
+        """
         if self.is_eof():
             return False
 
@@ -93,22 +137,47 @@ class BaseParser:
             self.advance()
         return success
 
-    def match_any(self, list):
-        for val in list:
+    def match_any(self, sequence):
+        """
+        Match any value in a given list of values.
+        
+        Args:
+            sequence (list of str): A sequence of string values to match.
+        Returns:
+            Symto: The next token.
+        """
+        for val in sequence:
             token = self.token
             if self.match(val):
                 return token
 
         return None
 
-    def match_map(self, kvList, default):
-        for (k, v) in kvList:
+    def match_map(self, kvSequence, default):
+        """
+        Match any value in a given sequence of values and maps it to a different value.
+
+        Args:
+            kvSequence: The (key, value)-sequence to match against.
+            default: The default value to return.
+        Returns:
+            The mapped value or the default value, if no match is found.
+        """
+        for (k, v) in kvSequence:
             if self.match(k):
                 return v
 
         return default
 
     def peek_kind(self, tokenType):
+        """
+        Peek the next token, if it matches a kind.
+
+        Args:
+            tokenType: The token type.
+        Returns:
+            Symto: The token or None if no matching token was found.
+        """
         return self.peek_kinds([tokenType])
 
     def peek_kinds(self, tokenTypes):
@@ -129,14 +198,14 @@ class BaseParser:
         return token
 
     def expect(self, val):
-        '''
+        """
         Expect the next token to have a given text value.
 
         Args:
             val (str): The expected text value.
         Returns:
             Symto: The next token.
-        '''
+        """
         if not self.match(val):
             raise UnexpectedTokenError(self.token.anchor, val, self.token.text)
         return self.token
@@ -155,9 +224,9 @@ class BaseParser:
         self.advance()
 
     def remove_state(self):
-        '''
+        """
         Remove
-        '''
+        """
         return self.tokenStateStack.pop()
 
     def until_any(self, endDelims):
@@ -182,10 +251,28 @@ class BaseParser:
         return result
 
     def match_kind_optional(self, kind, optionalKind, optionalText):
+        """
+        Match a token or return a default token if unsuccessful.
+
+        Args:
+            kind (Token): The token kind to match.
+            optionalKind (Token): The default token kind to use if no matching token is found.
+            optionalText (str): The default token text to use if no matching token is found.
+        Returns:
+            Symto: 
+        """
         token = self.match_kind(kind)
         return Symto.from_token(self.token, optionalKind, optionalText) if token is None else token
 
     def match_push_any_open_bracket(self, stack):
+        """
+        Match and push any opening bracket onto a bracket stack.
+
+        Args:
+            stack (list of Symto): The bracket stack.
+        Returns:
+            bool: True, if an opening bracket was matched and pushed. Otherwise False.
+        """
         val = self.match_any(SymbolicLexer.openBrackets)
         success = val is not None
         if success:
@@ -199,6 +286,15 @@ class BaseParser:
         return success
 
     def match_push_open_bracket(self, stack, openBracket):
+        """
+        Match and push an opening bracket onto a bracket stack.
+
+        Args:
+            stack (list of Symto): The bracket stack.
+            openBracket (str): The opening bracket to match.
+        Returns:
+            bool: True, if the opening bracket was matched. Otherwise False.
+        """
         val = self.token
         success = self.match(openBracket)
         if success:
@@ -206,6 +302,14 @@ class BaseParser:
         return success
 
     def was_previous_match_kind(self, kind):
+        """
+        Return whether the previous match was of a specified kind.
+
+        Args:
+            kind (Token): The token kind to match.
+        Returns:
+            bool: True, if the last matched token was of the specified kind. Otherwise False.
+        """
         if not self.can_back():
             return False
 
@@ -216,6 +320,14 @@ class BaseParser:
         return success
 
     def match_pop_matching_close_bracket(self, stack):
+        """
+        Match a closing bracket based on a bracket stack.
+
+        Args:
+            stack (list of Symto): The bracket stack.
+        Returns:
+            bool: True, if the matching bracket for the stack top was matched. Otherwise False.
+        """
         if len(stack) == 0:
             return False
 
@@ -242,6 +354,15 @@ class BaseParser:
         return success
 
     def match_pop_close_bracket(self, stack, closeBracket):
+        """
+        Match a closing bracket and modify a bracket-stack on success.
+
+        Args:
+            stack (list of Symto): The bracket stack.
+            closeBracket (str): The closing bracket to match.
+        Returns:
+            bool: True, if the bracket was matched. Otherwise False.
+        """
         if len(stack) == 0:
             return False
 
@@ -253,7 +374,7 @@ class BaseParser:
         return success
 
     def fetch_block(self, startDelim, endDelim):
-        '''
+        """
         Fetch everything between two delimiters.
         Respects nested brackets.
 
@@ -261,8 +382,8 @@ class BaseParser:
             startDelim (str): The starting delimiter.
             endDelim (str): The ending delimiter.
         Returns:
-            list(Symto): The block tokens.
-        '''
+            list of Symto: The block tokens.
+        """
         tokens = []
         if self.match(startDelim):
             bracketStack = []
@@ -278,13 +399,16 @@ class BaseParser:
         return tokens
 
 class UnitParser(BaseParser):
+    """A parser for symbolic source files (units)."""
+
     def try_parse_any(self, classes, args):
-        '''
+        """
         Parses all object types in the supplied list.
         
         Args:
-            classes (list(class)): 
-        '''
+            classes (list of class): A list of classes to try to parse.
+            args: A list of arguments to forward to the object parsers.
+        """
         if self.is_eof():
             return None
 
@@ -299,16 +423,16 @@ class UnitParser(BaseParser):
         return None
 
     def gather_objects(self, classes, matchAfterSuccess = None, args = []):
-        '''
+        """
         Gather a list of parsable objects.
 
         Args:
-            classes (list(class)): The list of parsable objects.
+            classes (list of class): A list of classes to try to parse.
             matchAfterSuccess (str): The symbol to match after a successful gather.
             args: Arguments to forward to the class.
         Returns:
-            Class: The first match or None, if no object was gathered.
-        '''
+            object: The first match or None, if no object was gathered.
+        """
         result = []
         while True:
             o = self.try_parse_any(classes, args)
@@ -321,22 +445,22 @@ class UnitParser(BaseParser):
         return result
 
     def gather_namespace_objects(self):
-        '''
+        """
         Gather all objects in a namespace.
         
         Returns:
-            list(object): The gathered objects.
-        '''
+            list of object: The gathered objects.
+        """
         # NOTE: Function should always come last
         return self.gather_objects([Namespace, Struct, Alias, Template, Function])
 
     def parse_all_references(self):
-        '''
+        """
         Parse all library references.
         
         Returns:
-            list(Reference): The reference list.
-        '''
+            list of objects.Reference: The reference list.
+        """
         # using statements
         references = []
 
@@ -359,18 +483,19 @@ class UnitParser(BaseParser):
 
             refStrList = [t.text for t in refTokens]
             refString = '.'.join(refStrList)
-            ref = Reference(userAnnotations, sysAnnotations, semantic, refString)
+            token = Symto.from_token(refTokens[0], Token.Token, refString)
+            ref = Reference(token, userAnnotations, sysAnnotations, semantic)
             references.append(ref)
 
         return references
 
     def parse(self):
-        '''
+        """
         Parses the active token stream.
         
         Returns:
-            list(Reference), Namespace: The list of references and the global (root) namespace object.
-        '''
+            list of objects.Reference, objects.Namespace: The list of references and the global (root) namespace object.
+        """
         # Reset stream position
         self.reset(self.lexer, self.tokens)
 

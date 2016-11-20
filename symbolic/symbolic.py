@@ -1,4 +1,8 @@
-﻿# Built-in
+﻿"""@package symbolic
+The root namespace, containing the symbolic executable.
+"""
+
+# Built-in
 import sys
 import json
 import os
@@ -14,42 +18,46 @@ from symbolic.parsers import UnitParser
 from symbolic.lexer import SymbolicLexer, Symto
 from symbolic.dag import *
 
-# Loads a pre-processor table from file
-def load_ppt(filePath):
-    '''
-    Loads a pre-processor table.
+def main():
+    """
+    The main program entrypoint.
+    """
 
-    Args:
-        filePath (str): The file path.
-    Returns:
-        dict: The pre-processor tokens.
-    '''
-    try:
-        with open(filePath) as filePath:
-            jsonFile = json.load(filePath)
-            return jsonFile['preprocessor']
-    except:
-        return {}
+    # Loads a pre-processor table from file
+    def load_ppt(filePath):
+        """
+        Loads a pre-processor table.
 
-# Merges pre-processor tables
-def merge_ppts(tables):
-    '''
-    Merges a collection of pre-processor tables.
+        Args:
+            filePath (str): The file path.
+        Returns:
+            dict: The pre-processor tokens.
+        """
+        try:
+            with open(filePath) as filePath:
+                jsonFile = json.load(filePath)
+                return jsonFile['preprocessor']
+        except:
+            return {}
 
-    Args:
-        tables (list(dict)): The pre-processor tables.
-    Returns:
-        dict: The pre-processor table.
-    '''
-    result = {}
-    for t in tables:
-        for p in t:
-            for key, val in p.items():
-                result[key] = val
+    # Merges pre-processor tables
+    def merge_ppts(tables):
+        """
+        Merges a collection of pre-processor tables.
 
-    return result
+        Args:
+            tables (list of dict): The pre-processor tables.
+        Returns:
+            dict: The pre-processor table.
+        """
+        result = {}
+        for t in tables:
+            for p in t:
+                for key, val in p.items():
+                    result[key] = val
 
-if __name__ == "__main__":
+        return result
+
     # Info
     print('Symbolic (C) 2016, WOZ')
     print('Version 1.0.0.0')
@@ -90,13 +98,7 @@ if __name__ == "__main__":
         projectPPT = load_ppt(projFilePath + '.pp')
 
         # Load all library descriptors
-        for p in jsonProjFile['project']['libraries'].items():
-            if p[0] != 'library':
-                continue
-
-            # Grab the relative path
-            relLibPath = p[1]
-
+        for relLibPath in jsonProjFile['project']['libraries']:
             # Combine to get the absolute library path
             absLibPath = os.path.normpath(os.path.join(projDirPath, relLibPath))
 
@@ -184,3 +186,6 @@ if __name__ == "__main__":
         dependencyGraph = dependencyCollection.to_graph()
 
         print('Done.')
+
+if __name__ == "__main__":
+    main()

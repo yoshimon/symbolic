@@ -1,4 +1,8 @@
-﻿# Built-in
+﻿"""@package symbolic.lexer
+Contains lexing-related classes.
+"""
+
+# Built-in
 import re
 
 # Library
@@ -7,12 +11,19 @@ from pygments.token import Token, Text, Operator, Name, String, Number, Punctuat
 from pygments.filter import simplefilter
 from jinja2 import Template
 
-__all__ = ['SymbolicLexer']
-
 class Anchor:
-    '''An anchor in the source code.'''
+    """
+    An anchor in the source code.
+
+    Attributes:
+        libName (str): The library name.
+        fileName (str): The file name.
+        line (int): The line in the source code.
+        column (int): The column in the source code.
+    """
+
     def __init__(self, libName, fileName, line, column):
-        '''
+        """
         Initialize the object.
 
         Args:
@@ -20,126 +31,144 @@ class Anchor:
             fileName (str): The file name.
             line (int): The line in the source code.
             column (int): The column in the source code.
-        '''
+        """
         self.libName = libName
         self.fileName = fileName
         self.line = line
         self.column = column
 
     def __str__(self):
-        '''
+        """
         Return a string representation of the object.
 
         Returns:
             str: The string representation.
-        '''
+        """
         return "'{0}' @ ({1}, {2})".format(self.fileName, self.line, self.column)
 
 class Symto:
-    '''A Symbolic token.'''
+    """
+    A Symbolic token.
+    
+    Args:
+        isOp (bool): Indicates whether the token is an operator.
+        isBinaryOp (bool): Indicates whether the token is a binary operator.
+        isBinaryLeftAssociative (bool): Indicates whether the associated binary operator is left-associative.
+        isBinaryRightAssociative (bool): Indicates whether the associated binary operator is right-associative.
+        binaryPrecedence (int): The binary operator precedence value.
+        isUnaryOp (bool): Indicates whether the token is a unary operator.
+        isUnaryLeftAssociative (bool): Indicates whether the associated unary operator is left-associative.
+        isUnaryRightAssociative (bool): Indicates whether the associated unary operator is right-associative.
+        unaryPrecedence (int): The unary operator precendence value.
+        isOpenBracket (bool): Indicates whether the token is an opening bracket.
+        matchingCloseBracket (str): The matching closing bracket, if the token is an opening bracket.
+        isCloseBracket (bool): Indicates whether the token is a closing bracket.
+        matchingOpenBracket (str): The matching opening bracket, if the token is a closing bracket.
+    """
+
     @staticmethod
     def strlist(l, none=None):
-        '''
+        """
         Converts a token list to a string list.
 
         Args:
-            l (list(Symto)): The token list.
+            l (list of Symto): The token list.
             none: Optional type to return for the None token.
         Returns:
-            list(str): The string list.
-        '''
+            list of str: The string list.
+        """
         return map(lambda t: t.text if t is not None else none, l)
 
     @staticmethod
     def join(l, c='.', none=None):
-        '''
+        """
         Join operation on a token list.
 
         Args:
-            l (list(Symto)): The token list.
+            l (list of Symto): The token list.
             c (str): The join-string.
             none: Optional type to return for the None token.
         Returns:
-            list(str): The string list.
-        '''
+            list of str: The string list.
+        """
         return c.join(Symto.strlist(l, none))
 
     @staticmethod
     def is_left_associtative(op):
-        '''
+        """
         Test whether an operator is left-associative.
 
         Args:
             op (str): The operator.
         Returns:
-            bool: True, if the operator is left-associative. Otherwise false.
-        '''
+            bool: True, if the operator is left-associative. Otherwise False.
+        """
         return (definitions[op][1])
 
     @staticmethod
     def is_right_associtative(op):
-        '''
+        """
         Test whether an operator is right-associative.
 
         Args:
             op (str): The operator.
         Returns:
-            bool: True, if the operator is right-associative. Otherwise false.
-        '''
+            bool: True, if the operator is right-associative. Otherwise False.
+        """
         return not is_left_associtative(op)
 
     @staticmethod
     def precedence(op):
-        '''
+        """
         Return the precende of an operator.
         
         Args:
             op (str): The operator.
         Returns:
             int: The precedence value.
-        '''
+        """
         return definitions[op][0]
 
     @staticmethod
     def from_token(other, kind, text):
-        '''
+        """
         Create a token from an existing token.
 
         Args:
             other (Symto): The other token.
-            kind (Token): The token kind.
+            kind (pygments.token.Token): The token kind.
             text (str): The token text.
         Returns:
             Symto: The token.
-        '''
+        """
         return Symto(kind, other.anchor.libName, other.anchor.fileName, text, other.anchor.line, other.anchor.column)
 
     @staticmethod
     def after_token(other, kind, text):
-        '''
+        """
         Create a token from an existing token.
 
         Args:
             other (Symto): The other token.
-            kind (Token): The token kind.
+            kind (pygments.token.Token): The token kind.
             text (str): The token text.
         Returns:
             Symto: The token.
-        '''
+        """
         return Symto(kind, other.libName, other.anchor.fileName, text, other.anchor.line, other.anchor.columnEnd + 1)
 
     def __init__(self, kind, libName, fileName, text, line, column):
-        '''
+        """
         Initialize the object.
 
         Args:
-            kinds (Token): The token kind.
+            kind (pygments.token.Token): The token kind.
             libName (str): The library name.
             fileName (str): The file name.
             text (str): The text value.
             line (int): The line in which the token was lexed.
             column (int): The column in which the token was lexed.
-        '''
+        """
         self.kind = kind
         self.text = str(text)
         self.anchor = Anchor(libName, fileName, line, column)
@@ -173,55 +202,59 @@ class Symto:
             self.matchingOpenBracket = SymbolicLexer.openBrackets[SymbolicLexer.closeBrackets.index(text)]
 
     def update(self, other, kind, text):
-        '''
+        """
         Update the token.
 
         Args:
             other (Symto): The other token to use as a baseline.
-            kind (Token): The token kind.
+            kind (pygments.token.Token): The token kind.
             text (str): The token text.
-        '''
+        """
         self.__init__(kind, other.libName, other.anchor.fileName, text, other.anchor.line, other.anchor.column)
 
     def __str__(self):
-        '''
+        """
         Return a string representation of the object.
 
         Returns:
             str: The string representation.
-        '''
+        """
         return self.text
 
-class TokenValue:
-    def __init__(self, text, line, column):
-        '''
-        Initialize the object.
-
-        Args:
-            text (str): The text.
-            line (int): The line.
-            column (int): The column.
-        '''
-        self.text = text
-        self.line = line
-        self.column = column
-
 @simplefilter
-def symbolic_filter(self, lexer, stream, options):
-    '''
+def _symbolic_filter(self, lexer, stream, options):
+    """
     Generator to filter text tokens.
 
     Args:
         lexer: Unused.
         stream: The token stream.
         options: Unused.
-    '''
+    """
     for toktype, tokval in stream:
         if toktype is not Token.Text:
             yield toktype, tokval
 
 class SymbolicLexer(RegexLexer):
-    '''A lexer for Symbolic tokens.'''
+    """
+    A lexer for Symbolic tokens.
+    
+    Attributes:
+        name (str): The name of the lexer.
+        aliases (list of str): The lexer aliases.
+        filenames (list of str): The symbolic extensions.
+        priority (float): The lexer priority.
+        openBrackets (list of str): A list of all opening brackets.
+        closeBrackets (list of str): A list of all closing brackets.
+        tokens (dict): A regular expression state machine.
+
+        fileName (str): The file name.
+        preprocessor: The preprocessor to use.
+        libName (str): The library name.
+        ppt (dict): The pre-processor table.
+        subs (dict): The template substitution table.
+    """
+
     name = 'Symbolic'
     aliases = ['sym', 'symbolic']
     filenames = ['*.sym']
@@ -249,13 +282,13 @@ class SymbolicLexer(RegexLexer):
     }
 
     def __init__(self, preprocessor, **options):
-        '''
+        """
         Initialize the object.
 
         Args:
             preprocessor: The pre-processor to use.
             options: The pygments lexer options.
-        '''
+        """
         RegexLexer.__init__(self, **options)
         # State must be maintained on the outside
         self.fileName = ''
@@ -265,20 +298,44 @@ class SymbolicLexer(RegexLexer):
         self.subs = None # Template / Substitution table
 
         # Register custom filter
-        self.add_filter(symbolic_filter())
+        self.add_filter(_symbolic_filter())
 
     def get_tokens_unprocessed(self, text):
-        '''
+        """
         Generate an unprocessed token stream.
 
         Args:
             text (str): The text to tokenize.
-        '''
+        """
+
+        class _TokenValue:
+            """
+            An intermediate representation of a token value.
+            
+            Attributes:
+                text (str): The text.
+                line (int): The line.
+                column (int): The column.
+            """
+
+            def __init__(self, text, line, column):
+                """
+                Initialize the object.
+
+                Args:
+                    text (str): The text.
+                    line (int): The line.
+                    column (int): The column.
+                """
+                self.text = text
+                self.line = line
+                self.column = column
+
         line = 1
         column = 1
         for index, token, value in RegexLexer.get_tokens_unprocessed(self, text):
             txt = self.subs[value] if (self.subs is not None) and (value in self.subs) else value
-            yield index, token, TokenValue(txt, line, column)
+            yield index, token, _TokenValue(txt, line, column)
             if value == '\n':
                 line += 1
                 column = 1
@@ -286,22 +343,22 @@ class SymbolicLexer(RegexLexer):
                 column += len(txt)
 
     def analyse_text(text):
-        '''
+        """
         Unused.
 
         Args:
             text: Unused.
-        '''
+        """
         return 0.0
 
     def tokenize(self, srcFileText, subs=None):
-        '''
+        """
         Tokenize a piece of text.
 
         Args:
             srcFileText (str): The source.
-            subs (dict(str, str)): The token substitution table.
-        '''
+            subs (dict of str, str): The token substitution table.
+        """
         # Bind substitution table
         self.subs = subs
 
@@ -322,7 +379,14 @@ class SymbolicLexer(RegexLexer):
         return actualTokens
 
 class Ops:
-    '''Symbolic operators.'''
+    """
+    Symbolic operators.
+    
+    Attributes:
+        unary (dict): The unary operators.
+        binary (dict): The binary operators.
+    """
+
     unary = {
             # Name: Precedence, Left-associative
             '+': [2, False],
@@ -331,7 +395,7 @@ class Ops:
             '~': [2, False],
             '*': [2, False],
             '&': [2, False],
-        }
+            }
 
     binary = {
             # Name: Precedence, Left-associative
@@ -375,5 +439,5 @@ class Ops:
             '>>=': [14, False],
             '&=': [14, False],
             '^=': [14, False],
-            '|=': [14, False],   
-        }
+            '|=': [14, False],
+            }
