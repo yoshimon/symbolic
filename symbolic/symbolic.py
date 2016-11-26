@@ -1,6 +1,6 @@
-﻿"""@package symbolic
-The root namespace, containing the symbolic executable.
-"""
+﻿"""@package symbolic"""
+
+"""The root namespace, containing the symbolic executable."""
 
 # Built-in
 import sys
@@ -19,9 +19,7 @@ from symbolic.lexer import SymbolicLexer, Symto
 from symbolic.dag import *
 
 def main():
-    """
-    The main program entrypoint.
-    """
+    """The main program entrypoint."""
 
     # Loads a pre-processor table from file
     def load_ppt(filePath):

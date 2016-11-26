@@ -1,6 +1,4 @@
-﻿"""@package symbolic.algorithm
-Contains common algorithms used throughout the project.
-"""
+﻿"""Contains common algorithms used throughout the project."""
 
 class Algorithm:
     """Custom algorithms on Python data structures."""

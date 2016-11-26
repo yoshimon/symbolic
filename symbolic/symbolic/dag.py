@@ -1,6 +1,4 @@
-﻿"""@package symbolic.dag
-Contains classes to resolve dependencies in symbolic.
-"""
+﻿"""Contains classes to resolve dependencies in symbolic."""
 
 # Built-in
 from itertools import chain

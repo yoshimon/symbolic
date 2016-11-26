@@ -1,6 +1,4 @@
-﻿"""@package symbolic.lexer
-Contains lexing-related classes.
-"""
+﻿"""Contains lexing-related classes."""
 
 # Built-in
 import re

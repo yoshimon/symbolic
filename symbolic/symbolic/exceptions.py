@@ -1,6 +1,4 @@
-﻿"""@package symbolic.exceptions
-Contains all custom exceptions classes used in the project.
-"""
+﻿"""Contains all custom exceptions classes used in the project."""
 
 class SourceError(Exception):
     """

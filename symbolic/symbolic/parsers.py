@@ -1,6 +1,4 @@
-﻿"""@package symbolic.parsers
-Contains classes that can be used to parse symbolic source code.
-"""
+﻿"""Contains classes that can be used to parse symbolic source code."""
 
 # Built-in
 import re

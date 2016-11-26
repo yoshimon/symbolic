@@ -1,6 +1,4 @@
-﻿"""@package symbolic.formatter
-Contains classes to generate formatted strings.
-"""
+﻿"""Contains classes to generate formatted strings."""
 
 from symbolic.lexer import SymbolicLexer
 
