@@ -13,6 +13,7 @@ from symbolic.exceptions import *
 from symbolic.language import *
 from symbolic.objects import *
 from symbolic.parsers import *
+from symbolic.preprocessors import ExternalPreprocessor
 
 class Dependency:
     """
@@ -20,8 +21,8 @@ class Dependency:
 
     Attributes:
         obj (object): The object behind the dependency.
-        location (Location): The location of the object in the library.
-        references (list of Reference): The references that are seen by this dependency.
+        location (objects.Location): The location of the object in the library.
+        references (list of objects.Reference): The references that are seen by this dependency.
         isPrivate (bool): True, if the object is private. Otherwise False.
         isDeprecated (bool): True, if the object is deprecated. Otherwise False.
     """
@@ -31,7 +32,7 @@ class Dependency:
         Initialize the object.
 
         Args:
-            references (list of Reference): The references list.
+            references (list of objects.Reference): The references list.
             obj (object): The object behind the dependency.
         """
         self.obj = obj
@@ -47,8 +48,8 @@ class LocationConflict:
     A conflict between two locations.
     
     Attributes:
-        firstDependency (Dependency): The first dependency.
-        secondDependency (Dependency): The second dependency.
+        firstDependency (objects.Dependency): The first dependency.
+        secondDependency (objects.Dependency): The second dependency.
     """
 
     def __init__(self, firstDependency, secondDependency):
@@ -56,8 +57,8 @@ class LocationConflict:
         Initialize the object.
         
         Args:
-            firstDependency (Dependency): The first dependency.
-            secondDependency (Dependency): The second dependency.
+            firstDependency (objects.Dependency): The first dependency.
+            secondDependency (objects.Dependency): The second dependency.
         """
         self.firstDependency = firstDependency
         self.secondDependency = secondDependency
@@ -67,20 +68,20 @@ class ResolvedDependencyLocation:
     A collection of dependencies that have been resolved to a location.
 
     Attributes:
-        dependencies (list of Dependency): The dependencies at this location.
-        subLocations (dict of (str, ResolvedDependencyLocation)): The sub-locations.    
+        dependencies (list of objects.Dependency): The dependencies at this location.
+        subLocations (dict of (str, objects.ResolvedDependencyLocation)): The sub-locations.    
     """
 
-    def __init__(self, dependencies, subLocations):
+    def __init__(self, dependencies=None, subLocations=None):
         """
         Initialize the object.
 
         Args:
-            dependencies (list of Dependency): The dependencies at this location.
-            subLocations (dict of (str, ResolvedDependencyLocation)): The sub-locations.
+            dependencies (list of objects.Dependency): The dependencies at this location.
+            subLocations (dict of (str, objects.ResolvedDependencyLocation)): The sub-locations.
         """
-        self.dependencies = dependencies
-        self.subLocations = subLocations
+        self.dependencies = dependencies if dependencies else []
+        self.subLocations = subLocations if subLocations else {}
 
 class NavigationResult:
     """
@@ -88,7 +89,7 @@ class NavigationResult:
 
     Attributes:
         libName (str): The library name.
-        resolvedDependencyLocation (list of ResolvedDependencyLocation): The resolved dependency location.
+        resolvedDependencyLocation (list of objects.ResolvedDependencyLocation): The resolved dependency location.
     """
 
     def __init__(self, libName, resolvedDependencyLocation):
@@ -97,7 +98,7 @@ class NavigationResult:
 
         Args:
             libName (str): The library name.
-            resolvedDependencyLocation (list of ResolvedDependencyLocation): The resolved dependency location.
+            resolvedDependencyLocation (list of objects.ResolvedDependencyLocation): The resolved dependency location.
         """
         self.libName = libName
         self.resolvedDependencyLocation = resolvedDependencyLocation
@@ -107,36 +108,30 @@ class ProjectDependencyCollection:
     A colllection of dependencies within a project.
 
     Attributes:
-        lexer (SymbolicLexer): The lexer to use.
-        unresolvedDependencies (set of Dependency): A set of unresolved dependencies.
+        unresolvedDependencies (set of objects.Dependency): A set of unresolved dependencies.
         libraries (dict): The libraries lookup table.
         resolvedObjects (defaultdict): Maps each library to a list of resolved objects
         links (dict): Maps unresolved dependencies to their resolved counterparts
-        locationConflicts (list of LocationConflict): A list of location conflicts.
+        locationConflicts (list of objects.LocationConflict): A list of location conflicts.
     """
 
-    def __init__(self, lexer):
-        """
-        Initialize the object.
-        
-        Args:
-            lexer (SymbolicLexer): The lexer to use.
-        """
-        self.lexer = lexer
+    def __init__(self):
+        """Initialize the object."""
         self.unresolvedDependencies = set()
         self.libraries = {} # The libraries lookup table
-        self.resolvedObjects = defaultdict() # Maps each library to a list of resolved objects
+        self.resolvedObjects = defaultdict(ResolvedDependencyLocation) # Maps each library to a set of resolved objects
         self.links = {} # Maps unresolved dependencies to their resolved counterparts
         self.locationConflicts = [] # Locations that point to the same endpoint (conflicts)
+        self.libName = None # The name of the library that is being monitored
 
     def navigate(self, errorAnchor, references, location):
         """
         Navigate to a location.
 
         Args:
-            errorAnchor (Anchor): The anchor to use in case an exception is thrown.
-            references (list of Reference): The library references.
-            location (Location): The location.
+            errorAnchor (objects.Anchor): The anchor to use in case an exception is thrown.
+            references (list of objects.Reference): The library references.
+            location (objects.Location): The location.
         Returns:
             dict: The resolved location.
         """
@@ -158,29 +153,26 @@ class ProjectDependencyCollection:
         
         # Implicit or explicit lookup
         isImplicitRef = offset == 0
-        libNameGen = chain([self.lexer.libName], (str(ref) for ref in references)) if isImplicitRef else ['.'.join(rl.name for rl in location[:offset])]
+        libNameGen = chain([self.libName], (str(ref) for ref in references)) if isImplicitRef else ['.'.join(rl.name for rl in location[:offset])]
 
         # Find the library and the object in the library
         lookup = None
         resolvedLibName = None
         locationFound = True
         for libName in libNameGen:
-            if libName not in self.resolvedObjects:
-                pass
-
-            lookup = self.resolvedObjects[libName]
-            
             # Assume this library contains the dependency
             resolvedLibName = libName
+            lookup = self.resolvedObjects[libName]
 
+            # Loop through all sublocations and verify the assumption above
             for i, rl in enumerate(location[offset:]):
-                # The namespace has to exist
-                if rl.name not in lookup:
+                if rl.name not in lookup.subLocations:
+                    # The assumption above does not hold
                     locationFound = False
                     break
 
                 # The dependencies associated with this name
-                resolvedDependencyLocation = lookup[rl.name]
+                resolvedDependencyLocation = lookup.subLocations[rl.name]
                 dependencies = resolvedDependencyLocation.dependencies
 
                 # ADL (parameter signature)
@@ -201,22 +193,29 @@ class ProjectDependencyCollection:
                     # Generate the translation unit for the template
                     templateSrc = dependencyObj.generate_translation_unit()
 
+                    # Run the pre-processor on the source
+                    ppTemplateSrc = self.preprocessor.run(templateSrc)
+
+                    # Lex the unit
+                    lexer = SymbolicLexer(libName=self.libName, fileName=str(dependencyObj.token))
+
                     # Modify the template substitutions of the lexer
-                    self.lexer.subs = { dependencyRL.templateParameters[i].token.text: parameter.text[1:-1] for i, parameter in enumerate(rl.templateParameters) }
+                    lexer.subs = { dependencyRL.templateParameters[i].token.text: parameter.text[1:-1] for i, parameter in enumerate(rl.templateParameters) }
 
                     # Lex the generated unit
-                    srcFileTokens = self.lexer.tokenize(templateSrc)
+                    srcFileTokens = lexer.tokenize(ppTemplateSrc)
 
                     # Parse the unit
-                    parser = UnitParser(self.lexer, srcFileTokens)
+                    parser = UnitParser(lexer, srcFileTokens)
                     templateReferences, templateRootNamespace = parser.parse()
                     
                     # Insert it into the collection
                     self.insert_unit(templateReferences, templateRootNamespace)
 
                 # Step down this namespace
-                lookup = resolvedDependencyLocation.subLocations
+                lookup = resolvedDependencyLocation
 
+            # If we verified the location we can stop the search
             if locationFound:
                 break
 
@@ -230,7 +229,7 @@ class ProjectDependencyCollection:
         Insert an object into the dependency collection.
 
         Args:
-            references (list of Reference): The references list.
+            references (list of objects.Reference): The references list.
             obj (object): The object to insert.
         """
         # Create and cache the dependency
@@ -243,7 +242,7 @@ class ProjectDependencyCollection:
         else:
             # Navigate to parent
             navResult = self.navigate(obj.token.anchor, references, dependencyLocation[:-1])
-            lookup = navResult.resolvedDependencyLocation
+            lookup = navResult.resolvedDependencyLocation.subLocations
 
             # Make sure that no duplicate object in this namespace exists
             if rl.name in lookup:
@@ -279,8 +278,8 @@ class ProjectDependencyCollection:
         Insert an unresolved translation unit into the collection.
 
         Args:
-            references (list of Reference): The library import references.
-            rootNamespace (Namespace): The global namespace.
+            references (list of objects.Reference): The library import references.
+            rootNamespace (objects.Namespace): The global namespace.
         """
         # Create a dependency for every object
         objs = deque(rootNamespace.objects)
@@ -303,13 +302,18 @@ class ProjectDependencyCollection:
             elif isinstance(obj, Alias):
                 self.insert(references, obj.targetTypename)
 
-    def begin_library(self):
-        """Begin collecting dependencies for a new library."""
+    def begin_library(self, libName):
+        """
+        Begin collecting dependencies for a new library.
+        
+        Args:
+            libName (str): The name of the library.
+        """
         # Create an empty entry in the global dict
         # Breakup the library name and insert it
         # Each part of the library name is its own subspace
         # e.g. std.types and std.math would share the std subspace
-        strings = self.lexer.libName.split('.')
+        strings = libName.split('.')
         lookup = self.libraries
         for s in strings:
             # Create new subspace
@@ -319,18 +323,24 @@ class ProjectDependencyCollection:
             # Step down
             lookup = lookup[s]
 
+        # Remember the library name
+        self.libName = libName
+
     def end_library(self):
         """End collecting dependencies for the current library."""
-        self.resolve()
+        self._resolve()
 
-    def resolve(self):
+        # Close this library
+        self.libName = None
+
+    def _resolve(self):
         """Resolve all dependencies."""
         if self.unresolvedDependencies:
             # Traverse from top to bottom
             unresolvedDependencies = deque(self.unresolvedDependencies)
             
             # Clear the unresolved dependencies, they are in the queue
-            self.unresolvedDependencies = {}
+            self.unresolvedDependencies.clear()
             
             while unresolvedDependencies:
                 dependency = unresolvedDependencies.popleft()
@@ -343,7 +353,7 @@ class ProjectDependencyCollection:
                 unresolvedDependencies += self.unresolvedDependencies
 
                 # And clear the cache again
-                self.unresolvedDependencies = {}
+                self.unresolvedDependencies.clear()
 
         # Try to resolve location conflicts now
         for conflict in self.locationConflicts:

@@ -16,23 +16,21 @@ class BaseParser:
     A base class for all parsers.
     
     Attributes:
-        lexer (SymbolicLexer): The lexer.
-        tokens (list of Symto): The token list.
+        tokens (list of lexer.Symto): The token list.
         tokenIdx (int): The token index.
-        token (Symto): The symbolic token.
+        token (lexer.Symto): The symbolic token.
         tokenStateStack (list of int): A state stack for token indices.
-        namespaceStack (list of Namespace): The namespace stack.
+        namespaceStack (list of objects.Namespace): The namespace stack.
     """
 
-    def __init__(self, lexer, tokens):
+    def __init__(self, tokens):
         """
         Initialize the object.
 
         Args:
-            lexer (SymbolicLexer): The lexer to use.
-            tokens (list of Symto): The token list.
+            tokens (list of lexer.Symto): The token list.
         """
-        self.reset(lexer, tokens)
+        self.reset(tokens)
 
     def is_eof(self):
         """
@@ -43,15 +41,13 @@ class BaseParser:
         """
         return self.tokenIdx >= len(self.tokens)
 
-    def reset(self, lexer, tokens):
+    def reset(self, tokens):
         """
         Reset the parser.
 
         Args:
-            lexer (SymbolicLexer): The lexer to use.
-            tokens (list of Symto): The token stream.
+            tokens (list of lexer.Symto): The token stream.
         """
-        self.lexer = lexer
         self.tokens = list(tokens)
 
         # Start at first token
@@ -66,7 +62,7 @@ class BaseParser:
         Advance the parser by one token.
 
         Returns:
-            Symto: The new token.
+            lexer.Symto: The new token.
         """
         if self.is_eof():
             raise UnexpectedEOFError()
@@ -92,7 +88,7 @@ class BaseParser:
         Step the parser back by one token.
         
         Returns:
-            Symto: The new token.
+            lexer.Symto: The new token.
         """
         if self.tokenIdx == 0:
             raise UnexpectedEOFError()
@@ -109,7 +105,7 @@ class BaseParser:
         Return the current token and advance the parser.
 
         Returns:
-            Symto: The current token.
+            lexer.Symto: The current token.
         """
         if self.is_eof():
             raise UnexpectedEOFError()
@@ -125,7 +121,7 @@ class BaseParser:
         Args:
             value (str): The value to match.
         Returns:
-            Symto: The next token.
+            lexer.Symto: The next token.
         """
         if self.is_eof():
             return False
@@ -142,7 +138,7 @@ class BaseParser:
         Args:
             sequence (list of str): A sequence of string values to match.
         Returns:
-            Symto: The next token.
+            lexer.Symto: The next token.
         """
         for val in sequence:
             token = self.token
@@ -174,7 +170,7 @@ class BaseParser:
         Args:
             tokenType: The token type.
         Returns:
-            Symto: The token or None if no matching token was found.
+            lexer.Symto: The token or None if no matching token was found.
         """
         return self.peek_kinds([tokenType])
 
@@ -202,7 +198,7 @@ class BaseParser:
         Args:
             val (str): The expected text value.
         Returns:
-            Symto: The next token.
+            lexer.Symto: The next token.
         """
         if not self.match(val):
             raise UnexpectedTokenError(self.token.anchor, val, self.token.text)
@@ -257,7 +253,7 @@ class BaseParser:
             optionalKind (Token): The default token kind to use if no matching token is found.
             optionalText (str): The default token text to use if no matching token is found.
         Returns:
-            Symto: 
+            lexer.Symto: 
         """
         token = self.match_kind(kind)
         return Symto.from_token(self.token, optionalKind, optionalText) if token is None else token
@@ -267,7 +263,7 @@ class BaseParser:
         Match and push any opening bracket onto a bracket stack.
 
         Args:
-            stack (list of Symto): The bracket stack.
+            stack (list of lexer.Symto): The bracket stack.
         Returns:
             bool: True, if an opening bracket was matched and pushed. Otherwise False.
         """
@@ -288,7 +284,7 @@ class BaseParser:
         Match and push an opening bracket onto a bracket stack.
 
         Args:
-            stack (list of Symto): The bracket stack.
+            stack (list of lexer.Symto): The bracket stack.
             openBracket (str): The opening bracket to match.
         Returns:
             bool: True, if the opening bracket was matched. Otherwise False.
@@ -322,7 +318,7 @@ class BaseParser:
         Match a closing bracket based on a bracket stack.
 
         Args:
-            stack (list of Symto): The bracket stack.
+            stack (list of lexer.Symto): The bracket stack.
         Returns:
             bool: True, if the matching bracket for the stack top was matched. Otherwise False.
         """
@@ -356,7 +352,7 @@ class BaseParser:
         Match a closing bracket and modify a bracket-stack on success.
 
         Args:
-            stack (list of Symto): The bracket stack.
+            stack (list of lexer.Symto): The bracket stack.
             closeBracket (str): The closing bracket to match.
         Returns:
             bool: True, if the bracket was matched. Otherwise False.
@@ -380,7 +376,7 @@ class BaseParser:
             startDelim (str): The starting delimiter.
             endDelim (str): The ending delimiter.
         Returns:
-            list of Symto: The block tokens.
+            list of lexer.Symto: The block tokens.
         """
         tokens = []
         if self.match(startDelim):
@@ -495,7 +491,7 @@ class UnitParser(BaseParser):
             list of objects.Reference, objects.Namespace: The list of references and the global (root) namespace object.
         """
         # Reset stream position
-        self.reset(self.lexer, self.tokens)
+        self.reset(self.tokens)
 
         # References first
         self.references = self.parse_all_references()

@@ -1,11 +1,32 @@
 ﻿"""Contains all custom exceptions classes used in the project."""
 
+class LibraryDependencyError(Exception):
+    """An exception class, that indicates that there is a circular dependency cycle between libraries."""
+
+    def __init__(self, dependencyChain):
+        """
+        Initialize the object.
+
+        Args:
+            dependencyChain (str): The dependency chain that caused the error.
+        """
+        self.dependencyChain = dependencyChain
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return 'Library dependency cycle found: [{:s}].'.format(dependencyChain)
+
 class SourceError(Exception):
     """
     An exception base class, that indicates an error that can be located in the source.
     
     Attributes:
-        anchor (symbolic.lexer.Anchor): The source code anchor.
+        anchor (objects.Anchor): The source code anchor.
     """
 
     def __init__(self, anchor):
@@ -13,7 +34,7 @@ class SourceError(Exception):
         Initialize the object.
 
         Args:
-            anchor (Anchor): The source code anchor.
+            anchor (objects.Anchor): The source code anchor.
         """
         super().__init__()
         self.anchor = anchor
@@ -37,15 +58,15 @@ class DevError(Exception):
         Returns:
             str: The string representation.
         """
-        return TokenError.__str__(self) + "Developer error."
+        return "Developer error."
 
 class UnexpectedTokenError(SourceError):
     """
     An exception class, that indicates a mismatch between an expected token and the current token in the token stream.
     
     Attributes:
-        expected (Symto): The expected token.
-        found (Symto): The current token in the token stream.
+        expected (lexer.Symto): The expected token.
+        found (lexer.Symto): The current token in the token stream.
     """
     
     def __init__(self, anchor, expected, found):
@@ -53,9 +74,9 @@ class UnexpectedTokenError(SourceError):
         Initialize the object.
 
         Args:
-            anchor (Anchor): The source code anchor.
-            expected (Symto): The expected token.
-            found (Symto): The current token in the token stream.
+            anchor (objects.Anchor): The source code anchor.
+            expected (lexer.Symto): The expected token.
+            found (lexer.Symto): The current token in the token stream.
         """
         super().__init__(anchor)
         self.expected = expected
@@ -87,8 +108,8 @@ class UnsupportedSystemAnnotationError(SourceError):
     An exception class, that indicates an unsupported system annotation.
     
     Attributes:
-       what (Symto): The expected token.
-       sysAnnotation (list of Annotation): The system annotation.
+       what (lexer.Symto): The expected token.
+       sysAnnotation (list of objects.Annotation): The system annotation.
     """
 
     def __init__(self, what, sysAnnotation):
@@ -96,8 +117,8 @@ class UnsupportedSystemAnnotationError(SourceError):
         Initialize the object.
 
         Args:
-            what (Symto): The expected token.
-            sysAnnotation (list of Annotation): The system annotation.
+            what (lexer.Symto): The expected token.
+            sysAnnotation (list of objects.Annotation): The system annotation.
         """
         super().__init__(sysAnnotation.token.anchor)
         self.what = what
@@ -117,7 +138,7 @@ class UnknownSystemAnnotationError(SourceError):
     An exception class, that indicates an unknown system annotation.
     
     Attributes:
-        sysAnnotation (Annotation): The system annotation.
+        sysAnnotation (objects.Annotation): The system annotation.
     """
 
     def __init__(self, anchor, sysAnnotation):
@@ -125,8 +146,8 @@ class UnknownSystemAnnotationError(SourceError):
         Initialize the object.
 
         Args:
-            anchor (Anchor): The anchor to associate with this error.
-            sysAnnotation (Annotation): The system annotation.
+            anchor (objects.Anchor): The anchor to associate with this error.
+            sysAnnotation (objects.Annotation): The system annotation.
         """
         super().__init__(anchor)
         self.sysAnnotation = sysAnnotation
@@ -301,7 +322,7 @@ class DuplicateNameError(SourceError):
     An exception class, that indicates a duplicate name.
     
     Attributes:
-        secondAnchor (Anchor): The anchor that triggered the error.
+        secondAnchor (objects.Anchor): The anchor that triggered the error.
     """
 
     def __init__(self, firstAnchor, secondAnchor):
@@ -309,8 +330,8 @@ class DuplicateNameError(SourceError):
         Initialize the object.
 
         Args:
-            firstAnchor (Anchor): The base anchor.
-            secondAnchor (Anchor): The anchor that triggered the error.
+            firstAnchor (objects.Anchor): The base anchor.
+            secondAnchor (objects.Anchor): The anchor that triggered the error.
         """
         super().__init__(firstAnchor)
         self.secondAnchor = secondAnchor
@@ -341,7 +362,7 @@ class DependencyNotFoundError(SourceError):
     An exception class, that indicates an invalid dependency location.
 
     Attributes:
-        location (Location): The dependency location.
+        location (objects.Location): The dependency location.
     """
 
     def __init__(self, anchor, location):
@@ -349,8 +370,8 @@ class DependencyNotFoundError(SourceError):
         Initialize the object.
 
         Args:
-            anchor (Anchor): The source code anchor.
-            location (Location): The dependency location.
+            anchor (objects.Anchor): The source code anchor.
+            location (objects.Location): The dependency location.
         """
         super().__init__(anchor)
         self.location = location

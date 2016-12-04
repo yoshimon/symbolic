@@ -47,38 +47,38 @@ class Algorithm:
         return True
 
     @staticmethod
-    def join(delimiter, l):
+    def join(delimiter, sequence):
         """
         Return a joined list of strings.
 
         Args:
             delimiter (str): The separator.
-            l: The list to convert.
+            sequence (iterable): The sequence to convert.
         Returns:
             str: The joined string values.
         """
-        return delimiter.join(str(e) for e in l)
+        return delimiter.join(str(e) for e in sequence)
 
     @staticmethod
-    def join_comma(l):
+    def join_comma(sequence):
         """
         Return a comma-separated list of strings.
 
         Args:
-            l: The list to convert.
+            sequence (iterable): The list to convert.
         Returns:
             str: The comma-separated string values.
         """
-        return Algorithm.join(", ", l)
+        return Algorithm.join(", ", sequence)
 
     @staticmethod
-    def join_dot(l):
+    def join_dot(sequence):
         """
         Return a joined list of strings.
 
         Args:
-            l: The list to convert.
+            sequence (iterable): The sequence to convert.
         Returns:
             str: The joined string values.
         """
-        return Algorithm.join(".", l)
+        return Algorithm.join(".", sequence)

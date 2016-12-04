@@ -7,7 +7,6 @@ import re
 from pygments.lexer import RegexLexer, include, bygroups, using, this, default, words
 from pygments.token import Token, Text, Operator, Name, String, Number, Punctuation, Error
 from pygments.filter import simplefilter
-from jinja2 import Template
 
 class Anchor:
     """
@@ -42,7 +41,7 @@ class Anchor:
         Returns:
             str: The string representation.
         """
-        return "'{0}' @ ({1}, {2})".format(self.fileName, self.line, self.column)
+        return "'{0}' in {1} @ ({2}, {3})".format(self.fileName, self.libName, self.line, self.column)
 
 class Symto:
     """
@@ -70,7 +69,7 @@ class Symto:
         Converts a token list to a string list.
 
         Args:
-            l (list of Symto): The token list.
+            l (list of lexer.Symto): The token list.
             none: Optional type to return for the None token.
         Returns:
             list of str: The string list.
@@ -83,7 +82,7 @@ class Symto:
         Join operation on a token list.
 
         Args:
-            l (list of Symto): The token list.
+            l (list of lexer.Symto): The token list.
             c (str): The join-string.
             none: Optional type to return for the None token.
         Returns:
@@ -133,7 +132,7 @@ class Symto:
         Create a token from an existing token.
 
         Args:
-            other (Symto): The other token.
+            other (lexer.Symto): The other token.
             kind (pygments.token.Token): The token kind.
             text (str): The token text.
         Returns:
@@ -147,7 +146,7 @@ class Symto:
         Create a token from an existing token.
 
         Args:
-            other (Symto): The other token.
+            other (lexer.Symto): The other token.
             kind (pygments.token.Token): The token kind.
             text (str): The token text.
         Returns:
@@ -204,7 +203,7 @@ class Symto:
         Update the token.
 
         Args:
-            other (Symto): The other token to use as a baseline.
+            other (lexer.Symto): The other token to use as a baseline.
             kind (pygments.token.Token): The token kind.
             text (str): The token text.
         """
@@ -247,9 +246,7 @@ class SymbolicLexer(RegexLexer):
         tokens (dict): A regular expression state machine.
 
         fileName (str): The file name.
-        preprocessor: The preprocessor to use.
         libName (str): The library name.
-        ppt (dict): The pre-processor table.
         subs (dict): The template substitution table.
     """
 
@@ -279,20 +276,17 @@ class SymbolicLexer(RegexLexer):
         ],
     }
 
-    def __init__(self, preprocessor, **options):
+    def __init__(self, libName=None, fileName=None, **options):
         """
         Initialize the object.
 
         Args:
-            preprocessor: The pre-processor to use.
             options: The pygments lexer options.
         """
         RegexLexer.__init__(self, **options)
         # State must be maintained on the outside
-        self.fileName = ''
-        self.preprocessor = preprocessor
-        self.libName = None
-        self.ppt = None # Pre-processor table
+        self.libName = libName
+        self.fileName = fileName
         self.subs = None # Template / Substitution table
 
         # Register custom filter
@@ -349,40 +343,37 @@ class SymbolicLexer(RegexLexer):
         """
         return 0.0
 
-    def tokenize(self, srcFileText, subs=None):
+    def tokenize(self, text, subs=None):
         """
         Tokenize a piece of text.
 
         Args:
-            srcFileText (str): The source.
-            subs (dict of str, str): The token substitution table.
+            text (str): The text to tokenize.
+            subs (dict of (str, str)): The token substitution table.
         """
+        tokens = self.get_tokens(text)
+ 
         # Bind substitution table
+        # NOTE: this is used by the generator below
         self.subs = subs
-
-        # Replace $ with library name
-        srcFileTxt = srcFileText.replace('$', self.libName)
-
-        # Run the pre-processor
-        template = self.preprocessor.from_string(srcFileTxt, self.ppt, Template)
-        context = template.render(self.ppt)
-        srcFileTokens = self.get_tokens(context)
-        
+               
         # Convert pygments tokens to Symbolic tokens
-        actualTokens = [Symto(t[0], self.libName, self.fileName, t[1].text, t[1].line, t[1].column) for t in srcFileTokens]
+        tokens = [Symto(t[0], self.libName, self.fileName, t[1].text, t[1].line, t[1].column) for t in tokens]
         
         # Unbind substitution table
         self.subs = None
         
-        return actualTokens
+        return tokens
 
 class Ops:
     """
     Symbolic operators.
     
     Attributes:
-        unary (dict): The unary operators.
-        binary (dict): The binary operators.
+        unary (dict of [str, [int, bool]]): The unary operators.
+            The dictionary maps unary operators to a precendence value and a left-associativity flag.
+        binary (dict of [str, [int, bool]]): The binary operators.
+            The dictionary maps binary operators to a precendence value and a left-associativity flag.
     """
 
     unary = {

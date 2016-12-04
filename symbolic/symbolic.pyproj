@@ -27,7 +27,13 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="preprocessors\jinja.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="symbolic\dag.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="symbolic\paths.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="symbolic\exceptions.py">
@@ -49,6 +55,12 @@
     <Compile Include="symbolic\algorithm.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="symbolic\preprocessors.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="symbolic\project.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="symbolic\__init__.py">
       <SubType>Code</SubType>
     </Compile>
@@ -60,6 +72,7 @@
     <InterpreterReference Include="{9a7a9026-48c1-4688-9d5d-e5699d47d074}\3.5" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="preprocessors\" />
     <Folder Include="symbolic\" />
   </ItemGroup>
   <PropertyGroup>

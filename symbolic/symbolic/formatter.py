@@ -23,9 +23,9 @@ class PrettyString:
         Append another PrettyString to this object.
 
         Args:
-            other (PrettyString): The other PrettyString.
+            other (formatter.PrettyString): The other PrettyString.
         Returns:
-            PrettyString: The combined string.
+            formatter.PrettyString: The combined string.
         """
         self.append(other)
         return self
@@ -55,7 +55,7 @@ class PrettyString:
         Args:
             text (str): The text to append.
         Returns:
-            PrettyString: The object itself.
+            formatter.PrettyString: The object itself.
         """
         if len(text) == 0:
             return self
@@ -90,10 +90,10 @@ class PrettyString:
         Create a PrettyString from a token stream.
 
         Args:
-            tokens (list of symbolic.lexer.Symto): The token stream.
+            tokens (list of lexer.Symto): The token stream.
             firstLine (int): The first line.
         Returns:
-            PrettyString: The PrettyString object.
+            formatter.PrettyString: The PrettyString object.
         """
         result = ''
         previousLine = firstLine
