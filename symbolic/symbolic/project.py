@@ -206,7 +206,6 @@ class Project:
                 references, globalNamespace = unitParser.parse()
 
                 # Create a dependency graph for the unit
-                # The lexer is provided for template processing
                 dependencyCollection.insert_unit(references, globalNamespace)
 
             # Signal that we are done with this library

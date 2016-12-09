@@ -175,6 +175,14 @@ class BaseParser:
         return self.peek_kinds([tokenType])
 
     def peek_kinds(self, tokenTypes):
+        """
+        Peek the next token, if it is within a specified set of kinds.
+
+        Args:
+            tokenTypes (list): The token types.
+        Returns:
+            lexer.Symto: The token or None if no matching token was found.
+        """
         token = self.token
         success = token.kind in tokenTypes
         if success:
@@ -183,9 +191,25 @@ class BaseParser:
             return None
 
     def match_kind(self, tokenType):
+        """
+        Match a token, if its type matches a specified value.
+
+        Args:
+            tokenType: The token type.
+        Returns:
+            lexer.Symto: The token or None, if no matching token was found.
+        """
         return self.match_any_kind([tokenType])
 
     def match_any_kind(self, tokenTypes):
+        """
+        Match a token, if its type is contained in a specified type list.
+
+        Args:
+            tokenTypes (list): The token types.
+        Returns:
+            lexer.Symto: The token or None, if no matching token was found.
+        """
         token = self.peek_kinds(tokenTypes)
         if token is not None:
             self.advance()
@@ -205,25 +229,44 @@ class BaseParser:
         return self.token
 
     def expect_kind(self, tokenType):
+        """
+        Expect the next token to be of a specific kind.
+
+        Args:
+            tokenType: The expected token kind.
+        Returns:
+            lexer.Symto: The token.
+        """
         token = self.match_kind(tokenType)
         if token is None:
             raise UnexpectedTokenError(self.token.anchor, tokenType, self.token.text)
         return token
 
     def push_state(self):
+        """Push a state."""
         self.tokenStateStack.append(self.tokenIdx)
 
     def pop_state(self):
+        """Pop the last saved state."""
         self.tokenIdx = self.remove_state() - 1
         self.advance()
 
     def remove_state(self):
         """
-        Remove
+        Remove the last pushed state without entering it.
+        
+        Returns:
+            int: The token index that would have been restored.
         """
         return self.tokenStateStack.pop()
 
     def until_any(self, endDelims):
+        """
+        Fetch all tokens until an end delimiter is encountered.
+
+        Args:
+            endDelims (list of str): A list of end delimiters.
+        """
         if not endDelims:
             raise DevError()
 
@@ -370,6 +413,7 @@ class BaseParser:
     def fetch_block(self, startDelim, endDelim):
         """
         Fetch everything between two delimiters.
+
         Respects nested brackets.
 
         Args:
@@ -397,7 +441,7 @@ class UnitParser(BaseParser):
 
     def try_parse_any(self, classes, args):
         """
-        Parses all object types in the supplied list.
+        Parse all object types in the supplied list.
         
         Args:
             classes (list of class): A list of classes to try to parse.
@@ -485,7 +529,7 @@ class UnitParser(BaseParser):
 
     def parse(self):
         """
-        Parses the active token stream.
+        Parse the active token stream.
         
         Returns:
             list of objects.Reference, objects.Namespace: The list of references and the global (root) namespace object.

@@ -22,7 +22,6 @@ def main():
     if args.showHeader:
         print("symbolic v0.9")
 
-    # Convert the cfg path to a virtual path
     projConfigFilePath = VirtualPath(args.path)
 
     # Change the working directory to the project path
@@ -31,6 +30,7 @@ def main():
     # Load and translate the project
     project = Project(projConfigFilePath)
     project.translate()
+    # TODO: save the translated project + libraries out
 
     print('Done.')
 
