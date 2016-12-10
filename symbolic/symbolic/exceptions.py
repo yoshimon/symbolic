@@ -412,3 +412,31 @@ class UnknownLibraryReferenceError(SourceError):
             str: The string representation.
         """
         return super().__str__() + '"{0}" is not a valid library reference.'.format(str(self.reference))
+
+class DuplicateParameterSignatureError(SourceError):
+    """
+    An exception class, that indicates an ambiguous parameter signature.
+    
+    Attributes:
+        otherAnchor (lexer.Anchor): The other anchor that causes the error.
+    """
+
+    def __init__(self, anchor, otherAnchor):
+        """
+        Initialize the object.
+
+        Args:
+            anchor (objects.Anchor): The source code anchor.
+            otherAnchor (objects.Anchor): The other source code anchor.
+        """
+        super().__init__(anchor)
+        self.otherAnchor = otherAnchor
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + 'Signature collides with existing declaration in "{0}".'.format(str(self.otherAnchor))

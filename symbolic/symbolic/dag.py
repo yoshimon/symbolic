@@ -259,6 +259,10 @@ class ProjectDependencyCollection:
                     # If the template and signature matches then it might be a conflict
                     if len(rl.templateParameters) == len(otherDependencyRL.templateParameters):
                         if len(rl.parameters) == len(otherDependencyRL.parameters):
+                            # No parameters means a definite conflicts
+                            if len(rl.parameters) == 0:
+                                raise DuplicateParameterSignatureError(obj.anchor, otherDependency.obj.anchor)
+
                             # It might be a conflict if the modifiers match
                             # The parameter typenames need to be resolved later to verify the conflict
                             isConflict = Algorithm.all_sequence(rl.parameters, otherDependencyRL.parameters,
@@ -363,7 +367,7 @@ class ProjectDependencyCollection:
         for conflict in self.locationConflicts:
             # Look at both conflicts
             # They have to be parameter conflicts
-            # All other conflicts should have already raised an error
+            # All trivial conflicts should have already raised an error
             first = conflict.firstDependency.location[-1].parameters
             second = conflict.secondDependency.location[-1].parameters
 
