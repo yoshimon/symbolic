@@ -80,6 +80,8 @@ class DefaultPreprocessor:
         Args:
             text (str): The text to pre-process.
             libName (str): The library name.
+            args: Unused.
+            kwargs: Unused.
         Returns:
             str: The pre-processed text.
         """

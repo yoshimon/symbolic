@@ -117,7 +117,7 @@ class ProjectDependencyCollection:
 
     def __init__(self):
         """Initialize the object."""
-        self.unresolvedDependencies = set()
+        self.unresolvedDependencies = list()
         self.libraries = {} # The libraries lookup table
         self.resolvedObjects = defaultdict(ResolvedDependencyLocation) # Maps each library to a set of resolved objects
         self.links = {} # Maps unresolved dependencies to their resolved counterparts
@@ -158,17 +158,17 @@ class ProjectDependencyCollection:
         # Find the library and the object in the library
         lookup = None
         resolvedLibName = None
-        locationFound = True
+        locationFound = False
         for libName in libNameGen:
             # Assume this library contains the dependency
             resolvedLibName = libName
             lookup = self.resolvedObjects[libName]
 
             # Loop through all sublocations and verify the assumption above
+            allSubLocationsFound = True
             for i, rl in enumerate(location[offset:]):
                 if rl.name not in lookup.subLocations:
-                    # The assumption above does not hold
-                    locationFound = False
+                    allSubLocationsFound = False
                     break
 
                 # The dependencies associated with this name
@@ -216,6 +216,7 @@ class ProjectDependencyCollection:
                 lookup = resolvedDependencyLocation
 
             # If we verified the location we can stop the search
+            locationFound = allSubLocationsFound
             if locationFound:
                 break
 
@@ -238,7 +239,7 @@ class ProjectDependencyCollection:
         rl = dependencyLocation[-1]
 
         if rl.kind == LocationKind.Unresolved:
-            self.unresolvedDependencies.add(dependency)
+            self.unresolvedDependencies.append(dependency)
         else:
             # Navigate to parent
             navResult = self.navigate(obj.token.anchor, references, dependencyLocation[:-1])

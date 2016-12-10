@@ -281,6 +281,8 @@ class SymbolicLexer(RegexLexer):
         Initialize the object.
 
         Args:
+            libName (str): The library name.
+            fileName (str): The file name.
             options: The pygments lexer options.
         """
         RegexLexer.__init__(self, **options)

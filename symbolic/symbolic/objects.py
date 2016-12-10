@@ -1643,7 +1643,7 @@ class Alias(TemplateObject):
         Generate a template string from the parsed object.
 
         Args:
-            prettyString (PrettyString): The string to append the Alias to.
+            prettyString (formatter.PrettyString): The string to append the Alias to.
         """
         prettyString += 'using ' + self.token.text
 

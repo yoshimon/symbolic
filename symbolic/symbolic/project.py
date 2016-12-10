@@ -123,6 +123,8 @@ class LibraryDependencyGraph:
             for ref in libConfig.references:
                 self.graph.add_edge(libConfig.libName, ref)
 
+            print("Loaded library {0}.".format(libConfig.libName))
+
     def resolve(self):
         """
         Resolve all dependencies between libraries.
@@ -143,6 +145,8 @@ class LibraryDependencyGraph:
             dependencyChain += p[1]
 
             raise LibraryDependencyError(dependencyChain)
+
+        print("Resolved library order: [{0}].".format(", ".join(libName for libName in sortedLibs)))
 
         return ((libName, self.graph.node[libName]["libConfig"]) for libName in sortedLibs)
 
