@@ -90,7 +90,7 @@ class LibraryConfiguration:
 
                 # Load references
                 for ref in jsonLibFileLibrary.get("references", []):
-                    self.references.append(ref["reference"])
+                    self.references.append(str(VirtualPath(ref).expanded().last()))
 
                 # Load the user pre-processor
                 jsonLibFilePP = jsonLibFileLibrary.get("preprocessor", {})
@@ -121,7 +121,7 @@ class LibraryDependencyGraph:
             
             # Connect the dependencies as defined by the library
             for ref in libConfig.references:
-                self.graph.add_edge(libConfig.libName, ref)
+                self.graph.add_edge(ref, libConfig.libName)
 
             print("Loaded library {0}.".format(libConfig.libName))
 
@@ -208,6 +208,12 @@ class Project:
                 # Parse the unit and extract an object representation
                 unitParser = UnitParser(srcFileTokens)
                 references, globalNamespace = unitParser.parse()
+
+                # Make sure that all references are valid (specified in the .manifest)
+                for ref in references:
+                    refLibName = str(ref)
+                    if refLibName != libName and refLibName not in libConfig.references:
+                        raise UnknownLibraryReferenceError(ref.anchor, ref)
 
                 # Create a dependency graph for the unit
                 dependencyCollection.insert_unit(references, globalNamespace)

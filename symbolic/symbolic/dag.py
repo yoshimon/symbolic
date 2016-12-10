@@ -6,7 +6,6 @@ from collections import deque, defaultdict
 
 # Library
 import networkx as nx
-import matplotlib.pyplot as plt
 
 # Project
 from symbolic.exceptions import *
@@ -310,6 +309,8 @@ class ProjectDependencyCollection:
         Args:
             libName (str): The name of the library.
         """
+        print("Processing library {0}...".format(libName))
+
         # Create an empty entry in the global dict
         # Breakup the library name and insert it
         # Each part of the library name is its own subspace
@@ -336,6 +337,8 @@ class ProjectDependencyCollection:
 
     def _resolve(self):
         """Resolve all dependencies."""
+        print("Resolving library dependencies...")
+
         if self.unresolvedDependencies:
             # Traverse from top to bottom
             unresolvedDependencies = deque(self.unresolvedDependencies)
@@ -359,6 +362,8 @@ class ProjectDependencyCollection:
         # Try to resolve location conflicts now
         for conflict in self.locationConflicts:
             # Look at both conflicts
+            # They have to be parameter conflicts
+            # All other conflicts should have already raised an error
             first = conflict.firstDependency.location[-1].parameters
             second = conflict.secondDependency.location[-1].parameters
 

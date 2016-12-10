@@ -89,7 +89,7 @@ class UnexpectedTokenError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + "Expected '{1}' but found '{0}'.".format(str(self.expected), str(self.found))
+        return super().__str__() + 'Expected "{1}" but found "{0}".'.format(str(self.expected), str(self.found))
 
 class UnexpectedEOFError(Exception):
     """An exception class, that indicates an unexpected EOF token in the token stream."""
@@ -131,7 +131,7 @@ class UnsupportedSystemAnnotationError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + "{0}s do not support the '{1}' system annotation.".format(self.what, str(self.sysAnnotation.token))
+        return super().__str__() + '{0}s do not support the "{1}" system annotation.'.format(self.what, str(self.sysAnnotation.token))
 
 class UnknownSystemAnnotationError(SourceError):
     """
@@ -383,4 +383,32 @@ class DependencyNotFoundError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + "Could not find dependency location '{0}'.".format(str(self.location))
+        return super().__str__() + 'Could not find dependency location "{0}".'.format(str(self.location))
+
+class UnknownLibraryReferenceError(SourceError):
+    """
+    An exception class, that indicates an unknown library reference.
+
+    Attributes:
+        reference (objects.Reference): The library reference.
+    """
+
+    def __init__(self, anchor, reference):
+        """
+        Initialize the object.
+
+        Args:
+            anchor (objects.Anchor): The source code anchor.
+            reference (str): The library reference.
+        """
+        super().__init__(anchor)
+        self.reference = reference
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + '"{0}" is not a valid library reference.'.format(str(self.reference))
