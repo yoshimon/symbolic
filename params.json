@@ -1,6 +1,0 @@
-{
-  "name": "symbolic",
-  "tagline": "A flexible compiler front-end for C-style Domain Specific Languages.",
-  "body": "# What is symbolic?\r\n**symbolic** is a flexible compiler front-end for creating custom, C-style Domain Specific Languages (DSL) that doesn't require any changes to cover a variety of target languages. This allows the target DSL to be cleanly separated from the lexing and parsing process. Any compatible, C-style DSL can be implemented using symbolic libraries and a custom compiler backend, that translates the symbolic intermediate representation (IR) to a target platform.\r\n",
-  "note": "Don't delete this file! It's used internally to help with page regeneration."
-}
