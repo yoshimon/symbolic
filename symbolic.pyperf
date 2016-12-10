@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<ProfilingTarget xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <ProjectTarget>
+    <TargetProject>80dd0f8d-6bb7-48e0-abe8-fed99bac985e</TargetProject>
+    <FriendlyName>symbolic</FriendlyName>
+  </ProjectTarget>
+  <Reports />
+</ProfilingTarget>
