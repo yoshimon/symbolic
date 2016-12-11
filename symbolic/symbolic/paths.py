@@ -153,7 +153,7 @@ class VirtualPath:
         Returns:
             bool: True, if the path exists. Otherwise False.
         """
-        return os.path.exists(str(self))
+        return os.path.exists(str(self.expanded()))
 
     def expanded(self):
         """

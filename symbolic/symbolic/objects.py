@@ -1879,10 +1879,8 @@ class Typename(Locatable):
                     raise InvalidTypenameError(firstToken.anchor)
 
         # Validate the entire scope
-        if len(self.scope) > 0:
-            for token in self.scope[1:]:
-                if token.text in Language.systemTypenames:
-                    raise InvalidTypenameError(token.anchor)
+        # if any(token.text in Language.systemTypenames for token in self.scope[1:]):
+        #    raise InvalidTypenameError(self.scope[0].anchor)
 
         # Should not be a keyword
         if any(token.text in Language.keywords for token in self.scope):

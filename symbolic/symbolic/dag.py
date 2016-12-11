@@ -39,7 +39,7 @@ class Dependency:
         self.references = references
         
         # Two system annotations are valid for all dependencies: private, deprecate
-        self.isPrivate = Annotation.has('private', obj.sysAnnotations) if obj is isinstance(obj, Named) else True
+        self.isPrivate = Annotation.has('private', obj.sysAnnotations) if obj is isinstance(obj, Named) else False
         self.isDeprecated = Annotation.has('deprecated', obj.sysAnnotations) if obj is isinstance(obj, Named) else False
 
 class LocationConflict:
@@ -205,7 +205,7 @@ class ProjectDependencyCollection:
                     srcFileTokens = lexer.tokenize(ppTemplateSrc)
 
                     # Parse the unit
-                    parser = UnitParser(lexer, srcFileTokens)
+                    parser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
                     templateReferences, templateRootNamespace = parser.parse()
                     
                     # Insert it into the collection
@@ -375,8 +375,9 @@ class ProjectDependencyCollection:
             for i, p0 in enumerate(first):
                 p1 = second[i]
 
-                # TODO: Lookup link of parameter dependency
-                # REPLACE FIRST AND SECOND WITH RESOLVED
+                # Lookup link of parameter dependency
+                
+
                 pass
 
             if first == second:

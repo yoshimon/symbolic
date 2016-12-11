@@ -60,7 +60,7 @@ class LibraryConfiguration:
     Attributes:
         directoryPath (paths.VirtualPath): The directory path.
         references (list of str): The library reference.
-        preprocessorModuleFilePath (paths.VirtualPath): The file path for the pre-processor module.
+        preprocessorModuleFilePath (paths.VirtualPath or None): The file path for the pre-processor module.
         preprocessorClass (str): The class name inside the preprocessor module.
         ppt (preprocessors.PPT): The pre-processor table to use.
         libName (str): The library name.
@@ -75,7 +75,7 @@ class LibraryConfiguration:
         """
         self.directoryPath = filePath.directory_path()
         self.references = []
-        self.preprocessorModuleFilePath = VirtualPath()
+        self.preprocessorModuleFilePath = None
         self.preprocessorClass = ""
         self.ppt = PPT(optFilePath=filePath.with_extension(".pp"))
 
@@ -203,10 +203,10 @@ class Project:
 
                 # Tokenize the source
                 lexer = SymbolicLexer(libName=libName, fileName=str(filePath))
-                srcFileTokens = lexer.tokenize(srcFileText)
+                srcFileTokens = lexer.tokenize(ppSrcFileText)
                     
                 # Parse the unit and extract an object representation
-                unitParser = UnitParser(srcFileTokens)
+                unitParser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
                 references, globalNamespace = unitParser.parse()
 
                 # Make sure that all references are valid (specified in the .manifest)

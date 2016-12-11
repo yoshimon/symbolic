@@ -16,6 +16,8 @@ class BaseParser:
     A base class for all parsers.
     
     Attributes:
+        libName (str): The library name.
+        fileName (str): The file name.
         tokens (list of lexer.Symto): The token list.
         tokenIdx (int): The token index.
         token (lexer.Symto): The symbolic token.
@@ -23,14 +25,14 @@ class BaseParser:
         namespaceStack (list of objects.Namespace): The namespace stack.
     """
 
-    def __init__(self, tokens):
+    def __init__(self, libName, fileName, tokens):
         """
         Initialize the object.
 
         Args:
             tokens (list of lexer.Symto): The token list.
         """
-        self.reset(tokens)
+        self.reset(libName, fileName, tokens)
 
     def is_eof(self):
         """
@@ -41,21 +43,24 @@ class BaseParser:
         """
         return self.tokenIdx >= len(self.tokens)
 
-    def reset(self, tokens):
+    def reset(self, libName, fileName, tokens):
         """
         Reset the parser.
 
         Args:
             tokens (list of lexer.Symto): The token stream.
         """
+        self.libName = libName
+        self.fileName = fileName
+
         self.tokens = list(tokens)
 
         # Start at first token
         self.tokenIdx = -1
         self.token = self.advance()
-        
+
         self.tokenStateStack = []
-        self.namespaceStack = [Namespace(None, Symto(Token.Text, self.token.anchor.libName, self.token.anchor.fileName, '', 1, 1), [], [], None)] # Global namespace
+        self.namespaceStack = [Namespace(None, Symto(Token.Text, libName, fileName, '', 1, 1), [], [], None)] # Global namespace
 
     def advance(self):
         """
@@ -65,13 +70,18 @@ class BaseParser:
             lexer.Symto: The new token.
         """
         if self.is_eof():
-            raise UnexpectedEOFError()
+            raise UnexpectedEOFError(self.token.anchor)
 
         self.tokenIdx += 1
         if not self.is_eof():
             self.token = self.tokens[self.tokenIdx]
         else:
-            self.token = None
+            if self.can_back():
+                # After the last token
+                self.token = Symto.after_token(self.token, Token.EOF, "")
+            else:
+                # Empty file
+                self.token = Symto(Token.EOF, self.libName, self.fileName, "", 1, 1)
         return self.token
 
     def can_back(self):
@@ -91,7 +101,7 @@ class BaseParser:
             lexer.Symto: The new token.
         """
         if self.tokenIdx == 0:
-            raise UnexpectedEOFError()
+            raise UnexpectedEOFError(self.token.anchor)
 
         self.tokenIdx -= 1
         if self.tokenIdx >= 0:
@@ -108,7 +118,7 @@ class BaseParser:
             lexer.Symto: The current token.
         """
         if self.is_eof():
-            raise UnexpectedEOFError()
+            raise UnexpectedEOFError(self.token.anchor)
 
         token = self.token
         self.advance()
@@ -224,6 +234,9 @@ class BaseParser:
         Returns:
             lexer.Symto: The next token.
         """
+        if self.is_eof():
+            raise UnexpectedEOFError(self.token.anchor)
+
         if not self.match(val):
             raise UnexpectedTokenError(self.token.anchor, val, self.token.text)
         return self.token
@@ -337,6 +350,19 @@ class BaseParser:
         if success:
             stack.append(val)
         return success
+
+    def previous(self):
+        """
+        Return the previous token.
+
+        Returns:
+            lexer.Symto: The previous token or None, if no such token exists.
+        """
+        if not self.can_back():
+            raise DevError()
+
+        self.back()
+        return self.consume()
 
     def was_previous_match_kind(self, kind):
         """
@@ -535,7 +561,7 @@ class UnitParser(BaseParser):
             list of objects.Reference, objects.Namespace: The list of references and the global (root) namespace object.
         """
         # Reset stream position
-        self.reset(self.tokens)
+        self.reset(self.libName, self.fileName, self.tokens)
 
         # References first
         self.references = self.parse_all_references()

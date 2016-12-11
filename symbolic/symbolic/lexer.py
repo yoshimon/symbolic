@@ -152,7 +152,7 @@ class Symto:
         Returns:
             Symto: The token.
         """
-        return Symto(kind, other.libName, other.anchor.fileName, text, other.anchor.line, other.anchor.columnEnd + 1)
+        return Symto(kind, other.anchor.libName, other.anchor.fileName, text, other.anchor.line, other.anchor.column + len(text) + 1)
 
     def __init__(self, kind, libName, fileName, text, line, column):
         """
@@ -169,7 +169,6 @@ class Symto:
         self.kind = kind
         self.text = str(text)
         self.anchor = Anchor(libName, fileName, line, column)
-        self.columnEnd = column + len(self.text)
         self.isTerminal = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex, Token.Name, Token.Literal.String]
         self.isNumber = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex]
         
@@ -207,7 +206,7 @@ class Symto:
             kind (pygments.token.Token): The token kind.
             text (str): The token text.
         """
-        self.__init__(kind, other.libName, other.anchor.fileName, text, other.anchor.line, other.anchor.column)
+        self.__init__(kind, other.anchor.libName, other.anchor.fileName, text, other.anchor.line, other.anchor.column)
 
     def __str__(self):
         """
@@ -327,10 +326,10 @@ class SymbolicLexer(RegexLexer):
 
         line = 1
         column = 1
-        for index, token, value in RegexLexer.get_tokens_unprocessed(self, text):
+        for index, token, value in RegexLexer.get_tokens_unprocessed(self, self._unmodifiedText):
             txt = self.subs[value] if (self.subs is not None) and (value in self.subs) else value
             yield index, token, _TokenValue(txt, line, column)
-            if value == '\n':
+            if txt == '\n':
                 line += 1
                 column = 1
             else:
@@ -353,16 +352,17 @@ class SymbolicLexer(RegexLexer):
             text (str): The text to tokenize.
             subs (dict of (str, str)): The token substitution table.
         """
+        # NOTE: this fixes an issue with pygments which modifies the text
         tokens = self.get_tokens(text)
  
-        # Bind substitution table
         # NOTE: this is used by the generator below
+        # Bind substitution table
+        # Bind unmodified text - pygments modifies the text that is passed in
         self.subs = subs
-               
+        self._unmodifiedText = text
         # Convert pygments tokens to Symbolic tokens
         tokens = [Symto(t[0], self.libName, self.fileName, t[1].text, t[1].line, t[1].column) for t in tokens]
-        
-        # Unbind substitution table
+        self._unmodifiedText = None
         self.subs = None
         
         return tokens
