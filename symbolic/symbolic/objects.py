@@ -1170,8 +1170,7 @@ class Function(TemplateObject, Namespace):
         Returns:
             objects.Location: A location within the library.
         """
-        location = self.default_location(LocationKind.Function, parameters=self.parameters)
-        return location
+        return self.default_location(LocationKind.Function, parameters=self.parameters)
 
     @staticmethod
     def parse_template(parser, isTemplate):

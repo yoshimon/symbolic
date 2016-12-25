@@ -132,7 +132,7 @@ class ProjectDependencyCollection:
             references (list of objects.Reference): The library references.
             location (objects.Location): The location.
         Returns:
-            dict: The resolved location.
+            dag.NavigationResult: The resolved location.
         """
         # Navigate the library tree first (explicit library name)
         # Fall back to reference order in unit, if no match possible
@@ -259,11 +259,7 @@ class ProjectDependencyCollection:
                     # If the template and signature matches then it might be a conflict
                     if len(rl.templateParameters) == len(otherDependencyRL.templateParameters):
                         if len(rl.parameters) == len(otherDependencyRL.parameters):
-                            # No parameters means a definite conflicts
-                            if len(rl.parameters) == 0:
-                                raise DuplicateParameterSignatureError(obj.anchor, otherDependency.obj.anchor)
-
-                            # It might be a conflict if the modifiers match
+                            # It might be a conflict if the parameter modifiers match
                             # The parameter typenames need to be resolved later to verify the conflict
                             isConflict = Algorithm.all_sequence(rl.parameters, otherDependencyRL.parameters,
                                                                 lambda p0, p1: p0.isRef == p1.isRef)
@@ -299,11 +295,14 @@ class ProjectDependencyCollection:
 
             # Connect immediate unresolved dependencies
             if isinstance(obj, Function):
+                # The unknown return type
                 self.insert(references, obj.returnTypename)
 
+                # The unknown parameter types
                 for parameter in obj.parameters:
-                    self.insert(references, parameter)
+                    self.insert(references, parameter.typename)
             elif isinstance(obj, Alias):
+                # The unknown typename
                 self.insert(references, obj.targetTypename)
 
     def begin_library(self, libName):
@@ -363,25 +362,100 @@ class ProjectDependencyCollection:
                 # And clear the cache again
                 self.unresolvedDependencies.clear()
 
+            # Now that each dependency has been resolved
+            # we solve location conflicts due to clashing parameter
+            # signatures by comparing the types
+            self._solve_location_conflicts()
+
+    def navigate_alias_target(self, navResult):
+        """
+        Navigate to the next target type of an alias.
+        
+        This can be used after navigating to a location to find the next target type.
+
+        Args:
+            navResult (dag.NavigationResult): The previous navigation result to continue the search from.
+        Returns:
+            dag.NavigationResult: The next navigation result.
+        """
+        if navResult is None:
+            return None
+
+        # There should only be one alias dependency at this location
+        dependencies = navResult.resolvedDependencyLocation.dependencies
+        if len(dependencies) != 1:
+            return None
+
+        # It has to be an alias
+        dependency = dependencies[0]
+        obj = dependency.obj
+        if not isinstance(obj, Alias):
+            return None
+
+        # Navigate to the target type
+        targetTypename = obj.targetTypename
+        return self.navigate(targetTypename.anchor, dependency.references, targetTypename.location())
+
+    def navigate_alias_base(self, navResult):
+        """
+        Navigate to the base type of an alias.
+
+        This can be used after navigating to a location to find the last target type.
+
+        Args:
+            navResult (dag.NavigationResult): The previous navigation result to continue the search from.
+        Returns:
+            dag.NavigationResult: The next navigation result.
+        """
+        result = navResult
+        while True:
+            nextResult = self.navigate_alias_target(result)
+            if nextResult is None:
+                return result
+            
+            result = nextResult
+
+    def _solve_location_conflicts(self):
+        """Solve all known location conflicts."""
         # Try to resolve location conflicts now
         for conflict in self.locationConflicts:
             # Look at both conflicts
-            # They have to be parameter conflicts
-            # All trivial conflicts should have already raised an error
-            first = conflict.firstDependency.location[-1].parameters
-            second = conflict.secondDependency.location[-1].parameters
+            # They have to be parameter conflicts, i.e. f(int) and f(int)
+            dep0 = conflict.firstDependency
+            dep1 = conflict.secondDependency
 
-            # Lookup the resolved dependencies
-            for i, p0 in enumerate(first):
-                p1 = second[i]
+            dep0Params = dep0.location[-1].parameters
+            dep1Params = dep1.location[-1].parameters
+
+            # Assume this is a conflict
+            isConflict = True
+
+            # Look at all parameter types in the conflict signatures
+            # and lookup the resolved locations for the types.
+            for p0, p1 in zip(dep0Params, dep1Params):
+                # Create a dependency for the parameters
+                p0Dep = Dependency(dep0.references, p0)
+                p1Dep = Dependency(dep1.references, p1)
 
                 # Lookup link of parameter dependency
+                p0Resolved = self.links[p0Dep] if p0Dep in self.links else self.navigate(p0Dep.obj.token, p0Dep.references, p0Dep.location)
+                p1Resolved = self.links[p1Dep] if p1Dep in self.links else self.navigate(p1Dep.obj.token, p1Dep.references, p1Dep.location)
+
+                # Navigate aliases down to the base type so that we can compare the locations for a conflict below.
+                # Aliases are unparamterized and hence unique.
+                p0Resolved = self.navigate_alias_base(p0Resolved)
+                p0ResolvedLocation = p0Resolved.resolvedDependencyLocation
                 
+                p1Resolved = self.navigate_alias_base(p1Resolved)
+                p1ResolvedLocation = p1Resolved.resolvedDependencyLocation
 
-                pass
+                # If the resolved locations differ this is not a conflict
+                if p0ResolvedLocation != p1ResolvedLocation:
+                    isConflict = False
+                    break
 
-            if first == second:
-                pass
+            if isConflict:
+                raise DuplicateParameterSignatureError(dep0.obj.token.anchor, dep1.obj.token.anchor)
 
     def to_graph(self):
         pass

@@ -33,6 +33,9 @@
     <Compile Include="symbolic\dag.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="symbolic\loggers.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="symbolic\paths.py">
       <SubType>Code</SubType>
     </Compile>
