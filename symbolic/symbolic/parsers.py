@@ -462,6 +462,19 @@ class BaseParser:
                         tokens.append(self.consume())
         return tokens
 
+class ParseResult:
+    """
+    The result of a parsing operation.
+
+    Attributes:
+        references (list of objects.Reference): The references.
+        rootNamespace (objects.Namespace): The root namespace.
+    """
+
+    def __init__(self, references, rootNamespace):
+        self.references = references
+        self.rootNamespace = rootNamespace
+
 class UnitParser(BaseParser):
     """A parser for symbolic source files (units)."""
 
@@ -572,4 +585,4 @@ class UnitParser(BaseParser):
         if not self.is_eof():
             raise ExpectedEOFError(self.token.anchor)
 
-        return self.references, self.namespaceStack.pop()
+        return ParseResult(self.references, self.namespaceStack.pop())

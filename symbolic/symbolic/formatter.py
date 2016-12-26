@@ -99,14 +99,14 @@ class PrettyString:
         previousLine = firstLine
         previousColumnEnd = 1
         for t in tokens:
-            if t.line != previousLine:
-                result += '\n' * (t.line - previousLine)
+            if t.anchor.line != previousLine:
+                result += '\n' * (t.anchor.line - previousLine)
                 previousColumnEnd = 1
 
-            result += ' ' * (t.column - previousColumnEnd)
+            result += ' ' * (t.anchor.column - previousColumnEnd)
 
             # Now append the token
             result += t.text
-            previousLine = t.line
-            previousColumnEnd = t.columnEnd
+            previousLine = t.anchor.line
+            previousColumnEnd = t.anchor.column + len(t.text)
         return result

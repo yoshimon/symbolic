@@ -122,6 +122,7 @@ class ProjectDependencyCollection:
         self.links = {} # Maps unresolved dependencies to their resolved counterparts
         self.locationConflicts = [] # Locations that point to the same endpoint (conflicts)
         self.libName = None # The name of the library that is being monitored
+        self.templateLinks = {} # Maps locations to template instantiation results.
 
     def navigate(self, errorAnchor, references, location):
         """
@@ -186,35 +187,46 @@ class ProjectDependencyCollection:
                 if len(rl.templateParameters) != len(dependencyRL.templateParameters):
                     raise TemplateMismatchError(errorAnchor)
 
-                # Instantiate the template
+                # Lazily instantiate templates, if we encounter one.
                 dependencyObj = dependency.obj
                 if isinstance(dependencyObj, Template):
-                    # Generate the translation unit for the template
-                    templateSrc = dependencyObj.generate_translation_unit()
+                    # Make sure we did not instantiate the template already. 
+                    dependencyLocationStr = str(dependency.location)
+                    if dependencyLocationStr not in self.usedTemplateLocations:
+                        # Generate the translation unit for the template.
+                        templateSrc = dependencyObj.generate_translation_unit()
 
-                    # Run the pre-processor on the source
-                    ppTemplateSrc = self.preprocessor.run(templateSrc)
+                        # Run the pre-processor on the source.
+                        # TODO: run pre-processor based on the location
+                        ppTemplateSrc = templateSrc # self.preprocessor.run(templateSrc, LIBNAME, PPT)
 
-                    # Lex the unit
-                    lexer = SymbolicLexer(libName=self.libName, fileName=str(dependencyObj.token))
+                        # Lex the unit so we can parse it.
+                        lexer = SymbolicLexer(libName=self.libName, fileName=str(dependencyObj.token) + " as template")
 
-                    # Modify the template substitutions of the lexer
-                    lexer.subs = { dependencyRL.templateParameters[i].token.text: parameter.text[1:-1] for i, parameter in enumerate(rl.templateParameters) }
+                        # Plugin the template substitutions for the lexer.
+                        templateSubs = { dependencyRL.templateParameters[i].token.text: parameter.text[1:-1] for i, parameter in enumerate(rl.templateParameters) }
 
-                    # Lex the generated unit
-                    srcFileTokens = lexer.tokenize(ppTemplateSrc)
+                        # Generate a parsable token stream now.
+                        srcFileTokens = lexer.tokenize(ppTemplateSrc, subs=templateSubs)
 
-                    # Parse the unit
-                    parser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
-                    templateReferences, templateRootNamespace = parser.parse()
-                    
-                    # Insert it into the collection
-                    self.insert_unit(templateReferences, templateRootNamespace)
+                        # Analyze the token stream.
+                        parser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
+                        parseResult = parser.parse()
+
+                        # Patch up anonymous objects to reflect namespaceList anonymous names.
+
+
+                        # We know the location of the instantiated object in the hierarchy.
+                        hierarchyPos = len(dependencyObj.namespaceList)
+                        self.usedTemplateLocations.add(str(dependencyLocationStr))
+
+                        # Insert it into the collection.
+                        self.insert_unit(parseResult.references, parseResult.rootNamespace)
 
                 # Step down this namespace
                 lookup = resolvedDependencyLocation
 
-            # If we verified the location we can stop the search
+            # If we verified the location we can stop the search.
             locationFound = allSubLocationsFound
             if locationFound:
                 break
@@ -328,7 +340,7 @@ class ProjectDependencyCollection:
             # Step down
             lookup = lookup[s]
 
-        # Remember the library name
+        # Remember the library name and pre-processor
         self.libName = libName
 
     def end_library(self):
@@ -381,18 +393,18 @@ class ProjectDependencyCollection:
         if navResult is None:
             return None
 
-        # There should only be one alias dependency at this location
+        # There should only be one alias dependency at this location.
         dependencies = navResult.resolvedDependencyLocation.dependencies
         if len(dependencies) != 1:
             return None
 
-        # It has to be an alias
+        # If it is not an alias we are done.
         dependency = dependencies[0]
         obj = dependency.obj
         if not isinstance(obj, Alias):
             return None
 
-        # Navigate to the target type
+        # Navigate to the target type.
         targetTypename = obj.targetTypename
         return self.navigate(targetTypename.anchor, dependency.references, targetTypename.location())
 
@@ -415,12 +427,23 @@ class ProjectDependencyCollection:
             
             result = nextResult
 
+    def navigate_dependency(self, dependency):
+        """
+        Navigate using a dependency as the target.
+
+        Args:
+            dependency (dag.Dependency): The dependency to lookup.
+        Returns:
+            dag.NavigationResult: The navigation result.
+        """
+        return self.links[dependency] if dependency in self.links else self.navigate(dependency.obj.token, dependency.references, dependency.location)
+
     def _solve_location_conflicts(self):
         """Solve all known location conflicts."""
-        # Try to resolve location conflicts now
+        # Try to resolve location conflicts now.
         for conflict in self.locationConflicts:
-            # Look at both conflicts
-            # They have to be parameter conflicts, i.e. f(int) and f(int)
+            # Look at both conflicts:
+            # They have to be parameter conflicts, i.e. f(int) and f(int).
             dep0 = conflict.firstDependency
             dep1 = conflict.secondDependency
 
@@ -430,26 +453,26 @@ class ProjectDependencyCollection:
             # Assume this is a conflict
             isConflict = True
 
-            # Look at all parameter types in the conflict signatures
-            # and lookup the resolved locations for the types.
+            # Look at all parameter types in the conflict signatures and
+            # lookup the resolved locations for the types.
             for p0, p1 in zip(dep0Params, dep1Params):
                 # Create a dependency for the parameters
                 p0Dep = Dependency(dep0.references, p0)
                 p1Dep = Dependency(dep1.references, p1)
 
-                # Lookup link of parameter dependency
-                p0Resolved = self.links[p0Dep] if p0Dep in self.links else self.navigate(p0Dep.obj.token, p0Dep.references, p0Dep.location)
-                p1Resolved = self.links[p1Dep] if p1Dep in self.links else self.navigate(p1Dep.obj.token, p1Dep.references, p1Dep.location)
+                # Try to find the actual dependency location.
+                p0Resolved = self.navigate_dependency(p0Dep)
+                p1Resolved = self.navigate_dependency(p1Dep)
 
-                # Navigate aliases down to the base type so that we can compare the locations for a conflict below.
-                # Aliases are unparamterized and hence unique.
+                # Navigate aliases down to the base type, if the dependency was an alias.
+                # This allows us so to compare the locations for a conflict below.
                 p0Resolved = self.navigate_alias_base(p0Resolved)
                 p0ResolvedLocation = p0Resolved.resolvedDependencyLocation
                 
                 p1Resolved = self.navigate_alias_base(p1Resolved)
                 p1ResolvedLocation = p1Resolved.resolvedDependencyLocation
 
-                # If the resolved locations differ this is not a conflict
+                # If the resolved locations differ this is not a conflict.
                 if p0ResolvedLocation != p1ResolvedLocation:
                     isConflict = False
                     break

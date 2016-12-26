@@ -181,6 +181,12 @@ class Project:
 
         # Translate each library by going through all *.sym files
         for libName, libConfig in orderedLibs:
+            # Load the pre-processor
+            preprocessor = ExternalPreprocessor(libConfig.preprocessorModuleFilePath, libConfig.preprocessorClass)
+            
+            # Combine the project PPT with the library PPT
+            projLibPPT = self.projConfig.ppt.combine(libConfig.ppt)
+
             # Signal the dependency collection that a new library is being processed
             dependencyCollection.begin_library(libName)
 
@@ -192,14 +198,13 @@ class Project:
                 filePPT = PPT(optFilePath=filePath.with_extension(".pp"))
 
                 # Merge all pre-processor tables
-                ppt = self.projConfig.ppt.combine(libConfig.ppt).merge(filePPT)
+                projLibFilePPT = projLibPPT.merge(filePPT)
 
                 # Load the source file
                 srcFileText = filePath.read_all_text()
 
                 # Pre-process the source
-                preprocessor = ExternalPreprocessor(libConfig.preprocessorModuleFilePath, libConfig.preprocessorClass)
-                ppSrcFileText = preprocessor.run(srcFileText, libConfig.libName, ppt)
+                ppSrcFileText = preprocessor.run(srcFileText, libConfig.libName, projLibFilePPT)
 
                 # Tokenize the source
                 lexer = SymbolicLexer(libName=libName, fileName=str(filePath))
@@ -207,16 +212,16 @@ class Project:
                     
                 # Parse the unit and extract an object representation
                 unitParser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
-                references, globalNamespace = unitParser.parse()
+                parseResult = unitParser.parse()
 
                 # Make sure that all references are valid (specified in the .manifest)
-                for ref in references:
+                for ref in parseResult.references:
                     refLibName = str(ref)
                     if refLibName != libName and refLibName not in libConfig.references:
                         raise UnknownLibraryReferenceError(ref.anchor, ref)
 
                 # Create a dependency graph for the unit
-                dependencyCollection.insert_unit(references, globalNamespace)
+                dependencyCollection.insert_unit(parseResult.references, parseResult.rootNamespace)
 
             # Signal that we are done with this library
             dependencyCollection.end_library()
