@@ -47,8 +47,8 @@ class LocationConflict:
     A conflict between two locations.
     
     Attributes:
-        firstDependency (objects.Dependency): The first dependency.
-        secondDependency (objects.Dependency): The second dependency.
+        firstDependency (dag.Dependency): The first dependency.
+        secondDependency (dag.Dependency): The second dependency.
     """
 
     def __init__(self, firstDependency, secondDependency):
@@ -56,8 +56,8 @@ class LocationConflict:
         Initialize the object.
         
         Args:
-            firstDependency (objects.Dependency): The first dependency.
-            secondDependency (objects.Dependency): The second dependency.
+            firstDependency (dag.Dependency): The first dependency.
+            secondDependency (dag.Dependency): The second dependency.
         """
         self.firstDependency = firstDependency
         self.secondDependency = secondDependency
@@ -67,8 +67,8 @@ class ResolvedDependencyLocation:
     A collection of dependencies that have been resolved to a location.
 
     Attributes:
-        dependencies (list of objects.Dependency): The dependencies at this location.
-        subLocations (dict of (str, objects.ResolvedDependencyLocation)): The sub-locations.    
+        dependencies (list of dag.Dependency): The dependencies at this location.
+        subLocations (dict of (str, dag.ResolvedDependencyLocation)): The sub-locations.    
     """
 
     def __init__(self, dependencies=None, subLocations=None):
@@ -76,8 +76,8 @@ class ResolvedDependencyLocation:
         Initialize the object.
 
         Args:
-            dependencies (list of objects.Dependency): The dependencies at this location.
-            subLocations (dict of (str, objects.ResolvedDependencyLocation)): The sub-locations.
+            dependencies (list of dag.Dependency): The dependencies at this location.
+            subLocations (dict of (str, dag.ResolvedDependencyLocation)): The sub-locations.
         """
         self.dependencies = dependencies if dependencies else []
         self.subLocations = subLocations if subLocations else {}
@@ -88,7 +88,7 @@ class NavigationResult:
 
     Attributes:
         libName (str): The library name.
-        resolvedDependencyLocation (list of objects.ResolvedDependencyLocation): The resolved dependency location.
+        resolvedDependencyLocation (list of dag.ResolvedDependencyLocation): The resolved dependency location.
     """
 
     def __init__(self, libName, resolvedDependencyLocation):
@@ -97,7 +97,7 @@ class NavigationResult:
 
         Args:
             libName (str): The library name.
-            resolvedDependencyLocation (list of objects.ResolvedDependencyLocation): The resolved dependency location.
+            resolvedDependencyLocation (list of dag.ResolvedDependencyLocation): The resolved dependency location.
         """
         self.libName = libName
         self.resolvedDependencyLocation = resolvedDependencyLocation
@@ -107,7 +107,7 @@ class ProjectDependencyCollection:
     A colllection of dependencies within a project.
 
     Attributes:
-        unresolvedDependencies (set of objects.Dependency): A set of unresolved dependencies.
+        unresolvedDependencies (set of dag.Dependency): A set of unresolved dependencies.
         libraries (dict): The libraries lookup table.
         resolvedObjects (defaultdict): Maps each library to a list of resolved objects
         links (dict): Maps unresolved dependencies to their resolved counterparts
@@ -190,9 +190,11 @@ class ProjectDependencyCollection:
                 # Lazily instantiate templates, if we encounter one.
                 dependencyObj = dependency.obj
                 if isinstance(dependencyObj, Template):
-                    # Make sure we did not instantiate the template already. 
-                    dependencyLocationStr = str(dependency.location)
-                    if dependencyLocationStr not in self.usedTemplateLocations:
+                    # Make sure we did not instantiate the template already.
+                    templateInstanceArgs =  ", ".join(str(p) for p in rl.templateParameters)
+                    dependencyLocationStr = "{0} with <{1}>".format(str(dependency.location), templateInstanceArgs)
+
+                    if dependencyLocationStr not in self.templateLinks:
                         # Generate the translation unit for the template.
                         templateSrc = dependencyObj.generate_translation_unit()
 
@@ -201,7 +203,7 @@ class ProjectDependencyCollection:
                         ppTemplateSrc = templateSrc # self.preprocessor.run(templateSrc, LIBNAME, PPT)
 
                         # Lex the unit so we can parse it.
-                        lexer = SymbolicLexer(libName=self.libName, fileName=str(dependencyObj.token) + " as template")
+                        lexer = SymbolicLexer(libName=self.libName, fileName="$Templates/{0}".format(str(dependencyObj.token)))
 
                         # Plugin the template substitutions for the lexer.
                         templateSubs = { dependencyRL.templateParameters[i].token.text: parameter.text[1:-1] for i, parameter in enumerate(rl.templateParameters) }
@@ -213,15 +215,23 @@ class ProjectDependencyCollection:
                         parser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
                         parseResult = parser.parse()
 
-                        # Patch up anonymous objects to reflect namespaceList anonymous names.
+                        # Lookup the template object
+                        templateObjHierarchyDepth = len(dependencyObj.namespaceList)
+                        templateObj = parseResult.rootNamespace.objects[0]
+                        while templateObjHierarchyDepth > 0:
+                            templateObj = templateObj.objects[0]
+                            templateObjHierarchyDepth -= 1
 
+                        # Bind the location to a template.
+                        self.templateLinks[dependencyLocationStr] = templateObj
 
-                        # We know the location of the instantiated object in the hierarchy.
-                        hierarchyPos = len(dependencyObj.namespaceList)
-                        self.usedTemplateLocations.add(str(dependencyLocationStr))
-
-                        # Insert it into the collection.
+                        # Insert it into the collection so we can look it up.
                         self.insert_unit(parseResult.references, parseResult.rootNamespace)
+                        
+                    # Use template links to jump to the right location, which is anonymous.
+                    templateObj = self.templateLinks[dependencyLocationStr]
+                    templateNavResult = self.navigate(dependencyObj.token.anchor, references, templateObj.location())
+                    resolvedDependencyLocation = templateNavResult.resolvedDependencyLocation
 
                 # Step down this namespace
                 lookup = resolvedDependencyLocation

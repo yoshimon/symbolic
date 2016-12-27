@@ -408,7 +408,7 @@ class Namespace(Named):
             return None
 
         # Name token
-        token = parser.match_kind_optional(Token.Name, Token.Text, '')
+        token = parser.match_name_optional()
         
         # Semantic
         semantic = Annotation.parse_semantic(parser)
@@ -1113,7 +1113,7 @@ class Parameter(Named):
             return None
 
         # Name
-        token = parser.match_kind_optional(Token.Name, Token.Text, '')
+        token = parser.match_name_optional()
 
         # Semantic
         semantic = Annotation.parse_semantic(parser)
@@ -1276,23 +1276,25 @@ class Function(TemplateObject, Namespace):
         """
         return Function.parse_template(parser, False)
 
-    def generate_from_template(self, prettyString):
+    def generate_from_template(self, prettyString, *, asAnonymous=True):
         """
         Generate a template string from the parsed object.
 
         Args:
             prettyString (formatter.PrettyString): The string to append the Function to.
+            asAnonymous (bool): Set this to True, if the template should be emitted with an anonymous name.
         """
         # ReturnType
         prettyString += str(self.returnTypename)
 
         # Name
-        if self.kind == FunctionKind.Extension:
-            prettyString += self.extensionName
-        elif self.kind == FunctionKind.Operator:
-            prettyString += 'operator' + self.name
-        else:
-            prettyString += self.name
+        if not asAnonymous:
+            if self.kind == FunctionKind.Extension:
+                prettyString += self.extensionName
+            elif self.kind == FunctionKind.Operator:
+                prettyString += 'operator' + self.name
+            else:
+                prettyString += self.name
 
         # Parameter signature
         numParameters = len(self.parameters)
@@ -1362,7 +1364,7 @@ class Member(Named):
     @staticmethod
     def parse(parser, args):
         """
-        Parse an member.
+        Parse a member.
 
         Args:
             parser (parsers.UnitParser): The parser to use.
@@ -1375,8 +1377,7 @@ class Member(Named):
         if typename is None:
             return None
 
-        name = parser.match_kind(Token.Name)
-        name = Symto.from_token(parser.token, Token.Text, '') if name is None else name
+        name = parser.match_name_optional()
 
         semantic = Annotation.parse_semantic(parser)
         parser.match(';')
@@ -1504,7 +1505,7 @@ class Struct(TemplateObject, Namespace):
         if not parser.match('struct'):
             return None
 
-        token = parser.match_kind_optional(Token.Name, Token.Text, '')
+        token = parser.match_name_optional()
         semantic = Annotation.parse_semantic(parser)
 
         # Register the struct with the current namespace
@@ -1542,14 +1543,17 @@ class Struct(TemplateObject, Namespace):
         """
         return Struct.parse_template(parser, False)
 
-    def generate_from_template(self, prettyString):
+    def generate_from_template(self, prettyString, *, asAnonymous=True):
         """
         Generate a template string from the parsed object.
 
         Args:
-            prettyString (formatter.PrettyString): The string to append the Struct to.
+            prettyString (formatter.PrettyString): The string to append the Function to.
+            asAnonymous (bool): Set this to True, if the template should be emitted with an anonymous name.
         """
-        prettyString += 'struct ' + self.token.text
+        prettyString += 'struct '
+        if not asAnonymous:
+            prettyString += self.token.text
 
 class Alias(TemplateObject):
     """
@@ -1604,7 +1608,7 @@ class Alias(TemplateObject):
         if not parser.match('using'):
             return None
 
-        token = parser.match_kind_optional(Token.Name, Token.Text, '')
+        token = parser.match_name_optional()
         semantic = Annotation.parse_semantic(parser)
         targetTypename = None
         body = None
@@ -1637,14 +1641,17 @@ class Alias(TemplateObject):
         """
         return Alias.parse_template(parser, False)
 
-    def generate_from_template(self, prettyString):
+    def generate_from_template(self, prettyString, *, asAnonymous=True):
         """
         Generate a template string from the parsed object.
 
         Args:
-            prettyString (formatter.PrettyString): The string to append the Alias to.
+            prettyString (formatter.PrettyString): The string to append the Function to.
+            asAnonymous (bool): Set this to True, if the template should be emitted with an anonymous name.
         """
-        prettyString += 'using ' + self.token.text
+        prettyString += 'using '
+        if not asAnonymous:
+            prettyString += self.token.text
 
 class Annotation:
     """
@@ -2156,6 +2163,13 @@ class Template(Named):
             formatter.PrettyString: The pretty-formatted string.
         """
         result = PrettyString()
+
+        # References
+        if len(self.references) > 0:
+            for ref in self.references:
+                result += "import {0};\n".format(str(ref))
+
+            result += "\n"
 
         # Namespace
         for namespace in self.namespaceList:
