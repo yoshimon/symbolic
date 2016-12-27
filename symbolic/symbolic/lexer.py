@@ -354,6 +354,8 @@ class SymbolicLexer(RegexLexer):
         """
         # NOTE: this fixes an issue with pygments which modifies the text
         tokens = self.get_tokens(text)
+
+        # TODO: replace the token with text and lex
  
         # NOTE: this is used by the generator below
         # Bind substitution table

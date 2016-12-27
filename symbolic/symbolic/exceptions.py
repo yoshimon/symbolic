@@ -89,7 +89,7 @@ class UnexpectedTokenError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + 'Expected "{1}" but found "{0}".'.format(str(self.expected), str(self.found))
+        return super().__str__() + 'Expected "{0}" but found "{1}".'.format(str(self.expected), str(self.found))
 
 class UnexpectedEOFError(SourceError):
     """An exception class, that indicates an unexpected EOF token in the token stream."""

@@ -317,6 +317,15 @@ class Named(Locatable):
             if annotation.token.text not in compatibleNames:
                 raise UnsupportedSystemAnnotationError(self.class_name(), annotation)
 
+    def __str__(self):
+        """
+        Return the token string of the named object.
+
+        Returns:
+            str: The name of the object.
+        """
+        return self.token.text
+
 class Reference(Named):
     """An external library reference."""
 
@@ -2175,7 +2184,7 @@ class Template(Named):
         for namespace in self.namespaceList:
             result += Annotation.usrlist_to_str(namespace.userAnnotations)
             result += Annotation.syslist_to_str(namespace.sysAnnotations)
-            result += 'namespace {0}'.format(namespace.token.text)
+            result += 'namespace'
             if namespace.semantic is not None:
                 result += ': ' + namespace.semantic.text
             result += ' {\n'
