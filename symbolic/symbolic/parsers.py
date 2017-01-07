@@ -18,11 +18,11 @@ class BaseParser:
     Attributes:
         libName (str): The library name.
         fileName (str): The file name.
-        tokens (list of lexer.Symto): The token list.
+        tokens ([lexer.Symto]): The token list.
         tokenIdx (int): The token index.
         token (lexer.Symto): The symbolic token.
-        tokenStateStack (list of int): A state stack for token indices.
-        namespaceStack (list of objects.Namespace): The namespace stack.
+        tokenStateStack ([int]): A state stack for token indices.
+        namespaceStack ([objects.Namespace]): The namespace stack.
     """
 
     def __init__(self, libName, fileName, tokens):
@@ -30,7 +30,7 @@ class BaseParser:
         Initialize the object.
 
         Args:
-            tokens (list of lexer.Symto): The token list.
+            tokens ([lexer.Symto]): The token list.
         """
         self.reset(libName, fileName, tokens)
 
@@ -48,7 +48,7 @@ class BaseParser:
         Reset the parser.
 
         Args:
-            tokens (list of lexer.Symto): The token stream.
+            tokens ([lexer.Symto]): The token stream.
         """
         self.libName = libName
         self.fileName = fileName
@@ -146,7 +146,7 @@ class BaseParser:
         Match any value in a given list of values.
         
         Args:
-            sequence (list of str): A sequence of string values to match.
+            sequence ([str]): A sequence of string values to match.
         Returns:
             lexer.Symto: The next token.
         """
@@ -287,7 +287,7 @@ class BaseParser:
         Fetch all tokens until an end delimiter is encountered.
 
         Args:
-            endDelims (list of str): A list of end delimiters.
+            endDelims ([str]): A list of end delimiters.
         """
         if not endDelims:
             raise DevError()
@@ -328,7 +328,7 @@ class BaseParser:
         Match and push any opening bracket onto a bracket stack.
 
         Args:
-            stack (list of lexer.Symto): The bracket stack.
+            stack ([lexer.Symto]): The bracket stack.
         Returns:
             bool: True, if an opening bracket was matched and pushed. Otherwise False.
         """
@@ -349,7 +349,7 @@ class BaseParser:
         Match and push an opening bracket onto a bracket stack.
 
         Args:
-            stack (list of lexer.Symto): The bracket stack.
+            stack ([lexer.Symto]): The bracket stack.
             openBracket (str): The opening bracket to match.
         Returns:
             bool: True, if the opening bracket was matched. Otherwise False.
@@ -396,7 +396,7 @@ class BaseParser:
         Match a closing bracket based on a bracket stack.
 
         Args:
-            stack (list of lexer.Symto): The bracket stack.
+            stack ([lexer.Symto]): The bracket stack.
         Returns:
             bool: True, if the matching bracket for the stack top was matched. Otherwise False.
         """
@@ -430,7 +430,7 @@ class BaseParser:
         Match a closing bracket and modify a bracket-stack on success.
 
         Args:
-            stack (list of lexer.Symto): The bracket stack.
+            stack ([lexer.Symto]): The bracket stack.
             closeBracket (str): The closing bracket to match.
         Returns:
             bool: True, if the bracket was matched. Otherwise False.
@@ -455,7 +455,7 @@ class BaseParser:
             startDelim (str): The starting delimiter.
             endDelim (str): The ending delimiter.
         Returns:
-            list of lexer.Symto: The block tokens.
+            [lexer.Symto]: The block tokens.
         """
         tokens = []
         if self.match(startDelim):
@@ -476,7 +476,7 @@ class ParseResult:
     The result of a parsing operation.
 
     Attributes:
-        references (list of objects.Reference): The references.
+        references ([objects.Reference]): The references.
         rootNamespace (objects.Namespace): The root namespace.
     """
 
@@ -492,7 +492,7 @@ class UnitParser(BaseParser):
         Parse all object types in the supplied list.
         
         Args:
-            classes (list of class): A list of classes to try to parse.
+            classes ([class]): A list of classes to try to parse.
             args: A list of arguments to forward to the object parsers.
         """
         if self.is_eof():
@@ -513,7 +513,7 @@ class UnitParser(BaseParser):
         Gather a list of parsable objects.
 
         Args:
-            classes (list of class): A list of classes to try to parse.
+            classes ([class]): A list of classes to try to parse.
             matchAfterSuccess (str): The symbol to match after a successful gather.
             args: Arguments to forward to the class.
         Returns:
@@ -535,7 +535,7 @@ class UnitParser(BaseParser):
         Gather all objects in a namespace.
         
         Returns:
-            list of object: The gathered objects.
+            [object]: The gathered objects.
         """
         # NOTE: Function should always come last
         return self.gather_objects([Namespace, Struct, Alias, Template, Function])
@@ -545,7 +545,7 @@ class UnitParser(BaseParser):
         Parse all library references.
         
         Returns:
-            list of objects.Reference: The reference list.
+            [objects.Reference]: The reference list.
         """
         # using statements
         references = []
@@ -580,7 +580,7 @@ class UnitParser(BaseParser):
         Parse the active token stream.
         
         Returns:
-            list of objects.Reference, objects.Namespace: The list of references and the global (root) namespace object.
+            objects.ParseResult: The list of references and the global (root) namespace object.
         """
         # Reset stream position
         self.reset(self.libName, self.fileName, self.tokens)

@@ -14,12 +14,22 @@ symbolic is a flexible compiler front-end for creating custom, C-style Domain Sp
     
     getting_started/project_configuration
     getting_started/compiling
-    
+
+.. toctree::
+    :maxdepth: 2
+    :caption: Symbolic Language
+
+    symbolic_language/aliases
+    symbolic_language/functions
+    symbolic_language/namespaces
+    symbolic_language/structures
+    symbolic_language/templates
+
 .. toctree::
     :glob:
     :maxdepth: 2
     :caption: Modules
-	
+	
     modules/*
 
 Glossary

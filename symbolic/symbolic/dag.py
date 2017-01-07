@@ -21,7 +21,7 @@ class Dependency:
     Attributes:
         obj (object): The object behind the dependency.
         location (objects.Location): The location of the object in the library.
-        references (list of objects.Reference): The references that are seen by this dependency.
+        references ([objects.Reference]): The references that are seen by this dependency.
         isPrivate (bool): True, if the object is private. Otherwise False.
         isDeprecated (bool): True, if the object is deprecated. Otherwise False.
     """
@@ -31,7 +31,7 @@ class Dependency:
         Initialize the object.
 
         Args:
-            references (list of objects.Reference): The references list.
+            references ([objects.Reference]): The references list.
             obj (object): The object behind the dependency.
         """
         self.obj = obj
@@ -67,8 +67,8 @@ class ResolvedDependencyLocation:
     A collection of dependencies that have been resolved to a location.
 
     Attributes:
-        dependencies (list of dag.Dependency): The dependencies at this location.
-        subLocations (dict of (str, dag.ResolvedDependencyLocation)): The sub-locations.    
+        dependencies ([dag.Dependency]): The dependencies at this location.
+        subLocations ({str, dag.ResolvedDependencyLocation}): The sub-locations.    
     """
 
     def __init__(self, dependencies=None, subLocations=None):
@@ -76,8 +76,8 @@ class ResolvedDependencyLocation:
         Initialize the object.
 
         Args:
-            dependencies (list of dag.Dependency): The dependencies at this location.
-            subLocations (dict of (str, dag.ResolvedDependencyLocation)): The sub-locations.
+            dependencies ([dag.Dependency]): The dependencies at this location.
+            subLocations ({str, dag.ResolvedDependencyLocation}): The sub-locations.
         """
         self.dependencies = dependencies if dependencies else []
         self.subLocations = subLocations if subLocations else {}
@@ -88,7 +88,7 @@ class NavigationResult:
 
     Attributes:
         libName (str): The library name.
-        resolvedDependencyLocation (list of dag.ResolvedDependencyLocation): The resolved dependency location.
+        resolvedDependencyLocation ([dag.ResolvedDependencyLocation]): The resolved dependency location.
     """
 
     def __init__(self, libName, resolvedDependencyLocation):
@@ -97,7 +97,7 @@ class NavigationResult:
 
         Args:
             libName (str): The library name.
-            resolvedDependencyLocation (list of dag.ResolvedDependencyLocation): The resolved dependency location.
+            resolvedDependencyLocation ([dag.ResolvedDependencyLocation]): The resolved dependency location.
         """
         self.libName = libName
         self.resolvedDependencyLocation = resolvedDependencyLocation
@@ -107,11 +107,11 @@ class ProjectDependencyCollection:
     A colllection of dependencies within a project.
 
     Attributes:
-        unresolvedDependencies (set of dag.Dependency): A set of unresolved dependencies.
+        unresolvedDependencies ({dag.Dependency}): A set of unresolved dependencies.
         libraries (dict): The libraries lookup table.
         resolvedObjects (defaultdict): Maps each library to a list of resolved objects
         links (dict): Maps unresolved dependencies to their resolved counterparts
-        locationConflicts (list of objects.LocationConflict): A list of location conflicts.
+        locationConflicts ([objects.LocationConflict]): A list of location conflicts.
     """
 
     def __init__(self):
@@ -129,8 +129,8 @@ class ProjectDependencyCollection:
         Navigate to a location.
 
         Args:
-            errorAnchor (objects.Anchor): The anchor to use in case an exception is thrown.
-            references (list of objects.Reference): The library references.
+            errorAnchor (lexer.Anchor): The anchor to use in case an exception is thrown.
+            references ([objects.Reference]): The library references.
             location (objects.Location): The location.
         Returns:
             dag.NavigationResult: The resolved location.
@@ -251,7 +251,7 @@ class ProjectDependencyCollection:
         Insert an object into the dependency collection.
 
         Args:
-            references (list of objects.Reference): The references list.
+            references ([objects.Reference]): The references list.
             obj (object): The object to insert.
         """
         # Create and cache the dependency
@@ -300,7 +300,7 @@ class ProjectDependencyCollection:
         Insert an unresolved translation unit into the collection.
 
         Args:
-            references (list of objects.Reference): The library import references.
+            references ([objects.Reference]): The library import references.
             rootNamespace (objects.Namespace): The global namespace.
         """
         # Create a dependency for every object

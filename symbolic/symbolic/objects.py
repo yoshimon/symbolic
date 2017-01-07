@@ -70,8 +70,8 @@ class RelativeLocation:
     Attributes:
         kind (objects.LocationKind): The location type specifier.
         name (str): The location name.
-        templateParameters (list of objects.TemplateParameter): The template parameters.
-        parameters (list of objects.Parameter): The signature.
+        templateParameters ([objects.TemplateParameter]): The template parameters.
+        parameters ([objects.Parameter]): The signature.
     """
 
     def __init__(self, kind, name, *, templateParameters=None, parameters=None):
@@ -79,8 +79,8 @@ class RelativeLocation:
         Args:
             kind (objects.LocationKind): The location type specifier.
             name (str): The location name.
-            templateParameters (list of objects.TemplateParameter): The template parameters.
-            parameters (list of objects.Parameter): The signature.
+            templateParameters ([objects.TemplateParameter]): The template parameters.
+            parameters ([objects.Parameter]): The signature.
         """
         self.kind = kind
         self.name = name
@@ -129,7 +129,7 @@ class Location:
     An (absolute) location within a library.
     
     Attributes:
-        path (list of objects.RelativeLocation): A list of relative location specifiers.
+        path ([objects.RelativeLocation]): A list of relative location specifiers.
     """
 
     def __init__(self, path):
@@ -137,7 +137,7 @@ class Location:
         Initialize the object.
 
         Args:
-            path (list of objects.RelativeLocation): A list of relative location specifiers.
+            path ([objects.RelativeLocation]): A list of relative location specifiers.
         """
         self.path = path
 
@@ -250,8 +250,8 @@ class Named(Locatable):
     
     Attributes:
         token (lexer.Symto): A token which holds the name.
-        userAnnotations (list of objects.Annotation): The user annotations.
-        sysAnnotations (list of objects.Annotation): The system annotations.
+        userAnnotations ([objects.Annotation]): The user annotations.
+        sysAnnotations ([objects.Annotation]): The system annotations.
         semantic (lexer.Symto): The semantic annotation.
     """
 
@@ -262,8 +262,8 @@ class Named(Locatable):
         Args:
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
-            userAnnotations (list of objects.Annotation): The user annotations.
-            sysAnnotations (list of objects.Annotation): The system annotations.
+            userAnnotations ([objects.Annotation]): The user annotations.
+            sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
         """
         super().__init__(parent, token.anchor)
@@ -290,8 +290,8 @@ class Named(Locatable):
         
         Args:
             kind (objects.LocationKind): The location kind of the final RelativeLocation.
-            templateParameters (list of objects.TemplateParameter): The template parameters at the final RelativeLocation.
-            parameters (list of objects.Parameter): The parameters at the final RelativeLocation.
+            templateParameters ([objects.TemplateParameter]): The template parameters at the final RelativeLocation.
+            parameters ([objects.Parameter]): The parameters at the final RelativeLocation.
         Returns:
             objects.Location: A location within the library.
         """
@@ -311,7 +311,7 @@ class Named(Locatable):
         Validate all system annotations.
 
         Args:
-            compatibleNames (list of str): A list, containing the compatible annotation names.
+            compatibleNames ([str]): A list, containing the compatible annotation names.
         """
         for annotation in self.sysAnnotations:
             if annotation.token.text not in compatibleNames:
@@ -336,8 +336,8 @@ class Reference(Named):
 
         Args:
             token (lexer.Symto): The reference text.
-            userAnnotations (list of objects.Annotation): The user annotations.
-            sysAnnotations (list of objects.Annotation): The system annotations.
+            userAnnotations ([objects.Annotation]): The user annotations.
+            sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
         """
         super().__init__(None, token, userAnnotations, sysAnnotations, semantic)
@@ -369,7 +369,7 @@ class Namespace(Named):
     A namespace within a library.
     
     Attributes:
-        objects (list of objects.Named): The Named object instances within the namespace.
+        objects ([objects.Named]): The Named object instances within the namespace.
     """
 
     @Decorators.validated
@@ -380,8 +380,8 @@ class Namespace(Named):
         Args:
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
-            userAnnotations (list of objects.Annotation): The user annotations.
-            sysAnnotations (list of objects.Annotation): The system annotations.
+            userAnnotations ([objects.Annotation]): The user annotations.
+            sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
         """
         Named.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic)
@@ -450,7 +450,7 @@ class TemplateObject(Named):
     A templatable object.
     
     Attributes:
-        body (list of lexer.Symto): The template body, represented by a list of tokens.
+        body ([lexer.Symto]): The template body, represented by a list of tokens.
     """
 
     def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body):
@@ -460,10 +460,10 @@ class TemplateObject(Named):
         Args:
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
-            userAnnotations (list of objects.Annotation): The user annotations.
-            sysAnnotations (list of objects.Annotation): The system annotations.
+            userAnnotations ([objects.Annotation]): The user annotations.
+            sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
-            body (list of lexer.Symto): The template body, represented by a list of tokens.
+            body ([lexer.Symto]): The template body, represented by a list of tokens.
         """
         super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
         self.body = body
@@ -504,10 +504,10 @@ class Instruction(Named):
     Attributes:
         kind (objects.InstructionKind): The instruction type specifier.
         expression (objects.Expression): The expression within the instruction.
-        instructions (list of objects.Instruction): The sub-instructions within the instruction (e.g. a for-loop body).
-        forInits (list of objects.Expression): The expressions for the for-loop initialization.
-        forPredicates (list of objects.Expression): The expressions for the for-loop predicates.
-        forSteps (list of objects.Expression): The expressions for the for-loop step.
+        instructions ([objects.Instruction]): The sub-instructions within the instruction (e.g. a for-loop body).
+        forInits ([objects.Expression]): The expressions for the for-loop initialization.
+        forPredicates ([objects.Expression]): The expressions for the for-loop predicates.
+        forSteps ([objects.Expression]): The expressions for the for-loop step.
     """
 
     @Decorators.validated
@@ -518,15 +518,15 @@ class Instruction(Named):
         Args:
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): An anomymous identifier for the object.
-            userAnnotations (list of objects.Annotation): The user annotations.
-            sysAnnotations (list of objects.Annotation): The system annotations.
+            userAnnotations ([objects.Annotation]): The user annotations.
+            sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
             kind (objects.InstructionKind): The instruction type specifier.
             expression (objects.Expression): The expression within the instruction.
-            instructions (list of objects.Instruction): The sub-instructions within the instruction (e.g. a for-loop body).
-            forInits (list of objects.Expression): The expressions for the for-loop initialization.
-            forPredicates (list of objects.Expression): The expressions for the for-loop predicates.
-            forSteps (list of objects.Expression): The expressions for the for-loop step.
+            instructions ([objects.Instruction]): The sub-instructions within the instruction (e.g. a for-loop body).
+            forInits ([objects.Expression]): The expressions for the for-loop initialization.
+            forPredicates ([objects.Expression]): The expressions for the for-loop predicates.
+            forSteps ([objects.Expression]): The expressions for the for-loop step.
         """
         super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
         self.kind = kind
@@ -600,7 +600,7 @@ class Instruction(Named):
         Args:
             parser (parsers.UnitParser): The parser to use.
         Returns:
-            list of objects.Instruction: The list of instructions.
+            [objects.Instruction]: The list of instructions.
         """
         parser.expect('{')
         # Parse all instructions in the body until } is found
@@ -615,7 +615,7 @@ class Instruction(Named):
 
         Args:
             parser (parsers.UnitParser): The parser to use.
-            args (list of str): The end delimiter list.
+            args ([str]): The end delimiter list.
         Returns:
             objects.Instruction: The instruction object or None, if no instruction was parsed.
         """
@@ -752,7 +752,7 @@ class ExpressionAST:
     Args:
         atom (objects.ExpressionAtom): The expression atom.
         parent (objects.ExpressionAST): The parent expression AST.
-        children (list of objects.ExpressionAST): The child expression ASTs.
+        children ([objects.ExpressionAST]): The child expression ASTs.
     """
 
     def __init__(self, atom, parent, children=None):
@@ -762,7 +762,7 @@ class ExpressionAST:
         Args:
             atom (objects.ExpressionAtom): The expression atom.
             parent (objects.ExpressionAST): The parent expression AST.
-            children (list of objects.ExpressionAST): The child expression ASTs.
+            children ([objects.ExpressionAST]): The child expression ASTs.
         """
         self.atom = atom
         self.parent = parent
@@ -773,8 +773,8 @@ class Expression(Named):
     An expression.
     
     Args:
-        tokens (list of lexer.Symto): The expression token list.
-        postfixAtoms (list of objects.ExpressionAtom): The expression atoms.
+        tokens ([lexer.Symto]): The expression token list.
+        postfixAtoms ([objects.ExpressionAtom]): The expression atoms.
         ast (objects.ExpressionAST): The expression AST.
     """
 
@@ -785,9 +785,9 @@ class Expression(Named):
 
         Args:
             parent (objects.Locatable): The parent object.
-            userAnnotations (list of objects.Annotation): The user annotations.
-            sysAnnotations (list of objects.Annotation): The system annotations.
-            tokens (list of lexer.Symto): The expression token list.
+            userAnnotations ([objects.Annotation]): The user annotations.
+            sysAnnotations ([objects.Annotation]): The system annotations.
+            tokens ([lexer.Symto]): The expression token list.
         """
         token = Symto.from_token(tokens[0], Token.Text, '')
         super().__init__(parent, token, userAnnotations, sysAnnotations, None)
@@ -814,9 +814,9 @@ class Expression(Named):
         Convert a token list to a postfix expression.
 
         Args:
-            tokens (list of lexer.Symto): The token list.
+            tokens ([lexer.Symto]): The token list.
         Returns:
-            list of objects.ExpressionAtom: The expression atoms, in RPN.
+            [objects.ExpressionAtom]: The expression atoms, in RPN.
         """
         class State(Enum):
             Default = 0
@@ -934,7 +934,7 @@ class Expression(Named):
         Convert a postfix (RPN) expression to an AST.
 
         Args:
-            postfixAtoms (list of objects.ExpressionAtom): The postfix atoms.
+            postfixAtoms ([objects.ExpressionAtom]): The postfix atoms.
         Returns:
             objects.ExpressionAST: The AST.
         """
@@ -1016,7 +1016,7 @@ class Expression(Named):
 
         Args:
             parser (parsers.UnitParser): The parser to use.
-            args (list of str): The end delimiter list.
+            args ([str]): The end delimiter list.
         Returns:
             objects.Expression: The expression or None, if no expression was parsed.
         """
@@ -1057,8 +1057,8 @@ class Parameter(Named):
         Args:
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
-            userAnnotations (list of objects.Annotation): The user annotations.
-            sysAnnotations (list of objects.Annotation): The system annotations.
+            userAnnotations ([objects.Annotation]): The user annotations.
+            sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
             typename (objects.Typename): The typename.
             isRef (bool): True, if the parameter is a reference. Otherwise False.
@@ -1137,7 +1137,7 @@ class Function(TemplateObject, Namespace):
         kind (objects.FunctionKind): The function kind.
         returnTypename (objects.Typename): The return typename.
         extensionTypename (objects.Typename): The extension typename.
-        parameters (list of objects.Parameter): The parameters.
+        parameters ([objects.Parameter]): The parameters.
     """
 
     @Decorators.validated
@@ -1148,14 +1148,14 @@ class Function(TemplateObject, Namespace):
         Args:
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
-            userAnnotations (list of objects.Annotation): The user annotations.
-            sysAnnotations (list of objects.Annotation): The system annotations.
+            userAnnotations ([objects.Annotation]): The user annotations.
+            sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
-            body (list of lexer.Symto): The template body.
+            body ([lexer.Symto]): The template body.
             kind (objects.FunctionKind): The function kind.
             returnTypename (objects.Typename): The return typename.
             extensionTypename (objects.Typename): The extension typename.
-            parameters (list of objects.Parameter): The parameters.
+            parameters ([objects.Parameter]): The parameters.
         """
         # Has to be bound first for validation
         self.kind = kind
@@ -1344,8 +1344,8 @@ class Member(Named):
         Args:
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
-            userAnnotations (list of objects.Annotation): The user annotations.
-            sysAnnotations (list of objects.Annotation): The system annotations.
+            userAnnotations ([objects.Annotation]): The user annotations.
+            sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
             typename (objects.Typename): The member typename.
         """
@@ -1398,7 +1398,7 @@ class MemberList(Named):
     A collection of Member objects that share the same Typename.
     
     Attributes:
-        members (list of objects.Member): A list of members.
+        members ([objects.Member]): A list of members.
         typename (objects.Typename): The member typename.
     """
 
@@ -1410,10 +1410,10 @@ class MemberList(Named):
         Args:
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
-            userAnnotations (list of objects.Annotation): The user annotations.
-            sysAnnotations (list of objects.Annotation): The system annotations.
+            userAnnotations ([objects.Annotation]): The user annotations.
+            sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
-            members (list of objects.Member): A list of members.
+            members ([objects.Member]): A list of members.
             typename (objects.Typename): The member typename.
         """
         super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
@@ -1477,10 +1477,10 @@ class Struct(TemplateObject, Namespace):
         Args:
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
-            userAnnotations (list of objects.Annotation): The user annotations.
-            sysAnnotations (list of objects.Annotation): The system annotations.
+            userAnnotations ([objects.Annotation]): The user annotations.
+            sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
-            body (list of lexer.Symto): The template body.
+            body ([lexer.Symto]): The template body.
         """
         Namespace.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic)
         TemplateObject.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body)
@@ -1580,10 +1580,10 @@ class Alias(TemplateObject):
         Args:
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
-            userAnnotations (list of objects.Annotation): The user annotations.
-            sysAnnotations (list of objects.Annotation): The system annotations.
+            userAnnotations ([objects.Annotation]): The user annotations.
+            sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
-            body (list of lexer.Symto): The template body.
+            body ([lexer.Symto]): The template body.
             targetTypename (objects.Typename): The target typename.
         """
         TemplateObject.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body)
@@ -1668,7 +1668,7 @@ class Annotation:
     
     Attributes:
         token (lexer.Symto): The name token.
-        args (list of str): The annotation arguments.
+        args ([str]): The annotation arguments.
     """
 
     def __init__(self, token, args):
@@ -1677,7 +1677,7 @@ class Annotation:
 
         Args:
             token (lexer.Symto): The name token.
-            args (list of str): The annotation arguments.
+            args ([str]): The annotation arguments.
         """
         self.token = token
         self.args = args
@@ -1688,11 +1688,11 @@ class Annotation:
         Convert an annotation list to a string list.
         
         Args:
-            collection (list of objects.Annotation): The annotation list.
+            collection ([objects.Annotation]): The annotation list.
             open (str): The opening string.
             close (str): The closing string.
         Returns:
-            list of str: The string list.
+            [str]: The string list.
         """
         result = ''
         for annotation in collection:
@@ -1710,9 +1710,9 @@ class Annotation:
         Convert a user annotation list to a string-list.
 
         Args:
-            collection (list of str): The user annotation list.
+            collection ([str]): The user annotation list.
         Returns:
-            list of str: The string list.
+            [str]: The string list.
         """
         return Annotation.list_to_str(collection, '[', ']')
 
@@ -1722,9 +1722,9 @@ class Annotation:
         Convert a system annotation list to a string-list.
 
         Args:
-            collection (list of str): The system annotation list.
+            collection ([str]): The system annotation list.
         Returns:
-            list of str: The string list.
+            [str]: The string list.
         """
         return Annotation.list_to_str(collection, '@')
 
@@ -1792,7 +1792,7 @@ class Annotation:
         Args:
             parser (parsers.UnitParser): The parser to use.
         Returns:
-            list of objects.Annotation, list of objects.Annotation: The user and system annotations.
+            [objects.Annotation], [objects.Annotation]: The user and system annotations.
         """
         userAnnotations = []
         sysAnnotations = []
@@ -1817,7 +1817,7 @@ class Annotation:
         Return a list of system annotation names.
         
         Returns:
-            set of str: A set of annotation names. 
+            {str}: A set of annotation names. 
         """
         return { 'static', 'private', 'noconstructor', 'deprecate' }
 
@@ -1828,7 +1828,7 @@ class Annotation:
 
         Args:
             name (str): The name to search for.
-            collection (list of objects.Annotation): The annotation collection.
+            collection ([objects.Annotation]): The annotation collection.
         Returns:
             bool: True, if an annotation with the specified name exists in the collection. Otherwise False.
         """
@@ -1839,10 +1839,10 @@ class Typename(Locatable):
     A typename.
     
     Attributes:
-        dims (list of int): The array dimensions.
-        scope (list of lexer.Symto): The name scope.
-        scopeStrings (list of str): The token scope list as a string list.
-        templateParameters (list of list of lexer.Symto): A template parameter list for each entry in the scope.
+        dims ([int]): The array dimensions.
+        scope ([lexer.Symto]): The name scope.
+        scopeStrings ([str]): The token scope list as a string list.
+        templateParameters ([[lexer.Symto]]): A template parameter list for each entry in the scope.
     """
 
     @Decorators.validated
@@ -1851,9 +1851,9 @@ class Typename(Locatable):
         Initialize the object.
 
         Args:
-            scope (list of lexer.Symto): The scope token list.
-            templateParameters (list of list of lexer.Symto): A template parameter list for each entry in the scope.
-            dims (list of int): The array dimensions. A value of None inside the list denotes an unbounded array.
+            scope ([lexer.Symto]): The scope token list.
+            templateParameters ([[lexer.Symto]]): A template parameter list for each entry in the scope.
+            dims ([int]): The array dimensions. A value of None inside the list denotes an unbounded array.
         """
         assert scope
 
@@ -1950,7 +1950,7 @@ class Typename(Locatable):
             parser (parsers.UnitParser): The parser to use.
             allowPartialMask (bool): Specifies whether partial masks are allowed, containing strings and identifiers.
         Returns:
-            list of objects.TemplateParameter: The template parameter list.
+            [objects.TemplateParameter]: The template parameter list.
         """
         templateParameters = []
         parameterMask = [Token.Name, Token.Literal.String] if allowPartialMask else [Token.Literal.String]
@@ -1972,7 +1972,7 @@ class Typename(Locatable):
         Args:
             parser (parsers.UnitParser): The parser to use.
         Returns:
-            list of int: The array dimensions.
+            [int]: The array dimensions.
         """
         dims = []
         if parser.match('['):
@@ -2006,7 +2006,7 @@ class Typename(Locatable):
             parser (parsers.UnitParser): The parser to use.
             allowPartialMask (bool): Specifies whether partial masks are allowed, containing strings and identifiers.
         Returns:
-            list of objects.Typename: The Typename or None, if no Typename was parsed.
+            [objects.Typename]: The Typename or None, if no Typename was parsed.
         """
         # Explicit scoping
         token = parser.match_kind(Token.Name)
@@ -2051,8 +2051,8 @@ class TemplateParameter(Named):
         Args:
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
-            userAnnotations (list of objects.Annotation): The user annotations.
-            sysAnnotations (list of objects.Annotation): The system annotations.
+            userAnnotations ([objects.Annotation]): The user annotations.
+            sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
         """
         super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
@@ -2111,10 +2111,10 @@ class Template(Named):
     A template.
 
     Attributes:
-        parameters (list of objects.TemplateParameter): The template parameter list.
+        parameters ([objects.TemplateParameter]): The template parameter list.
         obj (objects.TemplateObject): The template object attached to this template.
-        namespaceList (list of objects.Namespace): The namespace list to locate this template.
-        references (list of objects.Reference): The references to use when instantiating this template.
+        namespaceList ([objects.Namespace]): The namespace list to locate this template.
+        references ([objects.Reference]): The references to use when instantiating this template.
     """
 
     @Decorators.validated
@@ -2124,13 +2124,13 @@ class Template(Named):
 
         Args:
             parent (objects.Locatable): The parent object.
-            userAnnotations (list of objects.Annotation): The user annotations.
-            sysAnnotations (list of objects.Annotation): The system annotations.
+            userAnnotations ([objects.Annotation]): The user annotations.
+            sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
-            parameters (list of objects.TemplateParameter): The template parameter list.
+            parameters ([objects.TemplateParameter]): The template parameter list.
             obj (objects.TemplateObject): The template object attached to this template.
-            namespaceList (list of objects.Namespace): The namespace list to locate this template.
-            references (list of objects.Reference): The references to use when instantiating this template.
+            namespaceList ([objects.Namespace]): The namespace list to locate this template.
+            references ([objects.Reference]): The references to use when instantiating this template.
         """
         super().__init__(parent, obj.token, userAnnotations, sysAnnotations, semantic)
         self.obj = obj

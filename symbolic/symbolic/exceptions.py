@@ -26,7 +26,7 @@ class SourceError(Exception):
     An exception base class, that indicates an error that can be located in the source.
     
     Attributes:
-        anchor (objects.Anchor): The source code anchor.
+        anchor (lexer.Anchor): The source code anchor.
     """
 
     def __init__(self, anchor):
@@ -34,7 +34,7 @@ class SourceError(Exception):
         Initialize the object.
 
         Args:
-            anchor (objects.Anchor): The source code anchor.
+            anchor (lexer.Anchor): The source code anchor.
         """
         super().__init__()
         self.anchor = anchor
@@ -74,7 +74,7 @@ class UnexpectedTokenError(SourceError):
         Initialize the object.
 
         Args:
-            anchor (objects.Anchor): The source code anchor.
+            anchor (lexer.Anchor): The source code anchor.
             expected (lexer.Symto): The expected token.
             found (lexer.Symto): The current token in the token stream.
         """
@@ -109,7 +109,7 @@ class UnsupportedSystemAnnotationError(SourceError):
     
     Attributes:
        what (lexer.Symto): The expected token.
-       sysAnnotation (list of objects.Annotation): The system annotation.
+       sysAnnotation ([objects.Annotation]): The system annotation.
     """
 
     def __init__(self, what, sysAnnotation):
@@ -118,7 +118,7 @@ class UnsupportedSystemAnnotationError(SourceError):
 
         Args:
             what (lexer.Symto): The expected token.
-            sysAnnotation (list of objects.Annotation): The system annotation.
+            sysAnnotation ([objects.Annotation]): The system annotation.
         """
         super().__init__(sysAnnotation.token.anchor)
         self.what = what
@@ -146,7 +146,7 @@ class UnknownSystemAnnotationError(SourceError):
         Initialize the object.
 
         Args:
-            anchor (objects.Anchor): The anchor to associate with this error.
+            anchor (lexer.Anchor): The anchor to associate with this error.
             sysAnnotation (objects.Annotation): The system annotation.
         """
         super().__init__(anchor)
@@ -322,7 +322,7 @@ class DuplicateNameError(SourceError):
     An exception class, that indicates a duplicate name.
     
     Attributes:
-        secondAnchor (objects.Anchor): The anchor that triggered the error.
+        secondAnchor (lexer.Anchor): The anchor that triggered the error.
     """
 
     def __init__(self, firstAnchor, secondAnchor):
@@ -330,8 +330,8 @@ class DuplicateNameError(SourceError):
         Initialize the object.
 
         Args:
-            firstAnchor (objects.Anchor): The base anchor.
-            secondAnchor (objects.Anchor): The anchor that triggered the error.
+            firstAnchor (lexer.Anchor): The base anchor.
+            secondAnchor (lexer.Anchor): The anchor that triggered the error.
         """
         super().__init__(firstAnchor)
         self.secondAnchor = secondAnchor
@@ -370,7 +370,7 @@ class DependencyNotFoundError(SourceError):
         Initialize the object.
 
         Args:
-            anchor (objects.Anchor): The source code anchor.
+            anchor (lexer.Anchor): The source code anchor.
             location (objects.Location): The dependency location.
         """
         super().__init__(anchor)
@@ -398,7 +398,7 @@ class UnknownLibraryReferenceError(SourceError):
         Initialize the object.
 
         Args:
-            anchor (objects.Anchor): The source code anchor.
+            anchor (lexer.Anchor): The source code anchor.
             reference (str): The library reference.
         """
         super().__init__(anchor)
@@ -426,8 +426,8 @@ class DuplicateParameterSignatureError(SourceError):
         Initialize the object.
 
         Args:
-            anchor (objects.Anchor): The source code anchor.
-            otherAnchor (objects.Anchor): The other source code anchor.
+            anchor (lexer.Anchor): The source code anchor.
+            otherAnchor (lexer.Anchor): The other source code anchor.
         """
         super().__init__(anchor)
         self.otherAnchor = otherAnchor
@@ -439,4 +439,4 @@ class DuplicateParameterSignatureError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + 'Signature collides with existing declaration in "{0}".'.format(str(self.otherAnchor))
+        return super().__str__() + 'Signature collides with existing declaration {0}.'.format(str(self.otherAnchor))

@@ -90,7 +90,7 @@ class PrettyString:
         Create a PrettyString from a token stream.
 
         Args:
-            tokens (list of lexer.Symto): The token stream.
+            tokens ([lexer.Symto]): The token stream.
             firstLine (int): The first line.
         Returns:
             formatter.PrettyString: The PrettyString object.

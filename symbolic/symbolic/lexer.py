@@ -2,6 +2,7 @@
 
 # Built-in
 import re
+from collections import deque
 
 # Library
 from pygments.lexer import RegexLexer, include, bygroups, using, this, default, words
@@ -69,10 +70,10 @@ class Symto:
         Converts a token list to a string list.
 
         Args:
-            l (list of lexer.Symto): The token list.
+            l ([lexer.Symto]): The token list.
             none: Optional type to return for the None token.
         Returns:
-            list of str: The string list.
+            [str]: The string list.
         """
         return map(lambda t: t.text if t is not None else none, l)
 
@@ -82,11 +83,11 @@ class Symto:
         Join operation on a token list.
 
         Args:
-            l (list of lexer.Symto): The token list.
+            l ([lexer.Symto]): The token list.
             c (str): The join-string.
             none: Optional type to return for the None token.
         Returns:
-            list of str: The string list.
+            [str]: The string list.
         """
         return c.join(Symto.strlist(l, none))
 
@@ -237,11 +238,11 @@ class SymbolicLexer(RegexLexer):
     
     Attributes:
         name (str): The name of the lexer.
-        aliases (list of str): The lexer aliases.
-        filenames (list of str): The symbolic extensions.
+        aliases ([str]): The lexer aliases.
+        filenames ([str]): The symbolic extensions.
         priority (float): The lexer priority.
-        openBrackets (list of str): A list of all opening brackets.
-        closeBrackets (list of str): A list of all closing brackets.
+        openBrackets ([str]): A list of all opening brackets.
+        closeBrackets ([str]): A list of all closing brackets.
         tokens (dict): A regular expression state machine.
 
         fileName (str): The file name.
@@ -298,7 +299,7 @@ class SymbolicLexer(RegexLexer):
         Generate an unprocessed token stream.
 
         Args:
-            text (str): The text to tokenize.
+            text (str): Unused.
         """
 
         class _TokenValue:
@@ -324,16 +325,42 @@ class SymbolicLexer(RegexLexer):
                 self.line = line
                 self.column = column
 
+        # The member contains the right, unmodified text.
+        text = self._unmodifiedText
+
+        # Keeps track of the texts that still need processing.
         line = 1
         column = 1
-        for index, token, value in RegexLexer.get_tokens_unprocessed(self, self._unmodifiedText):
-            txt = self.subs[value] if (self.subs is not None) and (value in self.subs) else value
-            yield index, token, _TokenValue(txt, line, column)
-            if txt == '\n':
-                line += 1
-                column = 1
+
+        # Break it up into tokens.
+        for _, kind, value in RegexLexer.get_tokens_unprocessed(self, text):
+            # Perform substitution (recursion).
+            if (self.subs) and (value in self.subs):
+                # Perform the substitution.
+                newValue = self.subs[value]
+
+                # Prevent recursive substitution by deleting the key.
+                newSubs = dict(self.subs)
+                del newSubs[value]
+
+                # Generate the tokens recursively.
+                lex = SymbolicLexer(self.libName, self.fileName)
+                newTokens = lex.tokenize(newValue, newSubs)
             else:
-                column += len(txt)
+                newTokens = [Symto(kind, self.libName, self.fileName, value, 1, 1)]
+
+            # Emit all new tokens
+            for t in newTokens:
+                # Return the unpacked token.
+                # NOTE: packing / unpacking is required to work nicely with pygments.
+                yield 0, t.kind, _TokenValue(t.text, line, column)
+            
+                # Adjust line and column counters
+                if t.text == '\n':
+                    line += 1
+                    column = 1
+                else:
+                    column += len(t.text)
 
     def analyse_text(text):
         """
@@ -350,13 +377,11 @@ class SymbolicLexer(RegexLexer):
 
         Args:
             text (str): The text to tokenize.
-            subs (dict of (str, str)): The token substitution table.
+            subs ({str, str}): The token substitution table.
         """
         # NOTE: this fixes an issue with pygments which modifies the text
         tokens = self.get_tokens(text)
 
-        # TODO: replace the token with text and lex
- 
         # NOTE: this is used by the generator below
         # Bind substitution table
         # Bind unmodified text - pygments modifies the text that is passed in
@@ -374,9 +399,9 @@ class Ops:
     Symbolic operators.
     
     Attributes:
-        unary (dict of [str, [int, bool]]): The unary operators.
+        unary ({str, [int, bool]}): The unary operators.
             The dictionary maps unary operators to a precendence value and a left-associativity flag.
-        binary (dict of [str, [int, bool]]): The binary operators.
+        binary ({str, [int, bool]}): The binary operators.
             The dictionary maps binary operators to a precendence value and a left-associativity flag.
     """
 

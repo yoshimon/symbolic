@@ -11,7 +11,7 @@ class VirtualPath:
     
     Attributes:
         text (str): The underlying path string.
-        vars (dict of (str, str)): The variable mappings.
+        vars ({str, str}): The variable mappings.
     """
 
     def __init__(self, text=None):

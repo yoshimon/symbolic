@@ -11,7 +11,7 @@ class PPT:
     A pre-processor table.
     
     Attributes:
-        contents (dict of (str, str)): The underlying table.
+        contents ({str, str}): The underlying table.
     """
 
     def __init__(self, *, optFilePath=None):

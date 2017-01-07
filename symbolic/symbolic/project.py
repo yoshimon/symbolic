@@ -59,7 +59,7 @@ class LibraryConfiguration:
 
     Attributes:
         directoryPath (paths.VirtualPath): The directory path.
-        references (list of str): The library reference.
+        references ([str]): The library reference.
         preprocessorModuleFilePath (paths.VirtualPath or None): The file path for the pre-processor module.
         preprocessorClass (str): The class name inside the preprocessor module.
         ppt (preprocessors.PPT): The pre-processor table to use.
