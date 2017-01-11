@@ -198,8 +198,8 @@ class ProjectDependencyCollection:
                         # But only do that if this is not the last relative location
                         # since we are actually looking for the Alias in that case.
                         if i != len(location.path) - 1:
-                            targetTypenameLoc = dependencyObj.targetTypename.location()
-                            aliasNavResult = self.navigate(errorAnchor, references, targetTypenameLoc)
+                            aliasNavResult = NavigationResult(resolvedLibName, resolvedDependencyLocation)
+                            aliasNavResult = self.navigate_alias_base(aliasNavResult)
                             libName = aliasNavResult.libName
                             resolvedDependencyLocation = aliasNavResult.resolvedDependencyLocation
                     elif isinstance(dependencyObj, Template):
@@ -239,6 +239,7 @@ class ProjectDependencyCollection:
                                 templateObjHierarchyDepth -= 1
 
                             # Bind the location to a template.
+                            # TODO: this is not pointing to one object but an array of objects
                             self.templateLinks[dependencyLocationStr] = templateObj
 
                             # Insert it into the collection so we can look it up.
@@ -416,24 +417,19 @@ class ProjectDependencyCollection:
         Args:
             navResult (dag.NavigationResult): The previous navigation result to continue the search from.
         Returns:
-            dag.NavigationResult: The next navigation result.
+            dag.NavigationResult or None: The next navigation result or None if there was no resolvable alias.
         """
         if navResult is None:
             return None
 
         # There should only be one alias dependency at this location.
         dependencies = navResult.resolvedDependencyLocation.dependencies
-        if len(dependencies) != 1:
-            return None
-
-        # If it is not an alias we are done.
-        dependency = dependencies[0]
-        obj = dependency.obj
-        if not isinstance(obj, Alias):
+        dependency = next((dependency for dependency in dependencies if isinstance(dependency.obj, Alias)), None)
+        if dependency is None:
             return None
 
         # Navigate to the target type.
-        targetTypename = obj.targetTypename
+        targetTypename = dependency.obj.targetTypename
         return self.navigate(targetTypename.anchor, dependency.references, targetTypename.location())
 
     def navigate_alias_base(self, navResult):
