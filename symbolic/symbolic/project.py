@@ -209,7 +209,7 @@ class Project:
                 # Tokenize the source
                 lexer = SymbolicLexer(libName=libName, fileName=str(filePath))
                 srcFileTokens = lexer.tokenize(ppSrcFileText)
-                    
+
                 # Parse the unit and extract an object representation
                 unitParser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
                 parseResult = unitParser.parse()

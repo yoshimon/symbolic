@@ -248,6 +248,7 @@ class BaseParser:
 
         if not self.match(val):
             raise UnexpectedTokenError(self.token.anchor, val, self.token.text)
+
         return self.token
 
     def expect_kind(self, tokenType):

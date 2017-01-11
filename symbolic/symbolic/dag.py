@@ -155,6 +155,9 @@ class ProjectDependencyCollection:
         isImplicitRef = offset == 0
         libNameGen = chain([self.libName], (str(ref) for ref in references)) if isImplicitRef else ['.'.join(rl.name for rl in location[:offset])]
 
+        # Strip the library name
+        locationWithoutLibName = location[offset:]
+
         # Find the library and the object in the library
         lookup = None
         resolvedLibName = None
@@ -166,75 +169,90 @@ class ProjectDependencyCollection:
 
             # Loop through all sublocations and verify the assumption above
             allSubLocationsFound = True
-            for i, rl in enumerate(location[offset:]):
+            for i, rl in enumerate(locationWithoutLibName):
                 if rl.name not in lookup.subLocations:
                     allSubLocationsFound = False
                     break
 
-                # The dependencies associated with this name
+                # The dependencies associated with this name.
                 resolvedDependencyLocation = lookup.subLocations[rl.name]
                 dependencies = resolvedDependencyLocation.dependencies
 
-                # ADL (parameter signature)
-                dependency = next((d for d in dependencies if rl.parameters == d.location[i].parameters), None)
+                for dependency in dependencies:
+                    dependencyRL = dependency.location[i]
+                    
+                    # ADL
+                    if len(rl.templateParameters) != len(dependencyRL.templateParameters):
+                        continue
 
-                if not dependency:
-                    raise OverloadNotFoundError(errorAnchor)
+                    # TODO: properly compare signatures.
+                    # Compare navigate to parameter typenames and make sure they are identical
+                    if rl.parameters != dependencyRL.parameters:
+                        continue
 
-                dependencyRL = dependency.location[i]
+                    dependencyObj = dependency.obj
 
-                # Make sure the template arguments match
-                if len(rl.templateParameters) != len(dependencyRL.templateParameters):
-                    raise TemplateMismatchError(errorAnchor)
+                    # If it is an alias then we have to lookup the aliased type instead
+                    # since aliases don't have any sublocations.
+                    if isinstance(dependencyObj, Alias):
+                        # But only do that if this is not the last relative location
+                        # since we are actually looking for the Alias in that case.
+                        if i != len(location.path) - 1:
+                            targetTypenameLoc = dependencyObj.targetTypename.location()
+                            aliasNavResult = self.navigate(errorAnchor, references, targetTypenameLoc)
+                            libName = aliasNavResult.libName
+                            resolvedDependencyLocation = aliasNavResult.resolvedDependencyLocation
+                    elif isinstance(dependencyObj, Template):
+                        # Lazily instantiate templates, if we encounter one.
+                        # Make sure we did not instantiate the template already.
+                        templateInstanceArgs =  ", ".join(str(p) for p in rl.templateParameters)
+                        dependencyLocationStr = "{0} with <{1}>".format(str(dependency.location), templateInstanceArgs)
 
-                # Lazily instantiate templates, if we encounter one.
-                dependencyObj = dependency.obj
-                if isinstance(dependencyObj, Template):
-                    # Make sure we did not instantiate the template already.
-                    templateInstanceArgs =  ", ".join(str(p) for p in rl.templateParameters)
-                    dependencyLocationStr = "{0} with <{1}>".format(str(dependency.location), templateInstanceArgs)
+                        if dependencyLocationStr not in self.templateLinks:
+                            # Generate the translation unit for the template.
+                            templateSrc = dependencyObj.generate_translation_unit()
 
-                    if dependencyLocationStr not in self.templateLinks:
-                        # Generate the translation unit for the template.
-                        templateSrc = dependencyObj.generate_translation_unit()
+                            # Run the pre-processor on the source.
+                            # TODO: run pre-processor based on the location
+                            ppTemplateSrc = templateSrc # self.preprocessor.run(templateSrc, LIBNAME, PPT)
 
-                        # Run the pre-processor on the source.
-                        # TODO: run pre-processor based on the location
-                        ppTemplateSrc = templateSrc # self.preprocessor.run(templateSrc, LIBNAME, PPT)
+                            # Lex the unit so we can parse it.
+                            lexer = SymbolicLexer(libName=self.libName, fileName="$Templates/{0}".format(str(dependencyObj.token)))
 
-                        # Lex the unit so we can parse it.
-                        lexer = SymbolicLexer(libName=self.libName, fileName="$Templates/{0}".format(str(dependencyObj.token)))
+                            # Plugin the template substitutions for the lexer.
+                            templateSubs = { dependencyRL.templateParameters[i].token.text: parameter.text[1:-1] for i, parameter in enumerate(rl.templateParameters) }
 
-                        # Plugin the template substitutions for the lexer.
-                        templateSubs = { dependencyRL.templateParameters[i].token.text: parameter.text[1:-1] for i, parameter in enumerate(rl.templateParameters) }
+                            # Generate a parsable token stream now.
+                            srcFileTokens = lexer.tokenize(ppTemplateSrc, subs=templateSubs)
 
-                        # Generate a parsable token stream now.
-                        srcFileTokens = lexer.tokenize(ppTemplateSrc, subs=templateSubs)
+                            # TODO: concatenate tokens if this is the (last-1) template level.
 
-                        # Analyze the token stream.
-                        parser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
-                        parseResult = parser.parse()
+                            # Analyze the token stream.
+                            parser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
+                            parseResult = parser.parse()
 
-                        # Lookup the template object
-                        templateObjHierarchyDepth = len(dependencyObj.namespaceList)
-                        templateObj = parseResult.rootNamespace.objects[0]
-                        while templateObjHierarchyDepth > 0:
-                            templateObj = templateObj.objects[0]
-                            templateObjHierarchyDepth -= 1
+                            # Lookup the template object
+                            templateObjHierarchyDepth = len(dependencyObj.namespaceList)
+                            templateObj = parseResult.rootNamespace.objects[0]
+                            while templateObjHierarchyDepth > 0:
+                                templateObj = templateObj.objects[0]
+                                templateObjHierarchyDepth -= 1
 
-                        # Bind the location to a template.
-                        self.templateLinks[dependencyLocationStr] = templateObj
+                            # Bind the location to a template.
+                            self.templateLinks[dependencyLocationStr] = templateObj
 
-                        # Insert it into the collection so we can look it up.
-                        self.insert_unit(parseResult.references, parseResult.rootNamespace)
+                            # Insert it into the collection so we can look it up.
+                            self.insert_unit(parseResult.references, parseResult.rootNamespace)
                         
-                    # Use template links to jump to the right location, which is anonymous.
-                    templateObj = self.templateLinks[dependencyLocationStr]
-                    templateNavResult = self.navigate(dependencyObj.token.anchor, references, templateObj.location())
-                    resolvedDependencyLocation = templateNavResult.resolvedDependencyLocation
+                        # Use template links to jump to the right location, which is anonymous.
+                        templateObj = self.templateLinks[dependencyLocationStr]
+                        templateNavResult = self.navigate(dependencyObj.token.anchor, references, templateObj.location())
+                        templateAliasNavResult = self.navigate_alias_base(templateNavResult)
+                        resolvedDependencyLocation = templateAliasNavResult.resolvedDependencyLocation
 
-                # Step down this namespace
-                lookup = resolvedDependencyLocation
+                    # Step down this namespace
+                    lookup = resolvedDependencyLocation
+                    break
 
             # If we verified the location we can stop the search.
             locationFound = allSubLocationsFound

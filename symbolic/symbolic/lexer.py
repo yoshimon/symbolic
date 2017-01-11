@@ -271,6 +271,7 @@ class SymbolicLexer(RegexLexer):
             (r"'[^\']*'", String),
             (r'"[^\"]*"', String),
             (r'[,;(){}\\]', Punctuation),
+            (r'##', Punctuation),
             (r'\s', Text),
             (r'\n', Text),
         ],
@@ -334,14 +335,25 @@ class SymbolicLexer(RegexLexer):
 
         # Break it up into tokens.
         for _, kind, value in RegexLexer.get_tokens_unprocessed(self, text):
-            # Perform substitution (recursion).
-            if (self.subs) and (value in self.subs):
-                # Perform the substitution.
-                newValue = self.subs[value]
+            # Perform substitution.
+            # Either regular or with string ("") packing.
+            wasSubstituted = False
+            unpackedValue = value
+            if self.subs:
+                wasSubstituted = value in self.subs
+                if wasSubstituted:
+                    newValue = self.subs[value]
+                elif kind == Token.String:
+                    unpackedValue = value[1:-1]
+                    wasSubstituted = unpackedValue in self.subs
+                    if wasSubstituted:    
+                        # Repack the new value.
+                        newValue = '"{0}"'.format(self.subs[unpackedValue])
 
+            if wasSubstituted:
                 # Prevent recursive substitution by deleting the key.
                 newSubs = dict(self.subs)
-                del newSubs[value]
+                del newSubs[unpackedValue]
 
                 # Generate the tokens recursively.
                 lex = SymbolicLexer(self.libName, self.fileName)
@@ -393,6 +405,33 @@ class SymbolicLexer(RegexLexer):
         self.subs = None
         
         return tokens
+
+    @staticmethod
+    def concatenate_tokens(tokens):
+        """
+        Concatenate two tokens if separated by the concatenation operator.
+
+        Args:
+            tokens ([lexer.Symto]): The token sequence to process.
+        Returns:
+            [lexer.Symto]: The new token sequence.
+        """
+        newTokens = []
+        skipNext = False
+        for i, t in enumerate(tokens):
+            if skipNext:
+                skipNext = False
+                continue
+
+            if t.text == "##":
+                # Concat if possible.
+                if (i > 0) and (i < len(tokens) - 1):
+                    newTokens[-1] = Symto.from_token(tokens[i-1], Token.Name, tokens[i-1].text + tokens[i+1].text)
+                    skipNext = True
+            else:
+                newTokens.append(t)
+
+        return newTokens
 
 class Ops:
     """

@@ -279,6 +279,7 @@ class Named(Locatable):
         if self.token.text == '':
             # Generate an anonymous name
             self.token.text = '@{0}'.format(id(self))
+            self.token.kind = Token.Text
 
     def validate(self):
         """Validate the object."""
@@ -1021,8 +1022,8 @@ class Expression(Named):
             objects.Expression: The expression or None, if no expression was parsed.
         """
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
-        tokens = parser.until_any(args)
         try:
+            tokens = parser.until_any(args)
             return Expression(parser.namespaceStack[-1], userAnnotations, sysAnnotations, tokens)
         except:
             return None
@@ -1202,11 +1203,11 @@ class Function(TemplateObject, Namespace):
         hasExplicitReturnType = returnTypename is not None
 
         # If the next token is not an ID then returnTypename
-        # is actually the function name / scope and the return type is implicit void
+        # is actually the function name / scope and the return type is implicit.
         if parser.token.kind != Token.Name:
             if hasExplicitReturnType:
                 name = returnTypename.scope[-1]
-            returnTypenameToken = Symto.from_token(parser.token, Token.Name, 'void')
+            returnTypenameToken = Symto.from_token(parser.token, Token.Name, Typename.default_return_typename())
             returnTypename = Typename([returnTypenameToken])
         
         if hasExplicitReturnType:
@@ -1243,10 +1244,9 @@ class Function(TemplateObject, Namespace):
                         kind = FunctionKind.Operator
                         name = parser.expect_kind(Token.Operator)
 
-
-            if parser.match('('):
-                parameters = parser.gather_objects([Parameter], ',')
-                parser.expect(')')
+        if parser.match('('):
+            parameters = parser.gather_objects([Parameter], ',')
+            parser.expect(')')
 
         semantic = Annotation.parse_semantic(parser)
 
@@ -1294,7 +1294,9 @@ class Function(TemplateObject, Namespace):
             asAnonymous (bool): Set this to True, if the template should be emitted with an anonymous name.
         """
         # ReturnType
-        prettyString += str(self.returnTypename)
+        # Do not emit default return type.
+        if not self.returnTypename.is_default_return_typename():
+            prettyString += str(self.returnTypename)
 
         # Name
         if not asAnonymous:
@@ -1351,11 +1353,6 @@ class Member(Named):
         """
         super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
         self.typename = typename
-
-        # Make sure that the typename is not void
-        for token in typename.scope:
-            if token.text == 'void':
-                raise InvalidTypenameError(token.anchor)
 
     def validate(self):
         """Validate the object."""
@@ -1876,28 +1873,7 @@ class Typename(Locatable):
 
     def validate(self):
         """Validate the object."""
-        firstToken = self.scope[0]
-
-        # Validate the first scope token
-        if firstToken.text in Language.systemTypenames:
-            # The scope has to be exactly 1
-            if len(self.scope) > 1:
-                raise InvalidTypenameError(firstToken.anchor)
-
-            # Default typenames are never templated
-            if self.templateParameters[0]:
-                raise InvalidTypenameError(firstToken.anchor)
-
-            # void does not have array bounds
-            if firstToken.text == 'void':
-                if len(self.dims) > 0:
-                    raise InvalidTypenameError(firstToken.anchor)
-
-        # Validate the entire scope
-        # if any(token.text in Language.systemTypenames for token in self.scope[1:]):
-        #    raise InvalidTypenameError(self.scope[0].anchor)
-
-        # Should not be a keyword
+        # Should not be a keyword.
         if any(token.text in Language.keywords for token in self.scope):
             raise InvalidTypenameError(self.scope[0].anchor)
 
@@ -1909,6 +1885,36 @@ class Typename(Locatable):
             objects.Location: A location within the library.
         """
         return Location([RelativeLocation(LocationKind.Unresolved, s, templateParameters=self.templateParameters[i]) for i, s in enumerate(self.scopeStrings)])
+
+    @staticmethod
+    def default_return_typename():
+        """
+        Return the default return typename.
+
+        Returns:
+            Typename: The default return typename.
+        """
+        return Typename([Symto(Token.Name, "$System", "", "void", 1, 1)])
+
+    def is_default_return_typename(self):
+        """
+        Return whether the typename represents the default return typename.
+
+        Returns:
+            bool: True, if this typename represents the default typename. Otherwise False.
+        """
+        return self == Typename.default_return_typename()
+
+    def __eq__(self, other):
+        """
+        Return whether two typename objects are equal.
+
+        Args:
+            other (objects.Typename): The other typename object.
+        Returns:
+            bool: True, if the two objects are equal. Otherwise False.
+        """
+        return str(self) == str(other)
 
     def __str__(self):
         """
