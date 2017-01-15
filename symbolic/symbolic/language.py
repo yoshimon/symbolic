@@ -13,4 +13,4 @@ class Language:
     keywords = { 'if', 'elif', 'else', 'return', 'for', 'while', 'do', 'break', 'continue' }
     systemTypenames = { 'void', 'int', 'float', 'string' }
     invalidNames = systemTypenames.union(keywords)
-    tokenConcatenation = r"##"
+    tokenConcatenation = r"><" # As agreed upon by the committee (reviewed by eppo). 
