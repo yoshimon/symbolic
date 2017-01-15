@@ -263,6 +263,7 @@ class SymbolicLexer(RegexLexer):
 
     tokens = {
         'root': [
+            (Language.tokenConcatenation, Punctuation),
             (r'[a-zA-Z_]\w*', Name),
             (r'(\d+\.\d*|\.\d+|\d+)[eE][+-]?\d+', Number.Float),
             (r'(\d+\.\d*|\.\d+|\d+[fF])[fF]?', Number.Float),
@@ -274,7 +275,6 @@ class SymbolicLexer(RegexLexer):
             (r"'[^\']*'", String),
             (r'"[^\"]*"', String),
             (r'[,;(){}\\]', Punctuation),
-            (Language.tokenConcatenation, Punctuation),
             (r'\s', Text),
             (r'\n', Text),
         ],
