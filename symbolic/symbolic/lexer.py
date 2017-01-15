@@ -49,7 +49,7 @@ class Anchor:
 
 class Symto:
     """
-    A Symbolic token.
+    A symbolic token.
     
     Args:
         isOp (bool): Indicates whether the token is an operator.

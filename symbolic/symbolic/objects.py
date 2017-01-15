@@ -2209,7 +2209,10 @@ class Template(Named):
         result += ' {'
         result += '\n'
         result.indentLevel += 1
-        result.value += PrettyString.from_tokens(self.obj.body, self.obj.body[0].anchor.line) if len(self.obj.body) > 0 else 1
+
+        if len(self.obj.body) > 0:
+            result.value += PrettyString.from_tokens(self.obj.body, self.obj.body[0].anchor.line)
+
         result += '\n'
         result.indentLevel -= 1
         result += '}'
