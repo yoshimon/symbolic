@@ -227,7 +227,7 @@ class ProjectDependencyCollection:
                             # Generate a parsable token stream now.
                             srcFileTokens = lexer.tokenize(ppTemplateSrc, subs=templateSubs)
 
-                            # TODO: concatenate tokens if this is the (last-1) template level.
+                            # Concatenate tokens if the substituted tokens.
                             srcFileTokens = lexer.concatenate_tokens(srcFileTokens)
 
                             # Analyze the token stream.
