@@ -226,8 +226,6 @@ class ProjectDependencyCollection:
 
                             # Generate a parsable token stream now.
                             srcFileTokens = lexer.tokenize(ppTemplateSrc, subs=templateSubs)
-
-                            # Concatenate tokens if the substituted tokens.
                             srcFileTokens = lexer.concatenate_tokens(srcFileTokens)
 
                             # Analyze the token stream.
@@ -242,7 +240,6 @@ class ProjectDependencyCollection:
                                 templateObjHierarchyDepth -= 1
 
                             # Bind the location to a template.
-                            # TODO: this is not pointing to one object but an array of objects
                             self.templateLinks[dependencyLocationStr] = templateObj
 
                             # Insert it into the collection so we can look it up.
