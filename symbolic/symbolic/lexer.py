@@ -9,6 +9,9 @@ from pygments.lexer import RegexLexer, include, bygroups, using, this, default, 
 from pygments.token import Token, Text, Operator, Name, String, Number, Punctuation, Error
 from pygments.filter import simplefilter
 
+# Project
+from symbolic.language import Language
+
 class Anchor:
     """
     An anchor in the source code.
@@ -271,7 +274,7 @@ class SymbolicLexer(RegexLexer):
             (r"'[^\']*'", String),
             (r'"[^\"]*"', String),
             (r'[,;(){}\\]', Punctuation),
-            (r'##', Punctuation),
+            (Language.tokenConcatenation, Punctuation),
             (r'\s', Text),
             (r'\n', Text),
         ],
@@ -423,7 +426,7 @@ class SymbolicLexer(RegexLexer):
                 skipNext = False
                 continue
 
-            if t.text == "##":
+            if t.text == Language.tokenConcatenation:
                 # Concat if possible.
                 if (i > 0) and (i < len(tokens) - 1):
                     newTokens[-1] = Symto.from_token(tokens[i-1], Token.Name, tokens[i-1].text + tokens[i+1].text)
