@@ -170,8 +170,10 @@ class ProjectDependencyCollection:
             # Loop through all sublocations and verify the assumption above
             allSubLocationsFound = True
             for i, rl in enumerate(locationWithoutLibName):
+                # Assume the assumption above is false.
+                allSubLocationsFound = False
+
                 if rl.name not in lookup.subLocations:
-                    allSubLocationsFound = False
                     break
 
                 # The dependencies associated with this name.
@@ -226,6 +228,7 @@ class ProjectDependencyCollection:
                             srcFileTokens = lexer.tokenize(ppTemplateSrc, subs=templateSubs)
 
                             # TODO: concatenate tokens if this is the (last-1) template level.
+                            srcFileTokens = lexer.concatenate_tokens(srcFileTokens)
 
                             # Analyze the token stream.
                             parser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
@@ -252,6 +255,7 @@ class ProjectDependencyCollection:
                         resolvedDependencyLocation = templateAliasNavResult.resolvedDependencyLocation
 
                     # Step down this namespace
+                    allSubLocationsFound = True
                     lookup = resolvedDependencyLocation
                     break
 
