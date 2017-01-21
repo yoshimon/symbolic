@@ -221,6 +221,17 @@ class Symto:
         """
         return self.text
 
+    def __eq__(self, other):
+        """
+        Return whether the token equals another token.
+
+        Args:
+            other (lexer.Symto or None): The other token.
+        Returns:
+            bool: True, if the tokens are equal. Otherwise False.
+        """
+        return (other != None) and (self.text == other.text)
+
 @simplefilter
 def _symbolic_filter(self, lexer, stream, options):
     """

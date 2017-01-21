@@ -9,9 +9,11 @@ class Language:
         systemTypenames ({str}): All built-in typenames in symbolic.
         invalidNames ({str}): A set of invalid object names.
         tokenConcatenation (str): The token concatenator. Used within templates.
+        sysAnnotations ({str}): All system annotation names.
     """
 
     keywords = { 'if', 'elif', 'else', 'return', 'for', 'while', 'do', 'break', 'continue' }
     systemTypenames = { 'void', 'int', 'float', 'string' }
     invalidNames = systemTypenames.union(keywords)
     tokenConcatenation = r"><" # As agreed upon by the committee (reviewed by eppo). 
+    sysAnnotations = { 'static', 'private', 'noconstructor', 'deprecate' }

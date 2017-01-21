@@ -3,6 +3,7 @@
 # Built-in
 from itertools import chain
 from collections import deque, defaultdict
+import functools
 
 # Library
 import networkx as nx
@@ -180,16 +181,22 @@ class ProjectDependencyCollection:
                 resolvedDependencyLocation = lookup.subLocations[rl.name]
                 dependencies = resolvedDependencyLocation.dependencies
 
-                for dependency in dependencies:
+                # Perform ADL to filter out potential matches.
+                possibleMatches = filter(lambda dependency: rl.might_be_equal_to(dependency.location[i]), dependencies)
+                if not possibleMatches:
+                    continue
+
+                # Find the best match out of the possible matches by counting the number of
+                # partial matches. The highest match count wins.
+                countPartialMatches = lambda templateParameters: functools.reduce(lambda numMatches, p: numMatches + 1 if p.partialMatch is not None else 0, templateParameters, 0) 
+                dependencyCmp = lambda a, b: countPartialMatches(b.location[i].templateParameters) - countPartialMatches(a.location[i].templateParameters)
+                bestMatches = sorted(possibleMatches, key=functools.cmp_to_key(dependencyCmp))
+
+                for dependency in bestMatches:
                     dependencyRL = dependency.location[i]
                     
                     # ADL
-                    if len(rl.templateParameters) != len(dependencyRL.templateParameters):
-                        continue
-
-                    # TODO: properly compare signatures.
-                    # Compare navigate to parameter typenames and make sure they are identical
-                    if rl.parameters != dependencyRL.parameters:
+                    if not rl.might_be_equal_to(dependencyRL):
                         continue
 
                     dependencyObj = dependency.obj
@@ -222,7 +229,7 @@ class ProjectDependencyCollection:
                             lexer = SymbolicLexer(libName=self.libName, fileName="$Templates/{0}".format(str(dependencyObj.token)))
 
                             # Plugin the template substitutions for the lexer.
-                            templateSubs = { dependencyRL.templateParameters[i].token.text: parameter.text[1:-1] for i, parameter in enumerate(rl.templateParameters) }
+                            templateSubs = { dependencyRL.templateParameters[i].token.text: parameter.token.text[1:-1] for i, parameter in enumerate(rl.templateParameters) }
 
                             # Generate a parsable token stream now.
                             srcFileTokens = lexer.tokenize(ppTemplateSrc, subs=templateSubs)
@@ -299,16 +306,13 @@ class ProjectDependencyCollection:
                         raise DuplicateNameError(obj.anchor, otherDependency.obj.anchor)
 
                     # If the template and signature matches then it might be a conflict
-                    if len(rl.templateParameters) == len(otherDependencyRL.templateParameters):
-                        if len(rl.parameters) == len(otherDependencyRL.parameters):
-                            # It might be a conflict if the parameter modifiers match
-                            # The parameter typenames need to be resolved later to verify the conflict
-                            isConflict = Algorithm.all_sequence(rl.parameters, otherDependencyRL.parameters,
-                                                                lambda p0, p1: p0.isRef == p1.isRef)
-
-                            if isConflict:
-                                conflict = LocationConflict(dependency, otherDependency)
-                                self.locationConflicts.append(conflict)
+                    if rl.might_be_equal_to(otherDependencyRL):
+                        # Partial matches must match exactly.
+                        isExactPartialMatch = Algorithm.zip_all(rl.templateParameters, otherDependencyRL.templateParameters,
+                                                                lambda p0, p1: p0.partialMatch == p1.partialMatch)
+                        if isExactPartialMatch:
+                            conflict = LocationConflict(dependency, otherDependency)
+                            self.locationConflicts.append(conflict)
 
                 # Register dependency at this location
                 existingDependencies.append(dependency)

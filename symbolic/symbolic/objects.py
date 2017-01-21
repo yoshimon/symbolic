@@ -98,6 +98,24 @@ class RelativeLocation:
         """
         return (not self.templateParameters) and (not self.parameters)
 
+    def might_be_equal_to(self, other):
+        """
+        Return whether two relative locations could be potentially equal.
+
+        This function compares the signatures of both relative locations without
+        looking at the parameter types.
+
+        Returns:
+            bool: True, if the signatures match, excluding a test for type equality. Otherwise False.
+        """
+        return (
+            (self.kind == other.kind or self.kind == LocationKind.Unresolved or other.kind == LocationKind.Unresolved) and
+            self.name == other.name and
+            len(self.parameters) == len(other.parameters) and
+            Algorithm.zip_all(self.templateParameters, other.templateParameters,
+                              lambda p0, p1: p0.partialMatch is None or p1.partialMatch is None or p0.partialMatch == p1.partialMatch)
+        )
+
     def __str__(self):
         """
         Return a string representation of the object.
@@ -1800,23 +1818,13 @@ class Annotation:
                 if annotation is None: break
 
                 # Make sure the system annotation exists
-                if not annotation.token.text in Annotation.sys_annotations():
+                if not annotation.token.text in Language.sysAnnotations:
                     raise UnknownSystemAnnotationError(annotation.token.anchor, annotation.token.text)
 
                 sysAnnotations.append(annotation)
             else:
                 userAnnotations.append(annotation)
         return userAnnotations, sysAnnotations
-
-    @staticmethod
-    def sys_annotations():
-        """
-        Return a list of system annotation names.
-        
-        Returns:
-            {str}: A set of annotation names. 
-        """
-        return { 'static', 'private', 'noconstructor', 'deprecate' }
 
     @staticmethod
     def has(name, collection):
@@ -1965,7 +1973,7 @@ class Typename(Locatable):
                 token = parser.match_any_kind(parameterMask)
                 if token is None:
                     break
-                templateParameters += [token]
+                templateParameters.append(TemplateParameter(None, token, [], [], None, token))
                 parser.match(',')
             parser.expect('>')
         return templateParameters
@@ -2050,7 +2058,7 @@ class Typename(Locatable):
 class TemplateParameter(Named):
     """A template parameter."""
 
-    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic):
+    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, partialMatch):
         """
         Initialize the object.
 
@@ -2060,8 +2068,11 @@ class TemplateParameter(Named):
             userAnnotations ([objects.Annotation]): The user annotations.
             sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
+            partialMatch (lexer.Symto or None): A token that represents the partial template mask.
         """
         super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
+        
+        self.partialMatch = partialMatch
 
     @staticmethod
     def parse(parser, args):
@@ -2076,12 +2087,16 @@ class TemplateParameter(Named):
         """
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
 
+        # Name
         name = parser.match_kind(Token.Name)
         if name is None:
             return None
 
+        # Partial template specialization using = VALUE syntax
+        partialMatch = parser.expect_kind(Token.String) if parser.match("=") else None
+
         semantic = Annotation.parse_semantic(parser)
-        return TemplateParameter(parser.namespaceStack[-1], name, userAnnotations, sysAnnotations, semantic)
+        return TemplateParameter(parser.namespaceStack[-1], name, userAnnotations, sysAnnotations, semantic, partialMatch)
 
     def __str__(self):
         """

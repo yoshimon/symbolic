@@ -29,7 +29,7 @@ class Algorithm:
         return isEmpty
 
     @staticmethod
-    def all_sequence(a, b, predicate):
+    def zip_all(a, b, predicate):
         """
         Compare two sequences for equality based on a predicate.
 
@@ -40,6 +40,9 @@ class Algorithm:
         Returns:
             bool: True, if the lists are equal. Otherwise False.
         """
+        if len(a) != len(b):
+            return False
+
         for i, e0 in enumerate(a):
             if not predicate(e0, b[i]):
                 return False
