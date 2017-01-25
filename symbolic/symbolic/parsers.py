@@ -576,6 +576,15 @@ class UnitParser(BaseParser):
 
         return references
 
+    def namespace(self):
+        """
+        Return the current namespace on top of the namespace stack.
+
+        Returns:
+            objects.Namespace: The namespace on top of the namespace stack.
+        """
+        return self.namespaceStack[-1]
+
     def parse(self):
         """
         Parse the active token stream.

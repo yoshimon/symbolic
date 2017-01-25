@@ -125,13 +125,16 @@ class ProjectDependencyCollection:
         self.libName = None # The name of the library that is being monitored
         self.templateLinks = {} # Maps locations to template instantiation results.
 
-    def navigate(self, errorAnchor, references, location):
+    def navigate(self, errorAnchor, references, parent, location):
         """
         Navigate to a location.
 
         Args:
             errorAnchor (lexer.Anchor): The anchor to use in case an exception is thrown.
             references ([objects.Reference]): The library references.
+            parent (objects.Locatable or None): The parent object to start the search at.
+                The navigation will start the the parent and, on failure, move up the
+                hierarchy until a match is found.
             location (objects.Location): The location.
         Returns:
             dag.NavigationResult: The resolved location.
@@ -158,6 +161,21 @@ class ProjectDependencyCollection:
 
         # Strip the library name
         locationWithoutLibName = location[offset:]
+        relativeLocationPath = [locationWithoutLibName[-1]] if locationWithoutLibName else []
+
+        # Generate a sequence of additional locations to search at.
+        # This will search the parent location, and all of its parents first.
+        locationsWithoutLibName = deque()
+        currentParent = parent
+        namespaceOffset = 0 # The location offset used in the for loop below.
+        while (currentParent is not None) and (currentParent.parent is not None):
+            # Prepend the location of the parent to the search path.
+            parentPath = currentParent.location().path
+            otherLocationWithoutLibName = Location(parentPath + relativeLocationPath)
+            locationsWithoutLibName.append(otherLocationWithoutLibName)
+            currentParent = currentParent.parent
+
+        locationsWithoutLibName.append(Location(locationWithoutLibName))
 
         # Find the library and the object in the library
         lookup = None
@@ -166,101 +184,103 @@ class ProjectDependencyCollection:
         for libName in libNameGen:
             # Assume this library contains the dependency
             resolvedLibName = libName
-            lookup = self.resolvedObjects[libName]
+            baseLookup = self.resolvedObjects[libName]
+            lookup = baseLookup
 
             # Loop through all sublocations and verify the assumption above
             allSubLocationsFound = True
-            for i, rl in enumerate(locationWithoutLibName):
-                # Assume the assumption above is false.
-                allSubLocationsFound = False
+            for locationWithoutLibName in locationsWithoutLibName:
+                allSubLocationsFound = True
+                lookup = baseLookup
+                for i, rl in enumerate(locationWithoutLibName):
+                    # Assume the assumption above is false.
+                    allSubLocationsFound = False
 
-                if rl.name not in lookup.subLocations:
-                    break
+                    if rl.name not in lookup.subLocations:
+                        break
 
-                # The dependencies associated with this name.
-                resolvedDependencyLocation = lookup.subLocations[rl.name]
-                dependencies = resolvedDependencyLocation.dependencies
+                    # The dependencies associated with this name.
+                    resolvedDependencyLocation = lookup.subLocations[rl.name]
+                    dependencies = resolvedDependencyLocation.dependencies
 
-                # Perform ADL to filter out potential matches.
-                possibleMatches = filter(lambda dependency: rl.might_be_equal_to(dependency.location[i]), dependencies)
-                if not possibleMatches:
-                    continue
-
-                # Find the best match out of the possible matches by counting the number of
-                # partial matches. The highest match count wins.
-                countPartialMatches = lambda templateParameters: functools.reduce(lambda numMatches, p: numMatches + 1 if p.partialMatch is not None else 0, templateParameters, 0) 
-                dependencyCmp = lambda a, b: countPartialMatches(b.location[i].templateParameters) - countPartialMatches(a.location[i].templateParameters)
-                bestMatches = sorted(possibleMatches, key=functools.cmp_to_key(dependencyCmp))
-
-                for dependency in bestMatches:
-                    dependencyRL = dependency.location[i]
-                    
-                    # ADL
-                    if not rl.might_be_equal_to(dependencyRL):
+                    # Perform ADL to filter out potential matches.
+                    possibleMatches = filter(lambda dependency: rl.might_be_equal_to(dependency.location[i]), dependencies)
+                    if not possibleMatches:
                         continue
 
-                    dependencyObj = dependency.obj
+                    # Find the best match out of the possible matches by counting the number of
+                    # partial matches. The highest match count wins.
+                    countPartialMatches = lambda templateParameters: functools.reduce(lambda numMatches, p: numMatches + 1 if p.partialMatch is not None else 0, templateParameters, 0) 
+                    dependencyCmp = lambda a, b: countPartialMatches(b.location[i].templateParameters) - countPartialMatches(a.location[i].templateParameters)
+                    bestMatches = sorted(possibleMatches, key=functools.cmp_to_key(dependencyCmp))
 
-                    # If it is an alias then we have to lookup the aliased type instead
-                    # since aliases don't have any sublocations.
-                    if isinstance(dependencyObj, Alias):
-                        # But only do that if this is not the last relative location
-                        # since we are actually looking for the Alias in that case.
-                        if i != len(location.path) - 1:
-                            aliasNavResult = NavigationResult(resolvedLibName, resolvedDependencyLocation)
-                            aliasNavResult = self.navigate_alias_base(aliasNavResult)
-                            libName = aliasNavResult.libName
-                            resolvedDependencyLocation = aliasNavResult.resolvedDependencyLocation
-                    elif isinstance(dependencyObj, Template):
-                        # Lazily instantiate templates, if we encounter one.
-                        # Make sure we did not instantiate the template already.
-                        templateInstanceArgs =  ", ".join(str(p) for p in rl.templateParameters)
-                        dependencyLocationStr = "{0} with <{1}>".format(str(dependency.location), templateInstanceArgs)
+                    for dependency in bestMatches:
+                        dependencyRL = dependency.location[i]
+                        dependencyObj = dependency.obj
 
-                        if dependencyLocationStr not in self.templateLinks:
-                            # Generate the translation unit for the template.
-                            templateSrc = dependencyObj.generate_translation_unit()
+                        # If it is an alias then we have to lookup the aliased type instead
+                        # since aliases don't have any sublocations.
+                        if isinstance(dependencyObj, Alias):
+                            # But only do that if this is not the last relative location
+                            # since we are actually looking for the Alias in that case.
+                            if i != len(location.path) - 1:
+                                aliasNavResult = NavigationResult(resolvedLibName, resolvedDependencyLocation)
+                                aliasNavResult = self.navigate_alias_base(aliasNavResult)
+                                libName = aliasNavResult.libName
+                                resolvedDependencyLocation = aliasNavResult.resolvedDependencyLocation
+                        elif isinstance(dependencyObj, Template):
+                            # Lazily instantiate templates, if we encounter one.
+                            # Make sure we did not instantiate the template already.
+                            templateInstanceArgs =  ", ".join(str(p) for p in rl.templateParameters)
+                            dependencyLocationStr = "{0} with <{1}>".format(str(dependency.location), templateInstanceArgs)
 
-                            # Run the pre-processor on the source.
-                            # TODO: run pre-processor based on the location
-                            ppTemplateSrc = templateSrc # self.preprocessor.run(templateSrc, LIBNAME, PPT)
+                            if dependencyLocationStr not in self.templateLinks:
+                                # Generate the translation unit for the template.
+                                templateSrc = dependencyObj.generate_translation_unit()
 
-                            # Lex the unit so we can parse it.
-                            lexer = SymbolicLexer(libName=self.libName, fileName="$Templates/{0}".format(str(dependencyObj.token)))
+                                # Run the pre-processor on the source.
+                                # TODO: run pre-processor based on the location
+                                ppTemplateSrc = templateSrc # self.preprocessor.run(templateSrc, LIBNAME, PPT)
 
-                            # Plugin the template substitutions for the lexer.
-                            templateSubs = { dependencyRL.templateParameters[i].token.text: parameter.token.text[1:-1] for i, parameter in enumerate(rl.templateParameters) }
+                                # Lex the unit so we can parse it.
+                                lexer = SymbolicLexer(libName=self.libName, fileName="$Templates/{0}".format(str(dependencyObj.token)))
 
-                            # Generate a parsable token stream now.
-                            srcFileTokens = lexer.tokenize(ppTemplateSrc, subs=templateSubs)
-                            srcFileTokens = lexer.concatenate_tokens(srcFileTokens)
+                                # Plugin the template substitutions for the lexer.
+                                templateSubs = { dependencyRL.templateParameters[i].token.text: parameter.token.text[1:-1] for i, parameter in enumerate(rl.templateParameters) }
 
-                            # Analyze the token stream.
-                            parser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
-                            parseResult = parser.parse()
+                                # Generate a parsable token stream now.
+                                srcFileTokens = lexer.tokenize(ppTemplateSrc, subs=templateSubs)
+                                srcFileTokens = lexer.concatenate_tokens(srcFileTokens)
 
-                            # Lookup the template object
-                            templateObjHierarchyDepth = len(dependencyObj.namespaceList)
-                            templateObj = parseResult.rootNamespace.objects[0]
-                            while templateObjHierarchyDepth > 0:
-                                templateObj = templateObj.objects[0]
-                                templateObjHierarchyDepth -= 1
+                                # Analyze the token stream.
+                                parser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
+                                parseResult = parser.parse()
 
-                            # Bind the location to a template.
-                            self.templateLinks[dependencyLocationStr] = templateObj
+                                # Lookup the template object
+                                templateObjHierarchyDepth = len(dependencyObj.namespaceList)
+                                templateObj = parseResult.rootNamespace.objects[0]
+                                while templateObjHierarchyDepth > 0:
+                                    templateObj = templateObj.objects[0]
+                                    templateObjHierarchyDepth -= 1
 
-                            # Insert it into the collection so we can look it up.
-                            self.insert_unit(parseResult.references, parseResult.rootNamespace)
+                                # Bind the location to a template.
+                                self.templateLinks[dependencyLocationStr] = templateObj
+
+                                # Insert it into the collection so we can look it up.
+                                self.insert_unit(parseResult.references, parseResult.rootNamespace)
                         
-                        # Use template links to jump to the right location, which is anonymous.
-                        templateObj = self.templateLinks[dependencyLocationStr]
-                        templateNavResult = self.navigate(dependencyObj.token.anchor, references, templateObj.location())
-                        templateAliasNavResult = self.navigate_alias_base(templateNavResult)
-                        resolvedDependencyLocation = templateAliasNavResult.resolvedDependencyLocation
+                            # Use template links to jump to the right location, which is anonymous.
+                            templateObj = self.templateLinks[dependencyLocationStr]
+                            templateNavResult = self.navigate(dependencyObj.token.anchor, references, templateObj.parent, templateObj.location())
+                            templateAliasNavResult = self.navigate_alias_base(templateNavResult)
+                            resolvedDependencyLocation = templateAliasNavResult.resolvedDependencyLocation
 
-                    # Step down this namespace
-                    allSubLocationsFound = True
-                    lookup = resolvedDependencyLocation
+                        # Step down this namespace
+                        allSubLocationsFound = True
+                        lookup = resolvedDependencyLocation
+                        break
+
+                if allSubLocationsFound:
                     break
 
             # If we verified the location we can stop the search.
@@ -290,7 +310,7 @@ class ProjectDependencyCollection:
             self.unresolvedDependencies.append(dependency)
         else:
             # Navigate to parent
-            navResult = self.navigate(obj.token.anchor, references, dependencyLocation[:-1])
+            navResult = self.navigate(obj.token.anchor, references, obj.grandParentWithoutRoot, dependencyLocation[:-1])
             lookup = navResult.resolvedDependencyLocation.subLocations
 
             # Make sure that no duplicate object in this namespace exists
@@ -400,7 +420,7 @@ class ProjectDependencyCollection:
 
                 # The name has to be resolvable by now
                 # Catching unresolved objects will spawn templates, if encountered
-                self.links[dependency] = self.navigate(dependency.obj.anchor, dependency.references, dependency.location)
+                self.links[dependency] = self.navigate(dependency.obj.anchor, dependency.references, dependency.obj.parent, dependency.location)
 
                 # Add the unresolved dependencies to the queue
                 unresolvedDependencies += self.unresolvedDependencies
@@ -435,7 +455,7 @@ class ProjectDependencyCollection:
 
         # Navigate to the target type.
         targetTypename = dependency.obj.targetTypename
-        return self.navigate(targetTypename.anchor, dependency.references, targetTypename.location())
+        return self.navigate(targetTypename.anchor, dependency.references, dependency.obj.parent, targetTypename.location())
 
     def navigate_alias_base(self, navResult):
         """
@@ -465,7 +485,7 @@ class ProjectDependencyCollection:
         Returns:
             dag.NavigationResult: The navigation result.
         """
-        return self.links[dependency] if dependency in self.links else self.navigate(dependency.obj.token, dependency.references, dependency.location)
+        return self.links[dependency] if dependency in self.links else self.navigate(dependency.obj.token, dependency.references, dependency.obj.parent, dependency.location)
 
     def _solve_location_conflicts(self):
         """Solve all known location conflicts."""

@@ -8,7 +8,6 @@ This is later passed onto the dependency solver to resolve library dependencies,
 # Built-in
 import io
 from enum import Enum
-from copy import deepcopy
 from functools import wraps
 
 # Library
@@ -229,6 +228,8 @@ class Locatable:
     
     Attributes:
         parent (objects.Locatable): The parent object.
+        grandParent (objects.Locatable or None): The grand-parent object.
+        grandParentWithoutRoot (objects.Locatable or None): The grand-parent object or None if the grandparent is the root.
         anchor (Token): The anchor in the source code.        
     """
 
@@ -241,6 +242,8 @@ class Locatable:
             anchor (Token): The anchor in the source code.
         """
         self.parent = parent
+        self.grandParent = parent.parent if parent else None
+        self.grandParentWithoutRoot = self.grandParent if (self.grandParent) and (self.grandParent.parent) else None
         self.anchor = anchor
 
     def location(self):
@@ -252,15 +255,6 @@ class Locatable:
         """
         # Force this to be implemented by all derived classes
         raise DevError()
-
-    def class_name(self):
-        """
-        Return the class name of the object.
-
-        Returns:
-            str: The class name.
-        """
-        return self.__class__.__name__
 
 class Named(Locatable):
     """
@@ -323,7 +317,7 @@ class Named(Locatable):
     def validate_no_system_annotations(self):
         """Ensure that there are no system annotation associated to this object."""
         if self.sysAnnotations:
-            raise UnsupportedSystemAnnotationError(self.class_name(), self.sysAnnotations[0])
+            raise UnsupportedSystemAnnotationError(self.__class__.__name__, self.sysAnnotations[0])
 
     def validate_system_annotations(self, *compatibleNames):
         """
@@ -334,7 +328,7 @@ class Named(Locatable):
         """
         for annotation in self.sysAnnotations:
             if annotation.token.text not in compatibleNames:
-                raise UnsupportedSystemAnnotationError(self.class_name(), annotation)
+                raise UnsupportedSystemAnnotationError(self.__class__.__name__, annotation)
 
     def __str__(self):
         """
@@ -444,7 +438,7 @@ class Namespace(Named):
         parser.expect('{')
 
         # Grab the current parent
-        parent = parser.namespaceStack[-1]
+        parent = parser.namespace()
         
         # Create the namespace object
         namespace = Namespace(parent, token, userAnnotations, sysAnnotations, semantic)
@@ -644,7 +638,7 @@ class Instruction(Named):
         token = Symto.from_token(parser.token, Token.Text, '')
 
         # Grab the current parent
-        parent = parser.namespaceStack[-1]
+        parent = parser.namespace()
         
         # Control flow statements
         # Convert the keywords to lower-case representation and pair with its kind
@@ -1042,7 +1036,7 @@ class Expression(Named):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         try:
             tokens = parser.until_any(args)
-            return Expression(parser.namespaceStack[-1], userAnnotations, sysAnnotations, tokens)
+            return Expression(parser.namespace(), userAnnotations, sysAnnotations, tokens)
         except:
             return None
 
@@ -1146,7 +1140,7 @@ class Parameter(Named):
         # Semantic
         semantic = Annotation.parse_semantic(parser)
 
-        return Parameter(parser.namespaceStack[-1], token, userAnnotations, sysAnnotations, semantic, typename, isRef)
+        return Parameter(parser.namespace(), token, userAnnotations, sysAnnotations, semantic, typename, isRef)
 
 class Function(TemplateObject, Namespace):
     """
@@ -1222,11 +1216,12 @@ class Function(TemplateObject, Namespace):
 
         # If the next token is not an ID then returnTypename
         # is actually the function name / scope and the return type is implicit.
+        parent = parser.namespace()
         if parser.token.kind != Token.Name:
             if hasExplicitReturnType:
                 name = returnTypename.scope[-1]
-            returnTypenameToken = Symto.from_token(parser.token, Token.Name, Typename.default_return_typename())
-            returnTypename = Typename([returnTypenameToken])
+            returnTypenameToken = Symto.from_token(parser.token, Token.Name, Typename.default_return_typename(parent))
+            returnTypename = Typename(parent, [returnTypenameToken])
         
         if hasExplicitReturnType:
             # Extensions can be explicitly scoped
@@ -1248,7 +1243,7 @@ class Function(TemplateObject, Namespace):
                     # Looks like an extension
                     kind = FunctionKind.Extension
                     name = extensionTypename.scope[-1]
-                    extensionTypename = Typename(extensionTypename.scope[:-1], templateParameters=extensionTypename.templateParameters[:-1], dims=extensionTypename.dims[:-1]) if extensionTypename else None
+                    extensionTypename = Typename(parent, extensionTypename.scope[:-1], templateParameters=extensionTypename.templateParameters[:-1], dims=extensionTypename.dims[:-1]) if extensionTypename else None
                 else:
                     if len(extensionTypename.scope) == 1:
                         # Regular function or operator
@@ -1269,7 +1264,7 @@ class Function(TemplateObject, Namespace):
         semantic = Annotation.parse_semantic(parser)
 
         # Register the function with the current namespace
-        parent = parser.namespaceStack[-1]
+        parent = parser.namespace()
         func = Function(parent, name, userAnnotations, sysAnnotations, semantic, None, kind, returnTypename, extensionTypename, parameters)
         parser.namespaceStack.append(func)
         try:
@@ -1406,7 +1401,7 @@ class Member(Named):
         semantic = Annotation.parse_semantic(parser)
         parser.match(';')
 
-        return Member(parser.namespaceStack[-1], name, userAnnotations, sysAnnotations, semantic, typename)
+        return Member(parser.namespace(), name, userAnnotations, sysAnnotations, semantic, typename)
 
 class MemberList(Named):
     """
@@ -1478,9 +1473,9 @@ class MemberList(Named):
         members = []
         for name in names:
             name = Symto.from_token(parser.token, Token.Text, '') if name is None else name
-            members.append(Member(parser.namespaceStack[-1], name, userAnnotations, sysAnnotations, semantic, typename))
+            members.append(Member(parser.namespace(), name, userAnnotations, sysAnnotations, semantic, typename))
         
-        return MemberList(parser.namespaceStack[-1], name, userAnnotations, sysAnnotations, semantic, members, typename)
+        return MemberList(parser.namespace(), name, userAnnotations, sysAnnotations, semantic, members, typename)
 
 class Struct(TemplateObject, Namespace):
     """A structure."""
@@ -1533,7 +1528,7 @@ class Struct(TemplateObject, Namespace):
         semantic = Annotation.parse_semantic(parser)
 
         # Register the struct with the current namespace
-        parent = parser.namespaceStack[-1]
+        parent = parser.namespace()
         struct = Struct(parent, token, userAnnotations, sysAnnotations, semantic, None)
         parser.namespaceStack.append(struct)
         try:
@@ -1645,7 +1640,7 @@ class Alias(TemplateObject):
         parser.match(';')
 
         # Register the struct with the current namespace
-        parent = parser.namespaceStack[-1]
+        parent = parser.namespace()
         alias = Alias(parent, token, userAnnotations, sysAnnotations, semantic, body, targetTypename)
         if not isTemplate:
             parent.objects.append(alias)
@@ -1851,18 +1846,19 @@ class Typename(Locatable):
     """
 
     @Decorators.validated
-    def __init__(self, scope, *, templateParameters=None, dims=None):
+    def __init__(self, parent, scope, *, templateParameters=None, dims=None):
         """
         Initialize the object.
 
         Args:
+            parent (objects.Locatable): The parent object.
             scope ([lexer.Symto]): The scope token list.
             templateParameters ([[lexer.Symto]]): A template parameter list for each entry in the scope.
             dims ([int]): The array dimensions. A value of None inside the list denotes an unbounded array.
         """
         assert scope
 
-        super().__init__(None, scope[-1].anchor)
+        super().__init__(parent, scope[-1].anchor)
         self.scope = scope
         
         # Overwrite the scope strings
@@ -1890,19 +1886,31 @@ class Typename(Locatable):
         Return the location within the library.
 
         Returns:
-            objects.Location: A location within the library.
+            objects.Location: An unresolved location within the library pointed to by this typename.
         """
         return Location([RelativeLocation(LocationKind.Unresolved, s, templateParameters=self.templateParameters[i]) for i, s in enumerate(self.scopeStrings)])
 
     @staticmethod
-    def default_return_typename():
+    def default_return_typename_token():
+        """
+        Return the default return typename token.
+
+        Returns:
+            objects.Typename: The default return typename token.
+        """
+        return Symto(Token.Name, "$System", "", "void", 1, 1)
+
+    @staticmethod
+    def default_return_typename(parent):
         """
         Return the default return typename.
 
+        Args:
+            parent (objects.Locatable): The parent object.
         Returns:
-            Typename: The default return typename.
+            objects.Typename: The default return typename.
         """
-        return Typename([Symto(Token.Name, "$System", "", "void", 1, 1)])
+        return Typename(parent, [Typename.default_return_typename_token()])
 
     def is_default_return_typename(self):
         """
@@ -1911,7 +1919,7 @@ class Typename(Locatable):
         Returns:
             bool: True, if this typename represents the default typename. Otherwise False.
         """
-        return self == Typename.default_return_typename()
+        return self == Typename.default_return_typename_token()
 
     def __eq__(self, other):
         """
@@ -2038,7 +2046,8 @@ class Typename(Locatable):
                 break
 
         dim = Typename.parse_array_dimensions(parser)
-        return Typename(scope, templateParameters=templateParams, dims=dim)
+        parent = parser.namespace()
+        return Typename(parent, scope, templateParameters=templateParams, dims=dim)
 
     @staticmethod
     def parse(parser):
@@ -2096,7 +2105,7 @@ class TemplateParameter(Named):
         partialMatch = parser.expect_kind(Token.String) if parser.match("=") else None
 
         semantic = Annotation.parse_semantic(parser)
-        return TemplateParameter(parser.namespaceStack[-1], name, userAnnotations, sysAnnotations, semantic, partialMatch)
+        return TemplateParameter(parser.namespace(), name, userAnnotations, sysAnnotations, semantic, partialMatch)
 
     def __str__(self):
         """
@@ -2176,7 +2185,7 @@ class Template(Named):
             objects.Location: A location within the library.
         """
         # Return the location of the underlying object, but add the template parameters
-        loc = deepcopy(self.obj.location())
+        loc = Location(self.obj.location().path)
 
         # Change the last relative location to a template
         lastRelLoc = loc[-1]
@@ -2276,7 +2285,7 @@ class Template(Named):
             return None
 
         # Register the template with the current namespace
-        parent = parser.namespaceStack[-1]
+        parent = parser.namespace()
         template = Template(parent, userAnnotations, sysAnnotations, semantic, parameters, obj, list(parser.namespaceStack), list(parser.references))
         parent.objects.append(template)
 
