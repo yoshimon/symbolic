@@ -1,6 +1,7 @@
 ﻿"""Contains classes that can be used to pre-process text."""
 
 # Built-in
+import json
 import importlib.util
 
 # Library

@@ -19,7 +19,7 @@ class LibraryDependencyError(Exception):
         Returns:
             str: The string representation.
         """
-        return 'Library dependency cycle found: [{:s}].'.format(dependencyChain)
+        return 'Library dependency cycle found: [{:s}].'.format(self.dependencyChain)
 
 class SourceError(Exception):
     """

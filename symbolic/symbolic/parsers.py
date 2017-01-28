@@ -439,7 +439,6 @@ class BaseParser:
         if len(stack) == 0:
             return False
 
-        val = self.token
         success = self.match(closeBracket)
         if success:
             stack.pop()

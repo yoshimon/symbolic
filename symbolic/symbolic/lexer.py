@@ -95,42 +95,6 @@ class Symto:
         return c.join(Symto.strlist(l, none))
 
     @staticmethod
-    def is_left_associtative(op):
-        """
-        Test whether an operator is left-associative.
-
-        Args:
-            op (str): The operator.
-        Returns:
-            bool: True, if the operator is left-associative. Otherwise False.
-        """
-        return (definitions[op][1])
-
-    @staticmethod
-    def is_right_associtative(op):
-        """
-        Test whether an operator is right-associative.
-
-        Args:
-            op (str): The operator.
-        Returns:
-            bool: True, if the operator is right-associative. Otherwise False.
-        """
-        return not is_left_associtative(op)
-
-    @staticmethod
-    def precedence(op):
-        """
-        Return the precende of an operator.
-        
-        Args:
-            op (str): The operator.
-        Returns:
-            int: The precedence value.
-        """
-        return definitions[op][0]
-
-    @staticmethod
     def from_token(other, kind, text):
         """
         Create a token from an existing token.

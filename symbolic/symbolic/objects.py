@@ -672,7 +672,7 @@ class Instruction(Named):
                 parser.expect(')')
                 semantic = Annotation.parse_semantic(parser)
                 instructions = Instruction.parse_instruction_body(parser)
-                return Instruction(parent, token, userAnnotations, sysAnnotations, semantic, kind, instructions=instructions, forInits=forInit, forPredicates=forPredicates, forSteps=forSteps)
+                return Instruction(parent, token, userAnnotations, sysAnnotations, semantic, kind, instructions=instructions, forInits=forInits, forPredicates=forPredicates, forSteps=forSteps)
             elif kind == InstructionKind.Else:
                 # ELSE { ... }
                 semantic = Annotation.parse_semantic(parser)

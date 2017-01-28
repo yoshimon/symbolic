@@ -167,7 +167,6 @@ class ProjectDependencyCollection:
         # This will search the parent location, and all of its parents first.
         locationsWithoutLibName = deque()
         currentParent = parent
-        namespaceOffset = 0 # The location offset used in the for loop below.
         while (currentParent is not None) and (currentParent.parent is not None):
             # Prepend the location of the parent to the search path.
             parentPath = currentParent.location().path
