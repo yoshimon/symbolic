@@ -72,7 +72,7 @@ namespaces and structs. A unified syntax for templates is introduced:
    
 where :code:`<TEMPLATE_OBJECT>` is the object to be templated, :code:`<T0>, <T1>, ..., <TN>` are the *template parameters*
 and the corresponding, optional values :code:`<T0P>, <T1P>, ..., <TNP>` are the *partial specialization masks*.
-See    for more information on partial template specialization. 
+See  `Partial Specialization`_ for more information on partial template specialization. 
 
 .. role:: note_info
 
@@ -255,7 +255,7 @@ This example illustrates partial template specialization.
     }
 
     // Resolved to a_type<T0="int">.
-    int add(a_type<"float"> p)
+    int add(a_type<"int"> p)
     {
         return p.a + p.b;
     }
