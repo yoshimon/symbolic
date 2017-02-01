@@ -134,12 +134,12 @@ piece of source code:
             struct h(Param);
 
             template<"int">       // 6. Location: f<>().g<>(int).h<T0="int">()
-            struct h(int);        // Will resolve to f<>().int<>().
+            struct h(int);        // Will resolve to 3. Location.
 
             struct i              // 7. Location: f<>().g<>(int).i<>()
             {
-                h<"float">;       // Will resolve to f<>().g<>(int).h<T0>()
-                h<"int">;         // Will resolve to f<>().g<>(int).h<T0="int">()
+                h<"float">;       // Will resolve to 5. Location.
+                h<"int">;         // Will resolve to 6. Location.
             }
         }
     }
