@@ -5,8 +5,8 @@ expressiveness for more general concepts.
 
 Problem
 ---------------------
-The symbolic language is strongly typed and therefore requires types to be explicitly stated when referenced, e.g. in function
-signatures. This can lead to duplicate code and hence redundancy in the code. The following example illustrates the problem:
+The symbolic language is statically typed and requires types to be explicitly stated when referenced, e.g. in function
+signatures. This can lead to duplicate code and hence redundancy. The following example illustrates the problem:
 
 .. code-block:: cpp
 
@@ -28,11 +28,12 @@ signatures. This can lead to duplicate code and hence redundancy in the code. Th
         add(1.0, 2.0);
     }
     
-The two definitions of :code:`add` look similar and differ solely by the types that are passed in.
+Both versions of :code:`add` look similar and differ solely by the types that are passed in.
 
 Solution
 ---------------------
-*Templates* can be used to alleviate this redundancy which can substantially reduce the amount of manual programming required.
+*Templates* can be used to alleviate this redundancy which can substantially reduce the amount of manual programming required
+to implement certain concepts.
 
 .. code-block:: cpp
 
@@ -50,16 +51,16 @@ Solution
         add(1.0, 2.0);
     }
     
-A single template can be used to handle both cases by substituting the correct types for the signature.
-Templates behave similar to C macros, except that they emit new translation units into the translator when referenced instead of an
-in-place transformation of the source code. Looking at the example above, the call to :code:`int add(int, int)` instantiates the
-:code:`add` function template with :code:`T="int"`, resulting in the first definition of :code:`add` from the first example.
-The next call instantiates the same template with :code:`T="float"`, resulting in the second definition of :code:`add` from
-the first example. Notice that the operator reference :code:`+` is also affected by this, resolving the right operator for each
+A single template can be used to handle both cases by substituting the correct types for the signature after a symbolic matching pass.
+Templates behave similar to macros in the C language, except that they emit new translation units into the translator when referenced
+instead of an in-place transformation of the source code. Looking at the example above, the call to :code:`int add(int, int)`
+instantiates the :code:`add` function template with :code:`T="int"`, resulting in the first definition of :code:`add` from the
+first example. The next call instantiates the same template with :code:`T="float"`, resulting in the second definition of :code:`add`
+from the first example. Notice that the operator reference :code:`+` is also affected by this, resolving the right operator for each
 type :code:`T`.
 
-Templates are first class citizens of the language and can be used with all language objects, namely functions, structures,
-aliases and namespaces. A unified syntax for templates is used:
+Templates are an essential part of the symbolic language and can be used with all scoped language objects, namely aliases, functions,
+namespaces and structs. A unified syntax for templates is introduced:
 
 .. code-block:: cpp
 
@@ -76,19 +77,89 @@ See    for more information on partial template specialization.
 .. role:: note_info
 
 :note_info:`Template parameters are passed in as strings that are unpacked before substitution. This allows spaces and
-token delimiters to be included in the parameters.`
+other delimiters to be included in the parameter values.`
 
 Partial Specialization
 ----------------------
 Partial specialization can be used to specialize a template when one or more of its parameters match a user-defined pattern.
 This can be useful when certain template parameter values should be treated differently than others.
 Partial specializations take precedence over their unspecialized counterparts and other partial specializations 
-with less matches. See example 
+with less matches. See `Example 3 - Partial Specialization`_ which demonstrates partial template specialization.
 
 Concatenation
 -------------
-Template parameter concatenation is a way of combining multiple template parameters into a single symbol.
-See example 
+Two tokens can be concatenated into a single token using the :code:`><` operator.
+This operator is only defined within templates and is referred to as *eppocatenator*. See `Example 4 - Concatenation`_ which
+demonstrates in-template concatenation.
+
+Under the Hood
+--------------
+Templates can be best thought of as a built-in text replacement tool. When declaring a template, the actual template body
+is not inspected by the translator. All tokens between the opening :code:`{` and closing :code:`}` of the template body will be
+stored. Within the template body, every opening :code:`{` brace has to have a matching closing :code:`}` brace.
+After parsing, no templates are instantiated or inspected unless referenced.
+
+.. code-block:: cpp
+
+    template
+    {
+        This is an unnamed (anonymous) template. This entire template body will
+        not be inspected until the template is referenced somewhere. In this
+        particular case, since this template is anonymous, it can never be
+        referenced elsewhere.
+    }
+
+To find a particular template, its location has to be resolved. Fortunately, resolving templates is not more difficult than
+navigating to any other location. That being said, the introduction of templates adds another parameter dimension at every
+location which is given by the template parameters. Therefore, a location is now completely defined
+by all of its relative locations where each relative location must specify its name, its parameters and its
+template parameters. To resolve partial template specializations, the navigation phase must inspect all partial matches first,
+in descending order of the number of template parameter matches. The following example illustrates how locations are derived from a given
+piece of source code:
+
+.. code-block:: cpp
+
+    import hlsl;
+
+    struct int;                   // 1. Location: int<NoTemplate>()
+
+    struct f                      // 2. Location: f<NoTemplate>()
+    {
+        struct int;               // 3. Location: f<NoTemplate>().int<NoTemplate>()
+
+        template<>                // 4. Location: f<NoTemplate>().g<>(int)
+        g(int)
+        {
+            template<Param>       // 5. Location: f<NoTemplate>().g<>(int).h<T0>()
+            struct h(Param);
+
+            template<"int">       // 6. Location: f<NoTemplate>().g<>(int).h<T0="int">()
+            struct h(int);        // Will resolve to f<NoTemplate>().int<NoTemplate>().
+
+            struct i              // 7. Location: f<NoTemplate>().g<>(int).i<NoTemplate>()
+            {
+                h<"float">;       // Will resolve to f<NoTemplate>().g<>(int).h<T0>()
+                h<"int">;         // Will resolve to f<NoTemplate>().g<>(int).h<T0="int">()
+            }
+        }
+    }
+
+As can be seen in the example, no two locations within the same library can be identical. Otherwise a location conflict will be reported
+by the translator when declaring the conflicting object since the translator would not be able to unambiguously resolve the object
+during navigation.
+
+Once the template location has been resolved, it will be instantiated by copying its surrounding references and code (without the
+template header) into a new translation unit within the same library that instantiated the template. While copying the contents over,
+all surrounding namespaces will be anonymized. The new translation unit will then be parsed and analyzed like every other unit.
+Assuming we want to instantiate :code:`h<"float">` in the example above, the new, hidden translation unit will look like this:
+
+.. code-block:: cpp
+
+    import hlsl;
+
+During the lexing step, all template parameters inside the template body will be substituted with their corresponding values. Whenever
+a template parameter gets substituted, the translator will blacklist the substitution of that same parameter within the substituted string
+to prevent an infinite substitution recursion.
 
 Examples
 --------
@@ -99,18 +170,20 @@ Example 1 - Generic Structures
 A common use-case is to create generic data structures. The following code snippet demonstrates this:
 
 .. code-block:: cpp
+
+    import hlsl;
     
-    template<T0, T1>
-    struct my_type
+    template<First, Second>
+    struct a_type
     {
-        T0 a;
-        T1 b;
+        First a;
+        Second b;
     }
     
-    do_stuff(ref my_type<"int", "float"> c)
+    void f(ref a_type<"int", "float"> p)
     {
-        c.a = 42;
-        c.b = 0;
+        p.a = 42;
+        p.b = 0.0;
     }
     
 
@@ -119,30 +192,70 @@ Example 2 - Type Generation
 Templates can be used to generate new types. The following code snippet demonstrates this:
 
 .. code-block:: cpp
+
+    import hlsl;
     
-    // Creates a nested type with 2 members.
-    template<T0, T1>
-    struct emit_type2
+    // Allow external injection of source code into this type.
+    template<Type, Injection>
+    struct generated
     {
-        struct type
-        {
-            T0 a;
-            T0 b;
-        }
+        Type a;
+        Injection
     }
     
-    // Provide a nicer way to reference the template for integers.
-    using emit_ints
+    int add(generated<"T1 b; T1 c;", "int"> p)
     {
-        // T1 will be substituted with int during instantiation.
-        emit_type2<"T1 a; T1 b;", "int">
-    }
-    
-    int add(emit_ints.type c)
-    {
-        return c.a + c.b;
+        return p.a + p.b + p.c;
     }
 
 Example 3 - Partial Specialization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-This example illustrates different use-cases of partial template specialization.
+This example illustrates partial template specialization.
+
+.. code-block:: cpp
+
+    import hlsl;
+    
+    template<T0>
+    struct a_type
+    {
+        T0 a;
+    }
+
+    template<T0="int">
+    struct a_type
+    {
+        T0 a;
+        T0 b;
+    }
+
+    // Resolved to a_type<T0>.
+    int add(a_type<"float"> p)
+    {
+        return p.a;
+    }
+
+    // Resolved to a_type<T0="int">.
+    int add(a_type<"float"> p)
+    {
+        return p.a + p.b;
+    }
+
+Example 4 - Concatenation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+This example illustrates partial template specialization.
+
+.. code-block:: cpp
+
+    import hlsl;
+
+    template<T0, T1>
+    struct a_type
+    {
+        T0 >< T1 a;
+    }
+
+    float4 f(a_type<"float", "4"> p)
+    {
+        return p.a;
+    }
