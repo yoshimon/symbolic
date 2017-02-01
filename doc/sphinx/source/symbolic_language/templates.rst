@@ -222,7 +222,7 @@ Templates can be used to generate new types. The following code snippet demonstr
         Injection
     }
     
-    int add(generated<"T1 b; T1 c;", "int"> p)
+    int add(generated<"int", "Type b; Type c;"> p)
     {
         return p.a + p.b + p.c;
     }
