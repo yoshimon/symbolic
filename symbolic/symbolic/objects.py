@@ -2143,12 +2143,10 @@ class Template(Named):
     Attributes:
         parameters ([objects.TemplateParameter]): The template parameter list.
         obj (objects.TemplateObject): The template object attached to this template.
-        namespaceList ([objects.Namespace]): The namespace list to locate this template.
-        references ([objects.Reference]): The references to use when instantiating this template.
     """
 
     @Decorators.validated
-    def __init__(self, parent, userAnnotations, sysAnnotations, semantic, parameters, obj, namespaceList, references):
+    def __init__(self, parent, userAnnotations, sysAnnotations, semantic, parameters, obj):
         """
         Initialize the object.
 
@@ -2159,15 +2157,10 @@ class Template(Named):
             semantic (lexer.Symto): The semantic annotation.
             parameters ([objects.TemplateParameter]): The template parameter list.
             obj (objects.TemplateObject): The template object attached to this template.
-            namespaceList ([objects.Namespace]): The namespace list to locate this template.
-            references ([objects.Reference]): The references to use when instantiating this template.
         """
         super().__init__(parent, obj.token, userAnnotations, sysAnnotations, semantic)
         self.obj = obj
         self.parameters = parameters
-        self.namespaceList = namespaceList
-        self.namespaceList.pop(0)
-        self.references = references
 
         # Make sure that the template parameters are unique
         if len(set(self.parameters)) != len(self.parameters):
@@ -2203,23 +2196,6 @@ class Template(Named):
         """
         result = PrettyString()
 
-        # References
-        if len(self.references) > 0:
-            for ref in self.references:
-                result += "import {0};\n".format(str(ref))
-
-            result += "\n"
-
-        # Namespace
-        for namespace in self.namespaceList:
-            result += Annotation.usrlist_to_str(namespace.userAnnotations)
-            result += Annotation.syslist_to_str(namespace.sysAnnotations)
-            result += 'namespace'
-            if namespace.semantic is not None:
-                result += ': ' + namespace.semantic.text
-            result += ' {\n'
-            result.indentLevel += 1
-
         # Emit the annotations
         result += Annotation.usrlist_to_str(self.userAnnotations)
         result += Annotation.syslist_to_str(self.sysAnnotations)
@@ -2241,11 +2217,6 @@ class Template(Named):
         result.indentLevel -= 1
         result += '}'
         result += '\n'
-
-        # Close namespace
-        for namespace in self.namespaceList:
-            result.indentLevel -= 1
-            result += "}\n"
 
         return result.value.strip()
 
@@ -2286,7 +2257,7 @@ class Template(Named):
 
         # Register the template with the current namespace
         parent = parser.namespace()
-        template = Template(parent, userAnnotations, sysAnnotations, semantic, parameters, obj, list(parser.namespaceStack), list(parser.references))
+        template = Template(parent, userAnnotations, sysAnnotations, semantic, parameters, obj)
         parent.objects.append(template)
 
         return template

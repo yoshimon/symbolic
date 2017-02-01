@@ -256,17 +256,16 @@ class ProjectDependencyCollection:
                                 parseResult = parser.parse()
 
                                 # Lookup the template object
-                                templateObjHierarchyDepth = len(dependencyObj.namespaceList)
                                 templateObj = parseResult.rootNamespace.objects[0]
-                                while templateObjHierarchyDepth > 0:
-                                    templateObj = templateObj.objects[0]
-                                    templateObjHierarchyDepth -= 1
+                                templateObj.parent = dependencyObj.parent
+                                templateObj.grandParent = dependencyObj.grandParent
+                                templateObj.grandParentWithoutRoot = dependencyObj.grandParentWithoutRoot
 
                                 # Bind the location to a template.
                                 self.templateLinks[dependencyLocationStr] = templateObj
 
                                 # Insert it into the collection so we can look it up.
-                                self.insert_unit(parseResult.references, parseResult.rootNamespace)
+                                self.insert_unit(references, parseResult.rootNamespace)
                         
                             # Use template links to jump to the right location, which is anonymous.
                             templateObj = self.templateLinks[dependencyLocationStr]
