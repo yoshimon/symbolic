@@ -125,12 +125,13 @@ class ProjectDependencyCollection:
         self.libName = None # The name of the library that is being monitored
         self.templateLinks = {} # Maps locations to template instantiation results.
 
-    def navigate(self, errorAnchor, references, parent, location):
+    def navigate(self, errorAnchor, requester, references, parent, location):
         """
         Navigate to a location.
 
         Args:
             errorAnchor (lexer.Anchor): The anchor to use in case an exception is thrown.
+            requester (dag.Dependency): The dependency that requests the navigation.
             references ([objects.Reference]): The library references.
             parent (objects.Locatable or None): The parent object to start the search at.
                 The navigation will start the the parent and, on failure, move up the
@@ -231,7 +232,10 @@ class ProjectDependencyCollection:
                             # Lazily instantiate templates, if we encounter one.
                             # Make sure we did not instantiate the template already.
                             templateInstanceArgs =  ", ".join(str(p) for p in rl.templateParameters)
-                            dependencyLocationStr = "{0} with <{1}>".format(str(dependency.location), templateInstanceArgs)
+                            requesterReferences = requester.references
+                            importLibs = ", ".join(str(ref) for ref in requesterReferences)
+                            importLibs = " using {0}".format(importLibs) if importLibs else importLibs
+                            dependencyLocationStr = "{0} with <{1}>{2}".format(str(dependency.location), templateInstanceArgs, importLibs)
 
                             if dependencyLocationStr not in self.templateLinks:
                                 # Generate the translation unit for the template.
@@ -265,11 +269,11 @@ class ProjectDependencyCollection:
                                 self.templateLinks[dependencyLocationStr] = templateObj
 
                                 # Insert it into the collection so we can look it up.
-                                self.insert_unit(references, parseResult.rootNamespace)
+                                self.insert_unit(requesterReferences, parseResult.rootNamespace)
                         
                             # Use template links to jump to the right location, which is anonymous.
                             templateObj = self.templateLinks[dependencyLocationStr]
-                            templateNavResult = self.navigate(dependencyObj.token.anchor, references, templateObj.parent, templateObj.location())
+                            templateNavResult = self.navigate(dependencyObj.token.anchor, requester, references, templateObj.parent, templateObj.location())
                             templateAliasNavResult = self.navigate_alias_base(templateNavResult)
                             resolvedDependencyLocation = templateAliasNavResult.resolvedDependencyLocation
 
@@ -308,7 +312,7 @@ class ProjectDependencyCollection:
             self.unresolvedDependencies.append(dependency)
         else:
             # Navigate to parent
-            navResult = self.navigate(obj.token.anchor, references, obj.grandParentWithoutRoot, dependencyLocation[:-1])
+            navResult = self.navigate(obj.token.anchor, dependency, references, obj.grandParentWithoutRoot, dependencyLocation[:-1])
             lookup = navResult.resolvedDependencyLocation.subLocations
 
             # Make sure that no duplicate object in this namespace exists
@@ -418,7 +422,7 @@ class ProjectDependencyCollection:
 
                 # The name has to be resolvable by now
                 # Catching unresolved objects will spawn templates, if encountered
-                self.links[dependency] = self.navigate(dependency.obj.anchor, dependency.references, dependency.obj.parent, dependency.location)
+                self.links[dependency] = self.navigate(dependency.obj.anchor, dependency, dependency.references, dependency.obj.parent, dependency.location)
 
                 # Add the unresolved dependencies to the queue
                 unresolvedDependencies += self.unresolvedDependencies
@@ -453,7 +457,7 @@ class ProjectDependencyCollection:
 
         # Navigate to the target type.
         targetTypename = dependency.obj.targetTypename
-        return self.navigate(targetTypename.anchor, dependency.references, dependency.obj.parent, targetTypename.location())
+        return self.navigate(targetTypename.anchor, dependency, dependency.references, dependency.obj.parent, targetTypename.location())
 
     def navigate_alias_base(self, navResult):
         """
@@ -483,7 +487,7 @@ class ProjectDependencyCollection:
         Returns:
             dag.NavigationResult: The navigation result.
         """
-        return self.links[dependency] if dependency in self.links else self.navigate(dependency.obj.token, dependency.references, dependency.obj.parent, dependency.location)
+        return self.links[dependency] if dependency in self.links else self.navigate(dependency.obj.token, dependency, dependency.references, dependency.obj.parent, dependency.location)
 
     def _solve_location_conflicts(self):
         """Solve all known location conflicts."""
