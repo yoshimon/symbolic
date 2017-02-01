@@ -121,25 +121,25 @@ piece of source code:
 
     import hlsl;
 
-    struct int;                   // 1. Location: int<NoTemplate>()
+    struct int;                   // 1. Location: int<>()
 
-    struct f                      // 2. Location: f<NoTemplate>()
+    struct f                      // 2. Location: f<>()
     {
-        struct int;               // 3. Location: f<NoTemplate>().int<NoTemplate>()
+        struct int;               // 3. Location: f<>().int<>()
 
-        template<>                // 4. Location: f<NoTemplate>().g<>(int)
+        template<>                // 4. Location: f<>().g<>(int)
         g(int)
         {
-            template<Param>       // 5. Location: f<NoTemplate>().g<>(int).h<T0>()
+            template<Param>       // 5. Location: f<>().g<>(int).h<T0>()
             struct h(Param);
 
-            template<"int">       // 6. Location: f<NoTemplate>().g<>(int).h<T0="int">()
-            struct h(int);        // Will resolve to f<NoTemplate>().int<NoTemplate>().
+            template<"int">       // 6. Location: f<>().g<>(int).h<T0="int">()
+            struct h(int);        // Will resolve to f<>().int<>().
 
-            struct i              // 7. Location: f<NoTemplate>().g<>(int).i<NoTemplate>()
+            struct i              // 7. Location: f<>().g<>(int).i<>()
             {
-                h<"float">;       // Will resolve to f<NoTemplate>().g<>(int).h<T0>()
-                h<"int">;         // Will resolve to f<NoTemplate>().g<>(int).h<T0="int">()
+                h<"float">;       // Will resolve to f<>().g<>(int).h<T0>()
+                h<"int">;         // Will resolve to f<>().g<>(int).h<T0="int">()
             }
         }
     }
@@ -148,18 +148,37 @@ As can be seen in the example, no two locations within the same library can be i
 by the translator when declaring the conflicting object since the translator would not be able to unambiguously resolve the object
 during navigation.
 
-Once the template location has been resolved, it will be instantiated by copying its surrounding references and code (without the
-template header) into a new translation unit within the same library that instantiated the template. While copying the contents over,
-all surrounding namespaces will be anonymized. The new translation unit will then be parsed and analyzed like every other unit.
-Assuming we want to instantiate :code:`h<"float">` in the example above, the new, hidden translation unit will look like this:
+Once the template location has been resolved, it will be instantiated by copying the templated object into a new translation unit
+within the same library that instantiated the template. The object will be anonymized before the copy, so that multiple locations
+can refer to the same template without generating conflicting locations. The translator will keep track of an internal table that
+reduces duplicate template instantiations. However, duplicate instantiations will only be detected if they match exactly, that is when
+their template parameters and imported libraries are identical. The new translation unit will then be parsed and analyzed like every
+other unit using the references at the instantiators site. Assuming we want to instantiate :code:`h<"float">` in the example above,
+the new, hidden translation unit will look like this:
 
 .. code-block:: cpp
 
-    import hlsl;
+    struct (float);
 
-During the lexing step, all template parameters inside the template body will be substituted with their corresponding values. Whenever
-a template parameter gets substituted, the translator will blacklist the substitution of that same parameter within the substituted string
-to prevent an infinite substitution recursion.
+The translator will create a link to this anonymized object by mapping it to the template location so that it can be navigated to
+internally.
+
+During the lexing step, all template parameters will be substituted with their corresponding values. Whenever
+a template parameter gets substituted, the translator will blacklist the substitution of that same parameter within the substituted
+string to prevent an infinite substitution recursion.
+
+.. code-block:: cpp
+
+    template<T0>
+    struct a_type
+    {
+        T0
+    }
+
+    f(a_type<"Some T0 Here">);
+
+In the example above, the template parameter :code:`T0` will only be substituted once by :code:`Some T0 Here`. The :code:`T0`
+token inside the substituted string will not be replaced so that the substitution phase ends after the first pass.
 
 Examples
 --------
