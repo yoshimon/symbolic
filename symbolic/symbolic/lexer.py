@@ -149,6 +149,7 @@ class Symto:
                 self.isBinaryLeftAssociative = op[1]
                 self.isBinaryRightAssociative = not self.isBinaryLeftAssociative
                 self.binaryPrecedence = op[0]
+                self.isLValueOp = text in Ops.lvalue
             
             self.isUnaryOp = text in Ops.unary
             if self.isUnaryOp:
@@ -194,7 +195,7 @@ class Symto:
         Returns:
             bool: True, if the tokens are equal. Otherwise False.
         """
-        return (other != None) and (self.text == other.text)
+        return (other != None) and (str(self) == str(other))
 
 @simplefilter
 def _symbolic_filter(self, lexer, stream, options):
@@ -476,3 +477,5 @@ class Ops:
             '^=': [14, False],
             '|=': [14, False],
             }
+
+    lvalue = { "=", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^=", "|=" }

@@ -440,3 +440,57 @@ class DuplicateParameterSignatureError(SourceError):
             str: The string representation.
         """
         return super().__str__() + 'Signature collides with existing declaration {0}.'.format(str(self.otherAnchor))
+
+class VariableAlreadyExistsError(SourceError):
+    """
+    An exception class, that indicates that a variable with a given name already exists.
+    
+    Attributes:
+        otherAnchor (lexer.Anchor): The other anchor that causes the error.
+    """
+
+    def __init__(self, token):
+        """
+        Initialize the object.
+
+        Args:
+            token (lexer.Symto): The variable token.
+        """
+        super().__init__(token.anchor)
+        self.token = token
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + 'A variable named "{0}" already exists.'.format(str(self.token))
+
+class VariableNotFoundError(SourceError):
+    """
+    An exception class, that indicates that a variable with a given name was not found.
+    
+    Attributes:
+        otherAnchor (lexer.Anchor): The other anchor that causes the error.
+    """
+
+    def __init__(self, token):
+        """
+        Initialize the object.
+
+        Args:
+            token (lexer.Symto): The variable token.
+        """
+        super().__init__(token.anchor)
+        self.token = token
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + 'Could not find a variable named "{0}".'.format(str(self.token))

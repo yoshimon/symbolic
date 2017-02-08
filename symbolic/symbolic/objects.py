@@ -219,6 +219,15 @@ class Location:
         """
         return self.path.__delitem__(key)
 
+    def __len__(self):
+        """
+        Return the number of the location path elements.
+
+        Returns:
+            int: The number of path elements.
+        """
+        return len(self.path)
+
 class Locatable:
     """
     A locatable object within a library.
@@ -288,7 +297,7 @@ class Named(Locatable):
         self.token = token
 
         # Validate the name
-        if self.token.text == '':
+        if self.token == '':
             # Generate an anonymous name
             self.token.text = '@{0}'.format(id(self))
             self.token.kind = Token.Text
@@ -870,7 +879,7 @@ class Expression(Named):
                             stack.append(ExpressionAtom(t, ExpressionAtomKind.ArrayEnd))
                         elif t1.text == '<':
                             # K=2 lookahead
-                            if (not t2 is None) and (t2.kind == Token.Literal.String):
+                            if (not t2 is None) and (t2.kind == Token.Literal.String or t2.text == ">"):
                                 kind = ExpressionAtomKind.TemplateBegin
                                 states.append(State.Template)
                                 stack.append(ExpressionAtom(t, ExpressionAtomKind.TemplateEnd))
@@ -910,7 +919,7 @@ class Expression(Named):
                     stack.append(ExpressionAtom(t, -1))
                 elif (t.isCloseBracket and t.text != '>') or (t.text == '>' and states[-1] == State.Template): # Special case for template >
                     # Keep track of how many parameters were added
-                    if Algorithm.pop_while(stack, lambda atom: not atom.token.text == t.matchingOpenBracket, lambda atom: out.append(atom)):
+                    if Algorithm.pop_while(stack, lambda atom: not atom.token == t.matchingOpenBracket, lambda atom: out.append(atom)):
                         raise MissingBracketsError(t.anchor)
 
                     # Pop open bracket and state
@@ -936,7 +945,7 @@ class Expression(Named):
                     raise InvalidExpressionError(t.anchor)
 
         # Remaining tokens to output
-        if not Algorithm.pop_while(stack, lambda atom: not atom.token.text == '(', lambda atom: out.append(atom)):
+        if not Algorithm.pop_while(stack, lambda atom: not atom.token == '(', lambda atom: out.append(atom)):
             raise MissingBracketsError(stack[-1].token.anchor)
 
         return out
@@ -1832,7 +1841,7 @@ class Annotation:
         Returns:
             bool: True, if an annotation with the specified name exists in the collection. Otherwise False.
         """
-        return any(e.token.text == name for e in collection)
+        return any(e.token == name for e in collection)
 
 class Typename(Locatable):
     """
@@ -2134,7 +2143,7 @@ class TemplateParameter(Named):
         Returns:
             bool: True, if both template parameters are equal. Otherwise False.
         """
-        return self.token.text == other.token.text
+        return self.token == other.token
 
 class Template(Named):
     """

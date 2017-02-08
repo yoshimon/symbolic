@@ -20,7 +20,9 @@ def main():
 
     # Info
     if args.showHeader:
-        print("symbolic v0.9")
+        print("-" * 80)
+        print("symbolic 0.Xdev")
+        print("-" * 80)
 
     projConfigFilePath = VirtualPath(args.path)
 
@@ -31,8 +33,6 @@ def main():
     project = Project(projConfigFilePath)
     project.translate()
     # TODO: save the translated project + libraries out
-
-    print('Done.')
 
 if __name__ == "__main__":
     main()

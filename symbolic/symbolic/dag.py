@@ -120,11 +120,143 @@ class ProjectDependencyCollection:
         self.unresolvedDependencies = list()
         self.libraries = {} # The libraries lookup table
         self.resolvedObjects = defaultdict(ResolvedDependencyLocation) # Maps each library to a set of resolved objects
-        self.links = {} # Maps unresolved dependencies to their resolved counterparts
-        self.locationConflicts = [] # Locations that point to the same endpoint (conflicts)
-        self.libName = None # The name of the library that is being monitored
+        self.links = {} # Maps unresolved dependencies to their resolved counterparts.
+        self.locationConflicts = [] # Locations that point to the same endpoint (conflicts).
+        self.libName = None # The name of the library that is being monitored.
         self.templateLinks = {} # Maps locations to template instantiation results.
+        self.functions = [] # An internal cache of function objects inside the current library.
 
+        # Initialize function table that maps ExpressionAtomKinds to AST verification functions.
+        self._astVerifiers = {
+            ExpressionAtomKind.Var: self._verify_ast_var,
+            ExpressionAtomKind.Number: self._verify_ast_number,
+            ExpressionAtomKind.FunctionEnd: self._verify_ast_function,
+            ExpressionAtomKind.ArrayEnd: self._verify_ast_array,
+            ExpressionAtomKind.TemplateEnd: self._verify_ast_template,
+            ExpressionAtomKind.UnaryOp: self._verify_ast_unary_op,
+            ExpressionAtomKind.BinaryOp: self._verify_ast_binary_op
+        }
+
+    def _verify_ast_var(self, atom, children, localVars, newLocalVars, isOptional):
+        """
+        Verify an AST with a variable atom type.
+
+        Args:
+            atom (objects.ExpressionAtom): The root atom.
+            children (objects.ExpressionAST): The child nodes.
+            localVars (dict): Lookup table that maps variable names to resolved locations.
+            newLocalVars
+        Returns:
+            dag.NavigationResult: The location of the resulting type of this AST.
+        """
+        # Lookup the variable name.
+        varNR = localVars.get(atom.token.text, None)
+        if not isOptional and varNR is None:
+            raise VariableNotFoundError(atom.token)
+
+        # Return the navigation result.
+        return varNR
+
+    def _verify_ast_number(self, atom, children):
+        """
+        Verifies an AST with a number atom type.
+
+        Args:
+            atom (objects.ExpressionAtom): The root atom.
+            children (objects.ExpressionAST): The child nodes.
+        Returns:
+            dag.NavigationResult: The location of the resulting type of this AST.
+        """
+        pass
+
+    def _verify_ast_function(self, atom, children):
+        """
+        Verify an AST with a function atom type.
+
+        Args:
+            atom (objects.ExpressionAtom): The root atom.
+            children (objects.ExpressionAST): The child nodes.
+        Returns:
+            dag.NavigationResult: The location of the resulting type of this AST.
+        """
+        pass
+
+    def _verify_ast_array(self, atom, children):
+        """
+        Verifies an AST with an array atom type.
+
+        Args:
+            atom (objects.ExpressionAtom): The root atom.
+            children (objects.ExpressionAST): The child nodes.
+        Returns:
+            dag.NavigationResult: The location of the resulting type of this AST.
+        """
+        pass
+
+    def _verify_ast_template(self, atom, children):
+        """
+        Verify an AST with a template atom type.
+
+        Args:
+            atom (objects.ExpressionAtom): The root atom.
+            children (objects.ExpressionAST): The child nodes.
+        Returns:
+            dag.NavigationResult: The location of the resulting type of this AST.
+        """
+        pass
+
+    def _verify_ast_unary_op(self, atom, children):
+        """
+        Verifies an AST with a unary operator atom type.
+
+        Args:
+            atom (objects.ExpressionAtom): The root atom.
+            children (objects.ExpressionAST): The child nodes.
+        Returns:
+            dag.NavigationResult: The location of the resulting type of this AST.
+        """
+        pass
+
+    def _verify_ast_binary_op(self, atom, children):
+        """
+        Verify an AST with a binary operator atom type.
+
+        Args:
+            atom (objects.ExpressionAtom): The root atom.
+            children (objects.ExpressionAST): The child nodes.
+        Returns:
+            dag.NavigationResult: The location of the resulting type of this AST.
+        """
+        assert(len(children) == 2)
+
+        left, right = children[0], children[1]
+
+        if atom.token.isLValueOp and not self._is_lvalue(left):
+            raise LValueRequiredError(atom.token)
+            
+        # If this is the = operator then the LHS does not have to have a deducable type.
+        # A missing LHS type would indicate that we have a new variable declaration in that case.
+        isAssignmentOp = atom.token == "="
+            
+        leftNR = self._verify_expression_ast(localVars, newLocalVars, left, isOptional=isAssignmentOp)
+        rightNR = self._verify_expression_ast(localVars, newLocalVars, right, False)
+
+        if leftNR is None:
+            assert(isAssignmentOp)
+                
+            if left.atom.kind == ExpressionAtomKind.Var:
+                # New variable.
+                varName = left.atom.token.text
+                if varName in newLocalVars:
+                    raise VariableAlreadyExistsError(varName)
+
+                newLocalVars[varName] = rightNR
+            else:
+                # Must be an extension.
+                pass
+
+        # Lookup the operator now.
+    
     def navigate(self, errorAnchor, requester, references, parent, location):
         """
         Navigate to a location.
@@ -204,7 +336,7 @@ class ProjectDependencyCollection:
                     dependencies = resolvedDependencyLocation.dependencies
 
                     # Perform ADL to filter out potential matches.
-                    possibleMatches = filter(lambda dependency: rl.might_be_equal_to(dependency.location[i]), dependencies)
+                    possibleMatches = filter(lambda dependency: i < len(dependency.location) and rl.might_be_equal_to(dependency.location[i]), dependencies)
                     if not possibleMatches:
                         continue
 
@@ -369,6 +501,9 @@ class ProjectDependencyCollection:
                 # The unknown parameter types
                 for parameter in obj.parameters:
                     self.insert(references, parameter.typename)
+
+                # Remember this function for instruction verification later.
+                self.functions.append(obj)
             elif isinstance(obj, Alias):
                 # The unknown typename
                 self.insert(references, obj.targetTypename)
@@ -380,7 +515,10 @@ class ProjectDependencyCollection:
         Args:
             libName (str): The name of the library.
         """
-        print("Processing library {0}...".format(libName))
+        print()
+        print("-" * 80)
+        print("Building {0}".format(libName))
+        print("-" * 80)
 
         # Create an empty entry in the global dict
         # Breakup the library name and insert it
@@ -398,6 +536,7 @@ class ProjectDependencyCollection:
 
         # Remember the library name and pre-processor
         self.libName = libName
+        self.functions = []
 
     def end_library(self):
         """End collecting dependencies for the current library."""
@@ -405,11 +544,10 @@ class ProjectDependencyCollection:
 
         # Close this library
         self.libName = None
+        self.functions = []
 
     def _resolve(self):
         """Resolve all dependencies."""
-        print("Resolving library dependencies...")
-
         if self.unresolvedDependencies:
             # Traverse from top to bottom
             unresolvedDependencies = deque(self.unresolvedDependencies)
@@ -434,6 +572,100 @@ class ProjectDependencyCollection:
             # we solve location conflicts due to clashing parameter
             # signatures by comparing the types
             self._solve_location_conflicts()
+
+        # Now that all members and function parameters are resolved we can look at the instructions within
+        # the functions.
+        self._verify_functions()
+
+    def _verify_functions(self):
+        """Verify all instructions within all instantiated functions of the current library."""
+        for func in self.functions:
+            self._verify_function(func)
+
+    def _verify_function(self, func):
+        """
+        Verify the contents of a given function body.
+        
+        Args:
+            func (objects.Function): The function object.
+        """
+        # The local variable cache.
+        # Maps each variable name to a resolved type location.
+        localVars = {}
+
+        for obj in func.objects:
+            if isinstance(obj, Instruction):
+                self._verify_instruction(localVars, obj)
+
+    def _verify_instruction(self, localVars, instruction):
+        """
+        Verify an instruction.
+
+        Args:
+            localVars (dict): The local variables.
+            instruction (objects.Instruction): The instruction to verify.
+        """
+        newLocalVars = {}
+
+        # Verify the AST.
+        if instruction.kind == InstructionKind.Expression:
+            # We don't care about the expression type.
+            self._verify_expression_ast(localVars, newLocalVars, instruction.expression.ast)
+        elif instruction.kind in [InstructionKind.Break, InstructionKind.Continue]:
+            # Make sure we are inside a loop.
+            if not state != ScopeState.Loop:
+                raise NotInsideLoopError(instruction.token.anchor)
+        elif instruction.kind == InstructionKind.Return:
+            exprTypeLocation = self._verify_expression_ast(localVars, newLocalVars, instruction.expression.ast)
+            
+            # Return statements are not allowed to introduce new variables.
+            if localVars:
+                raise DeclarationInReturnError(instruction.token.anchor)
+
+            # Make sure the expression type matches the function return type.
+            func = instruction.parent
+            assert(isinstance(func, Function))
+            return exprTypeLocation == func.returnTypename
+        elif instruction.kind == InstructionKind.If:
+            exprType = self._verify_expression_ast(localVars, newLocalVars, instruction.expression.ast)
+
+            # Make sure the return type evaluates to bool.
+            
+        elif instruction.kind == InstructionKind.Elif:
+            pass
+
+    def _verify_expression_ast(self, localVars, newLocalVars, ast, *, isOptional=False):
+        """
+        Verify an expression.
+
+        Args:
+            localVars (dict): Visible variable declarations.
+            newLocalVars (dict): New variable declarations.
+            ast (objects.ExpressionAST): The expression AST to verify.
+            isOptional (bool): Indicates whether the result of this function can be optionally None.
+        Returns:
+            dag.NavigationResult or None: The navigation result after searching for the type of the expression.
+        """
+        atom = ast.atom
+        children = ast.children
+
+        # Validate the AST.
+        assert(atom.kind not in self._astVerifiers)
+
+        # Invoke the verification handler.
+        return self._astVerifiers[atom.kind](atom, children, localVars, newLocalVars, isOptional)
+
+    @staticmethod
+    def _is_lvalue(ast):
+        """
+        Returns whether an AST contains an l-value only.
+        
+        Args:
+            ast (objects.ExpressionAST): The AST to inspect.
+        Returns:
+            bool: True, if the AST contains an l-value. Otherwise False.
+        """
+        return ast.atom.kind == ExpressionAST
 
     def navigate_alias_target(self, navResult):
         """
@@ -531,8 +763,7 @@ class ProjectDependencyCollection:
             if isConflict:
                 raise DuplicateParameterSignatureError(dep0.obj.token.anchor, dep1.obj.token.anchor)
 
-    def to_graph(self):
-        pass
+        self.locationConflicts = []
 
 class ProjectDependencyGraph:
     pass

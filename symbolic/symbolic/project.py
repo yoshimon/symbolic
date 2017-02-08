@@ -113,6 +113,9 @@ class LibraryDependencyGraph:
         self.graph = nx.DiGraph()
 
         # Create a node for each library
+        print("-" * 80)
+        print("(1) Library Gatherer")
+        print("-" * 80)
         for libDirPath in self.projConfig.libraryDirectoryPaths:
             # Load the library configuration
             libConfig = LibraryConfiguration(libDirPath + ".manifest")
@@ -123,7 +126,7 @@ class LibraryDependencyGraph:
             for ref in libConfig.references:
                 self.graph.add_edge(ref, libConfig.libName)
 
-            print("Loaded library {0}.".format(libConfig.libName))
+            print("{0} found.".format(libConfig.libName))
 
     def resolve(self):
         """
@@ -132,6 +135,11 @@ class LibraryDependencyGraph:
         Returns:
             iterable: A linearized sequence of library names.
         """
+        print()
+        print("-" * 80)
+        print("(2) Library Dependency Solver")
+        print("-" * 80)
+
         # All dependencies have to resolve nicely
         try:
             sortedLibs = nx.topological_sort(self.graph)
@@ -146,7 +154,7 @@ class LibraryDependencyGraph:
 
             raise LibraryDependencyError(dependencyChain)
 
-        print("Resolved library order: [{0}].".format(", ".join(libName for libName in sortedLibs)))
+        print("Resolved build order: [{0}].".format(", ".join(libName for libName in sortedLibs)))
 
         return ((libName, self.graph.node[libName]["libConfig"]) for libName in sortedLibs)
 
@@ -225,6 +233,3 @@ class Project:
 
             # Signal that we are done with this library
             dependencyCollection.end_library()
-
-        # Convert the resolved collection to a dependency graph
-        dependencyGraph = dependencyCollection.to_graph()
