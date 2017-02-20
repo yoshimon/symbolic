@@ -469,12 +469,7 @@ class VariableAlreadyExistsError(SourceError):
         return super().__str__() + 'A variable named "{0}" already exists.'.format(str(self.token))
 
 class VariableNotFoundError(SourceError):
-    """
-    An exception class, that indicates that a variable with a given name was not found.
-    
-    Attributes:
-        otherAnchor (lexer.Anchor): The other anchor that causes the error.
-    """
+    """An exception class, that indicates that a variable with a given name was not found."""
 
     def __init__(self, token):
         """
@@ -493,4 +488,16 @@ class VariableNotFoundError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + 'Could not find a variable named "{0}".'.format(str(self.token))
+        return super().__str__() + 'Could not find any variable named "{0}".'.format(str(self.token))
+
+class LValueRequiredError(SourceError):
+    """An exception class, that indicates that an L-value was required but not found."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + 'L-value required.'.format(str(self.anchor))

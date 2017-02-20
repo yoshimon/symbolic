@@ -317,7 +317,7 @@ class Named(Locatable):
         Returns:
             objects.Location: A location within the library.
         """
-        rl = [RelativeLocation(kind, self.token.text, templateParameters=templateParameters, parameters=parameters)]
+        rl = [RelativeLocation(kind, str(self.token), templateParameters=templateParameters, parameters=parameters)]
         if (self.parent) and (self.parent.parent):
             return Location(self.parent.location().path + rl)
         else:
@@ -336,7 +336,7 @@ class Named(Locatable):
             compatibleNames ([str]): A list, containing the compatible annotation names.
         """
         for annotation in self.sysAnnotations:
-            if annotation.token.text not in compatibleNames:
+            if str(annotation.token) not in compatibleNames:
                 raise UnsupportedSystemAnnotationError(self.__class__.__name__, annotation)
 
     def __str__(self):
@@ -346,7 +346,7 @@ class Named(Locatable):
         Returns:
             str: The name of the object.
         """
-        return self.token.text
+        return str(self.token)
 
 class Reference(Named):
     """An external library reference."""
@@ -384,7 +384,7 @@ class Reference(Named):
         Returns:
             str: The string representation.
         """
-        return self.token.text
+        return str(self.token)
 
 class Namespace(Named):
     """
@@ -691,7 +691,7 @@ class Instruction(Named):
                 raise DevError()
         else:
             # Early-out if the current token is one of the end delimiters
-            if parser.token.text in args:
+            if str(parser.token) in args:
                 return None
 
             # Look for jumps (same as above)
@@ -828,7 +828,7 @@ class Expression(Named):
         Returns:
             objects.Location: A location within the library.
         """
-        return Location([RelativeLocation(LocationKind.Unresolved, self.token.text)])
+        return Location([RelativeLocation(LocationKind.Unresolved, str(self.token))])
 
     @staticmethod
     def to_postfix(tokens):
@@ -1343,7 +1343,7 @@ class Function(TemplateObject, Namespace):
                     if p.isRef:
                         prettyString += 'ref'
                     prettyString += str(p.typename)
-                    prettyString += p.token.text
+                    prettyString += str(p.token)
                     if p.semantic is not None:
                         prettyString += ': ' + p.semantic.text
                     if i < numParameters - 1:
@@ -1581,7 +1581,7 @@ class Struct(TemplateObject, Namespace):
         """
         prettyString += 'struct '
         if not asAnonymous:
-            prettyString += self.token.text
+            prettyString += str(self.token)
 
 class Alias(TemplateObject):
     """
@@ -1679,7 +1679,7 @@ class Alias(TemplateObject):
         """
         prettyString += 'using '
         if not asAnonymous:
-            prettyString += self.token.text
+            prettyString += str(self.token)
 
 class Annotation:
     """
@@ -1715,7 +1715,7 @@ class Annotation:
         """
         result = ''
         for annotation in collection:
-            result += open + annotation.token.text
+            result += open + str(annotation.token)
             if len(annotation.args) > 0:
                 result += '(' + ', '.join([t.text for t in annotation.args]) + ')'
             if close is not None:
@@ -1822,8 +1822,8 @@ class Annotation:
                 if annotation is None: break
 
                 # Make sure the system annotation exists
-                if not annotation.token.text in Language.sysAnnotations:
-                    raise UnknownSystemAnnotationError(annotation.token.anchor, annotation.token.text)
+                if not str(annotation.token) in Language.sysAnnotations:
+                    raise UnknownSystemAnnotationError(annotation.token.anchor, str(annotation.token))
 
                 sysAnnotations.append(annotation)
             else:
@@ -1871,7 +1871,7 @@ class Typename(Locatable):
         self.scope = scope
         
         # Overwrite the scope strings
-        self.scopeStrings = [token.text for token in scope]
+        self.scopeStrings = [str(token) for token in scope]
 
         # Generate args if necessary
         if templateParameters is None:
@@ -1887,7 +1887,7 @@ class Typename(Locatable):
     def validate(self):
         """Validate the object."""
         # Should not be a keyword.
-        if any(token.text in Language.keywords for token in self.scope):
+        if any(str(token) in Language.keywords for token in self.scope):
             raise InvalidTypenameError(self.scope[0].anchor)
 
     def location(self):
@@ -1954,7 +1954,7 @@ class Typename(Locatable):
 
             # Base
             token = self.scope[i]
-            s = token.text
+            s = str(token)
 
             # Template args
             if templateParameters:
@@ -2123,7 +2123,7 @@ class TemplateParameter(Named):
         Returns:
             str: The string representation.
         """
-        return self.token.text
+        return str(self.token)
 
     def  __hash__(self):
         """

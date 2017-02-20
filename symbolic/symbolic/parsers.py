@@ -136,7 +136,7 @@ class BaseParser:
         if self.is_eof():
             return False
 
-        success = value == self.token.text
+        success = value == str(self.token)
         if success:
             self.advance()
         return success
@@ -247,7 +247,7 @@ class BaseParser:
             raise UnexpectedEOFError(self.token.anchor)
 
         if not self.match(val):
-            raise UnexpectedTokenError(self.token.anchor, val, self.token.text)
+            raise UnexpectedTokenError(self.token.anchor, val, str(self.token))
 
         return self.token
 
@@ -262,7 +262,7 @@ class BaseParser:
         """
         token = self.match_kind(tokenType)
         if token is None:
-            raise UnexpectedTokenError(self.token.anchor, tokenType, self.token.text)
+            raise UnexpectedTokenError(self.token.anchor, tokenType, str(self.token))
         return token
 
     def push_state(self):

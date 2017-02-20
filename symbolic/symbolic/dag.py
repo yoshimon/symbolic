@@ -125,6 +125,7 @@ class ProjectDependencyCollection:
         self.libName = None # The name of the library that is being monitored.
         self.templateLinks = {} # Maps locations to template instantiation results.
         self.functions = [] # An internal cache of function objects inside the current library.
+        self._libLocationNavResults = {} # Maps tags (object Ids) to their resolved navigation result.
 
         # Initialize function table that maps ExpressionAtomKinds to AST verification functions.
         self._astVerifiers = {
@@ -149,15 +150,15 @@ class ProjectDependencyCollection:
         Returns:
             dag.NavigationResult: The location of the resulting type of this AST.
         """
-        # Lookup the variable name.
-        varNR = localVars.get(atom.token.text, None)
+        # Lookup the resolved variable type.
+        varNR = localVars.get(str(atom.token), None)
         if not isOptional and varNR is None:
             raise VariableNotFoundError(atom.token)
 
         # Return the navigation result.
         return varNR
 
-    def _verify_ast_number(self, atom, children):
+    def _verify_ast_number(self, atom, children, localVars, newLocalVars, isOptional):
         """
         Verifies an AST with a number atom type.
 
@@ -169,7 +170,7 @@ class ProjectDependencyCollection:
         """
         pass
 
-    def _verify_ast_function(self, atom, children):
+    def _verify_ast_function(self, atom, children, localVars, newLocalVars, isOptional):
         """
         Verify an AST with a function atom type.
 
@@ -181,7 +182,7 @@ class ProjectDependencyCollection:
         """
         pass
 
-    def _verify_ast_array(self, atom, children):
+    def _verify_ast_array(self, atom, children, localVars, newLocalVars, isOptional):
         """
         Verifies an AST with an array atom type.
 
@@ -193,7 +194,7 @@ class ProjectDependencyCollection:
         """
         pass
 
-    def _verify_ast_template(self, atom, children):
+    def _verify_ast_template(self, atom, children, localVars, newLocalVars, isOptional):
         """
         Verify an AST with a template atom type.
 
@@ -205,7 +206,7 @@ class ProjectDependencyCollection:
         """
         pass
 
-    def _verify_ast_unary_op(self, atom, children):
+    def _verify_ast_unary_op(self, atom, children, localVars, newLocalVars, isOptional):
         """
         Verifies an AST with a unary operator atom type.
 
@@ -217,7 +218,7 @@ class ProjectDependencyCollection:
         """
         pass
 
-    def _verify_ast_binary_op(self, atom, children):
+    def _verify_ast_binary_op(self, atom, children, localVars, newLocalVars, isOptional):
         """
         Verify an AST with a binary operator atom type.
 
@@ -232,23 +233,24 @@ class ProjectDependencyCollection:
         left, right = children[0], children[1]
 
         if atom.token.isLValueOp and not self._is_lvalue(left):
-            raise LValueRequiredError(atom.token)
+            raise LValueRequiredError(atom.token.anchor)
             
         # If this is the = operator then the LHS does not have to have a deducable type.
         # A missing LHS type would indicate that we have a new variable declaration in that case.
         isAssignmentOp = atom.token == "="
             
         leftNR = self._verify_expression_ast(localVars, newLocalVars, left, isOptional=isAssignmentOp)
-        rightNR = self._verify_expression_ast(localVars, newLocalVars, right, False)
+        rightNR = self._verify_expression_ast(localVars, newLocalVars, right)
 
         if leftNR is None:
             assert(isAssignmentOp)
                 
             if left.atom.kind == ExpressionAtomKind.Var:
                 # New variable.
-                varName = left.atom.token.text
+                varToken = left.atom.token
+                varName = str(varToken)
                 if varName in newLocalVars:
-                    raise VariableAlreadyExistsError(varName)
+                    raise VariableAlreadyExistsError(varToken)
 
                 newLocalVars[varName] = rightNR
             else:
@@ -257,7 +259,7 @@ class ProjectDependencyCollection:
 
         # Lookup the operator now.
     
-    def navigate(self, errorAnchor, requester, references, parent, location):
+    def navigate(self, errorAnchor, requester, references, parent, location, tag):
         """
         Navigate to a location.
 
@@ -269,6 +271,8 @@ class ProjectDependencyCollection:
                 The navigation will start the the parent and, on failure, move up the
                 hierarchy until a match is found.
             location (objects.Location): The location.
+            tag (int): A tag to associate with this navigation operation. Used for caching
+                navigation results.
         Returns:
             dag.NavigationResult: The resolved location.
         """
@@ -381,7 +385,7 @@ class ProjectDependencyCollection:
                                 lexer = SymbolicLexer(libName=self.libName, fileName="$Templates/{0}".format(str(dependencyObj.token)))
 
                                 # Plugin the template substitutions for the lexer.
-                                templateSubs = { dependencyRL.templateParameters[i].token.text: parameter.token.text[1:-1] for i, parameter in enumerate(rl.templateParameters) }
+                                templateSubs = { str(dependencyRL.templateParameters[i].token): str(parameter.token)[1:-1] for i, parameter in enumerate(rl.templateParameters) }
 
                                 # Generate a parsable token stream now.
                                 srcFileTokens = lexer.tokenize(ppTemplateSrc, subs=templateSubs)
@@ -405,7 +409,7 @@ class ProjectDependencyCollection:
                         
                             # Use template links to jump to the right location, which is anonymous.
                             templateObj = self.templateLinks[dependencyLocationStr]
-                            templateNavResult = self.navigate(dependencyObj.token.anchor, requester, references, templateObj.parent, templateObj.location())
+                            templateNavResult = self.navigate(dependencyObj.token.anchor, requester, references, templateObj.parent, templateObj.location(), id(templateObj))
                             templateAliasNavResult = self.navigate_alias_base(templateNavResult)
                             resolvedDependencyLocation = templateAliasNavResult.resolvedDependencyLocation
 
@@ -425,7 +429,13 @@ class ProjectDependencyCollection:
         if not locationFound:
             raise DependencyNotFoundError(errorAnchor, location)
 
-        return NavigationResult(resolvedLibName, lookup)
+        result = NavigationResult(resolvedLibName, lookup)
+
+        # Cache the result.
+        # This is used to lookup function parameter typename locations later.
+        self._libLocationNavResults[tag] = result
+
+        return result
 
     def insert(self, references, obj):
         """
@@ -444,7 +454,7 @@ class ProjectDependencyCollection:
             self.unresolvedDependencies.append(dependency)
         else:
             # Navigate to parent
-            navResult = self.navigate(obj.token.anchor, dependency, references, obj.grandParentWithoutRoot, dependencyLocation[:-1])
+            navResult = self.navigate(obj.token.anchor, dependency, references, obj.grandParentWithoutRoot, dependencyLocation[:-1], id(obj))
             lookup = navResult.resolvedDependencyLocation.subLocations
 
             # Make sure that no duplicate object in this namespace exists
@@ -534,9 +544,9 @@ class ProjectDependencyCollection:
             # Step down
             lookup = lookup[s]
 
-        # Remember the library name and pre-processor
         self.libName = libName
         self.functions = []
+        self._libLocationNavResults = {}
 
     def end_library(self):
         """End collecting dependencies for the current library."""
@@ -557,10 +567,11 @@ class ProjectDependencyCollection:
             
             while unresolvedDependencies:
                 dependency = unresolvedDependencies.popleft()
+                obj = dependency.obj
 
                 # The name has to be resolvable by now
                 # Catching unresolved objects will spawn templates, if encountered
-                self.links[dependency] = self.navigate(dependency.obj.anchor, dependency, dependency.references, dependency.obj.parent, dependency.location)
+                self.links[dependency] = self.navigate(obj.anchor, dependency, dependency.references, obj.parent, dependency.location, id(obj))
 
                 # Add the unresolved dependencies to the queue
                 unresolvedDependencies += self.unresolvedDependencies
@@ -592,6 +603,12 @@ class ProjectDependencyCollection:
         # The local variable cache.
         # Maps each variable name to a resolved type location.
         localVars = {}
+
+        # Push the function parameters as local variables.
+        for p in func.parameters:
+            pId = id(p.typename)
+            pNR = self._libLocationNavResults[pId]
+            localVars[str(p.token)] = pNR
 
         for obj in func.objects:
             if isinstance(obj, Instruction):
@@ -650,7 +667,7 @@ class ProjectDependencyCollection:
         children = ast.children
 
         # Validate the AST.
-        assert(atom.kind not in self._astVerifiers)
+        assert(atom.kind in self._astVerifiers)
 
         # Invoke the verification handler.
         return self._astVerifiers[atom.kind](atom, children, localVars, newLocalVars, isOptional)
@@ -665,7 +682,9 @@ class ProjectDependencyCollection:
         Returns:
             bool: True, if the AST contains an l-value. Otherwise False.
         """
-        return ast.atom.kind == ExpressionAST
+        # Look at LHS of . or the atom itself if it is not a member.
+        varAtomKind = ast.children[1].atom.kind if str(ast.atom.token) in "." else ast.atom.kind
+        return varAtomKind == ExpressionAtomKind.Var
 
     def navigate_alias_target(self, navResult):
         """
@@ -689,7 +708,7 @@ class ProjectDependencyCollection:
 
         # Navigate to the target type.
         targetTypename = dependency.obj.targetTypename
-        return self.navigate(targetTypename.anchor, dependency, dependency.references, dependency.obj.parent, targetTypename.location())
+        return self.navigate(targetTypename.anchor, dependency, dependency.references, dependency.obj.parent, targetTypename.location(), id(targetTypename))
 
     def navigate_alias_base(self, navResult):
         """
@@ -719,7 +738,7 @@ class ProjectDependencyCollection:
         Returns:
             dag.NavigationResult: The navigation result.
         """
-        return self.links[dependency] if dependency in self.links else self.navigate(dependency.obj.token, dependency, dependency.references, dependency.obj.parent, dependency.location)
+        return self.links[dependency] if dependency in self.links else self.navigate(dependency.obj.token, dependency, dependency.references, dependency.obj.parent, dependency.location, id(dependency.obj))
 
     def _solve_location_conflicts(self):
         """Solve all known location conflicts."""
