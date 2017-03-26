@@ -111,6 +111,7 @@ class RelativeLocation:
             (self.kind == other.kind or self.kind == LocationKind.Unresolved or other.kind == LocationKind.Unresolved) and
             self.name == other.name and
             len(self.parameters) == len(other.parameters) and
+            all(p0.isRef == p1.isRef for p0, p1 in zip(self.parameters, other.parameters)) and
             Algorithm.zip_all(self.templateParameters, other.templateParameters,
                               lambda p0, p1: p0.partialMatch is None or p1.partialMatch is None or p0.partialMatch == p1.partialMatch)
         )
@@ -124,8 +125,7 @@ class RelativeLocation:
         """
         templateStr = "<{0}>".format(Algorithm.join_comma(self.templateParameters)) if self.templateParameters else ""
         parameterStr = "({0})".format(Algorithm.join_comma(self.parameters)) if self.parameters else ""
-        kindStr = " as {0}".format(str(self.kind)) if self.kind != LocationKind.Unresolved else ""
-        return self.name + templateStr + parameterStr + kindStr
+        return self.name + templateStr + parameterStr
 
     def __eq__(self, other):
         """
@@ -165,7 +165,13 @@ class Location:
         Returns:
             str: The string representation.
         """
-        return Algorithm.join_dot(self.path)
+        if self.path:
+            lastRL = self.path[-1]
+            kindStr = " as {0}".format(str(lastRL.kind)) if lastRL.kind != LocationKind.Unresolved else ""
+        else:
+            kindStr = ""
+
+        return Algorithm.join_dot(self.path) + kindStr
 
     def __eq__(self, other):
         """
@@ -236,20 +242,23 @@ class Locatable:
     to locate the object within a library.
     
     Attributes:
+        references ([objects.Reference]): The references visible to this locatable.
         parent (objects.Locatable): The parent object.
         grandParent (objects.Locatable or None): The grand-parent object.
         grandParentWithoutRoot (objects.Locatable or None): The grand-parent object or None if the grandparent is the root.
         anchor (Token): The anchor in the source code.        
     """
 
-    def __init__(self, parent, anchor):
+    def __init__(self, references, parent, anchor):
         """
         Initialize the object.
         
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             anchor (Token): The anchor in the source code.
         """
+        self.references = references
         self.parent = parent
         self.grandParent = parent.parent if parent else None
         self.grandParentWithoutRoot = self.grandParent if (self.grandParent) and (self.grandParent.parent) else None
@@ -276,18 +285,19 @@ class Named(Locatable):
         semantic (lexer.Symto): The semantic annotation.
     """
 
-    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic):
+    def __init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic):
         """
         Initialize the object.
 
         Args:
+            references ([objects.Reference]): The references visible to this object.
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             userAnnotations ([objects.Annotation]): The user annotations.
             sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
         """
-        super().__init__(parent, token.anchor)
+        super().__init__(references, parent, token.anchor)
         assert token is not None
         assert userAnnotations is not None
         assert sysAnnotations is not None
@@ -357,12 +367,13 @@ class Reference(Named):
         Initialize the object.
 
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             token (lexer.Symto): The reference text.
             userAnnotations ([objects.Annotation]): The user annotations.
             sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
         """
-        super().__init__(None, token, userAnnotations, sysAnnotations, semantic)
+        super().__init__([], None, token, userAnnotations, sysAnnotations, semantic)
 
     def validate(self):
         """Validate the object."""
@@ -395,18 +406,19 @@ class Namespace(Named):
     """
 
     @Decorators.validated
-    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic):
+    def __init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic):
         """
         Initialize the object.
 
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             userAnnotations ([objects.Annotation]): The user annotations.
             sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
         """
-        Named.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic)
+        Named.__init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic)
         self.objects = []
 
     def validate(self):
@@ -450,7 +462,7 @@ class Namespace(Named):
         parent = parser.namespace()
         
         # Create the namespace object
-        namespace = Namespace(parent, token, userAnnotations, sysAnnotations, semantic)
+        namespace = Namespace(parser.references, parent, token, userAnnotations, sysAnnotations, semantic)
         
         # Register it with the parent
         parent.objects.append(namespace)
@@ -475,11 +487,12 @@ class TemplateObject(Named):
         body ([lexer.Symto]): The template body, represented by a list of tokens.
     """
 
-    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body):
+    def __init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic, body):
         """
         Initialize the object.
 
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             userAnnotations ([objects.Annotation]): The user annotations.
@@ -487,7 +500,7 @@ class TemplateObject(Named):
             semantic (lexer.Symto): The semantic annotation.
             body ([lexer.Symto]): The template body, represented by a list of tokens.
         """
-        super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
+        super().__init__(references, parent, token, userAnnotations, sysAnnotations, semantic)
         self.body = body
 
 class InstructionKind(Enum):
@@ -533,11 +546,12 @@ class Instruction(Named):
     """
 
     @Decorators.validated
-    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, kind, *, expression=None, instructions=None, forInits=None, forPredicates=None, forSteps=None):
+    def __init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic, kind, *, expression=None, instructions=None, forInits=None, forPredicates=None, forSteps=None):
         """
         Initialize the object.
 
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): An anomymous identifier for the object.
             userAnnotations ([objects.Annotation]): The user annotations.
@@ -550,7 +564,7 @@ class Instruction(Named):
             forPredicates ([objects.Expression]): The expressions for the for-loop predicates.
             forSteps ([objects.Expression]): The expressions for the for-loop step.
         """
-        super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
+        super().__init__(references, parent, token, userAnnotations, sysAnnotations, semantic)
         self.kind = kind
         self.expression = expression
         self.instructions = instructions
@@ -663,13 +677,13 @@ class Instruction(Named):
                 # KEYWORD(EXPRESSION)
                 expression, semantic = Instruction.parse_parenthesized_expression(parser)
                 instructions = Instruction.parse_instruction_body(parser)
-                return Instruction(parent, token, userAnnotations, sysAnnotations, semantic, kind, expression=expression, instructions=instructions)
+                return Instruction(parser.references, parent, token, userAnnotations, sysAnnotations, semantic, kind, expression=expression, instructions=instructions)
             elif kind == InstructionKind.Do:
                 # DO { ... } WHILE(EXPRESSION)
                 instructions = Instruction.parse_instruction_body(parser)
                 parser.expect('while')
                 expression, semantic = Instruction.parse_parenthesized_expression(parser)
-                return Instruction(parent, token, userAnnotations, sysAnnotations, semantic, kind, expression=expression, instructions=instructions)
+                return Instruction(parser.references, parent, token, userAnnotations, sysAnnotations, semantic, kind, expression=expression, instructions=instructions)
             elif kind == InstructionKind.For:
                 # FOR(INIT_EXPR, INIT_EXPR; COND, COND; STEP, STEP)
                 parser.expect('(')
@@ -681,12 +695,12 @@ class Instruction(Named):
                 parser.expect(')')
                 semantic = Annotation.parse_semantic(parser)
                 instructions = Instruction.parse_instruction_body(parser)
-                return Instruction(parent, token, userAnnotations, sysAnnotations, semantic, kind, instructions=instructions, forInits=forInits, forPredicates=forPredicates, forSteps=forSteps)
+                return Instruction(parser.references, parent, token, userAnnotations, sysAnnotations, semantic, kind, instructions=instructions, forInits=forInits, forPredicates=forPredicates, forSteps=forSteps)
             elif kind == InstructionKind.Else:
                 # ELSE { ... }
                 semantic = Annotation.parse_semantic(parser)
                 instructions = Instruction.parse_instruction_body(parser)
-                return Instruction(parent, token, userAnnotations, sysAnnotations, semantic, kind, instructions=instructions)
+                return Instruction(parser.references, parent, token, userAnnotations, sysAnnotations, semantic, kind, instructions=instructions)
             else:
                 raise DevError()
         else:
@@ -715,7 +729,7 @@ class Instruction(Named):
 
             parser.expect(';')
 
-            return Instruction(parent, token, [], [], None, kind, expression=expression) 
+            return Instruction(parser.references, parent, token, [], [], None, kind, expression=expression) 
 
 class ExpressionAtomKind(Enum):
     """
@@ -801,18 +815,19 @@ class Expression(Named):
     """
 
     @Decorators.validated
-    def __init__(self, parent, userAnnotations, sysAnnotations, tokens):
+    def __init__(self, references, parent, userAnnotations, sysAnnotations, tokens):
         """
         Initialize the object.
 
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             userAnnotations ([objects.Annotation]): The user annotations.
             sysAnnotations ([objects.Annotation]): The system annotations.
             tokens ([lexer.Symto]): The expression token list.
         """
         token = Symto.from_token(tokens[0], Token.Text, '')
-        super().__init__(parent, token, userAnnotations, sysAnnotations, None)
+        super().__init__(references, parent, token, userAnnotations, sysAnnotations, None)
         self.tokens = tokens
         self.postfixAtoms = Expression.to_postfix(tokens) # Convert to RPN
         self.ast = Expression.to_ast(self.postfixAtoms) # RPN to AST
@@ -1045,7 +1060,7 @@ class Expression(Named):
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
         try:
             tokens = parser.until_any(args)
-            return Expression(parser.namespace(), userAnnotations, sysAnnotations, tokens)
+            return Expression(parser.references, parser.namespace(), userAnnotations, sysAnnotations, tokens)
         except:
             return None
 
@@ -1085,7 +1100,7 @@ class Parameter(Named):
             typename (objects.Typename): The typename.
             isRef (bool): True, if the parameter is a reference. Otherwise False.
         """
-        super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
+        super().__init__(typename.references, parent, token, userAnnotations, sysAnnotations, semantic)
         self.typename = typename
         self.isRef = isRef
 
@@ -1163,11 +1178,12 @@ class Function(TemplateObject, Namespace):
     """
 
     @Decorators.validated
-    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body, kind, returnTypename, extensionTypename, parameters):
+    def __init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic, body, kind, returnTypename, extensionTypename, parameters):
         """
         Initialize the object.
 
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             userAnnotations ([objects.Annotation]): The user annotations.
@@ -1184,8 +1200,8 @@ class Function(TemplateObject, Namespace):
         self.returnTypename = returnTypename
         self.extensionTypename = extensionTypename
         self.parameters = parameters
-        Namespace.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic)
-        TemplateObject.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body)
+        Namespace.__init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic)
+        TemplateObject.__init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic, body)
 
     def validate(self):
         """Validate the object."""
@@ -1229,8 +1245,8 @@ class Function(TemplateObject, Namespace):
         if parser.token.kind != Token.Name:
             if hasExplicitReturnType:
                 name = returnTypename.scope[-1]
-            returnTypenameToken = Symto.from_token(parser.token, Token.Name, Typename.default_return_typename(parent))
-            returnTypename = Typename(parent, [returnTypenameToken])
+            returnTypenameToken = Symto.from_token(parser.token, Token.Name, Typename.default_return_typename(parser.references, parent))
+            returnTypename = Typename(parser.references, parent, [returnTypenameToken])
         
         if hasExplicitReturnType:
             # Extensions can be explicitly scoped
@@ -1252,7 +1268,7 @@ class Function(TemplateObject, Namespace):
                     # Looks like an extension
                     kind = FunctionKind.Extension
                     name = extensionTypename.scope[-1]
-                    extensionTypename = Typename(parent, extensionTypename.scope[:-1], templateParameters=extensionTypename.templateParameters[:-1], dims=extensionTypename.dims[:-1]) if extensionTypename else None
+                    extensionTypename = Typename(parser.references, parent, extensionTypename.scope[:-1], templateParameters=extensionTypename.templateParameters[:-1], dims=extensionTypename.dims[:-1]) if extensionTypename else None
                 else:
                     if len(extensionTypename.scope) == 1:
                         # Regular function or operator
@@ -1274,7 +1290,7 @@ class Function(TemplateObject, Namespace):
 
         # Register the function with the current namespace
         parent = parser.namespace()
-        func = Function(parent, name, userAnnotations, sysAnnotations, semantic, None, kind, returnTypename, extensionTypename, parameters)
+        func = Function(parser.references, parent, name, userAnnotations, sysAnnotations, semantic, None, kind, returnTypename, extensionTypename, parameters)
         parser.namespaceStack.append(func)
         try:
             if isTemplate:
@@ -1307,27 +1323,17 @@ class Function(TemplateObject, Namespace):
         """
         return Function.parse_template(parser, False)
 
-    def generate_from_template(self, prettyString, *, asAnonymous=True):
+    def generate_from_template(self, prettyString):
         """
         Generate a template string from the parsed object.
 
         Args:
             prettyString (formatter.PrettyString): The string to append the Function to.
-            asAnonymous (bool): Set this to True, if the template should be emitted with an anonymous name.
         """
         # ReturnType
         # Do not emit default return type.
         if not self.returnTypename.is_default_return_typename():
             prettyString += str(self.returnTypename)
-
-        # Name
-        if not asAnonymous:
-            if self.kind == FunctionKind.Extension:
-                prettyString += self.extensionName
-            elif self.kind == FunctionKind.Operator:
-                prettyString += 'operator' + self.name
-            else:
-                prettyString += self.name
 
         # Parameter signature
         numParameters = len(self.parameters)
@@ -1345,7 +1351,7 @@ class Function(TemplateObject, Namespace):
                     prettyString += str(p.typename)
                     prettyString += str(p.token)
                     if p.semantic is not None:
-                        prettyString += ': ' + p.semantic.text
+                        prettyString += ': ' + str(p.semantic)
                     if i < numParameters - 1:
                         prettyString += ','
                     prettyString += '\n'
@@ -1361,11 +1367,12 @@ class Member(Named):
     """
 
     @Decorators.validated
-    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, typename):
+    def __init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic, typename):
         """
         Initialize the object.
 
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             userAnnotations ([objects.Annotation]): The user annotations.
@@ -1373,7 +1380,7 @@ class Member(Named):
             semantic (lexer.Symto): The semantic annotation.
             typename (objects.Typename): The member typename.
         """
-        super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
+        super().__init__(references, parent, token, userAnnotations, sysAnnotations, semantic)
         self.typename = typename
 
     def validate(self):
@@ -1401,7 +1408,7 @@ class Member(Named):
             objects.Expression: The parameter or None, if no parameter was parsed.
         """
         userAnnotations, sysAnnotations = Annotation.parse_annotations(parser)
-        typename = Typename.try_parse()
+        typename = Typename.try_parse(parser)
         if typename is None:
             return None
 
@@ -1410,7 +1417,7 @@ class Member(Named):
         semantic = Annotation.parse_semantic(parser)
         parser.match(';')
 
-        return Member(parser.namespace(), name, userAnnotations, sysAnnotations, semantic, typename)
+        return Member(parser.references, parser.namespace(), name, userAnnotations, sysAnnotations, semantic, typename)
 
 class MemberList(Named):
     """
@@ -1422,11 +1429,12 @@ class MemberList(Named):
     """
 
     @Decorators.validated
-    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, members, typename):
+    def __init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic, members, typename):
         """
         Initialize the object.
 
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             userAnnotations ([objects.Annotation]): The user annotations.
@@ -1435,7 +1443,7 @@ class MemberList(Named):
             members ([objects.Member]): A list of members.
             typename (objects.Typename): The member typename.
         """
-        super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
+        super().__init__(references, parent, token, userAnnotations, sysAnnotations, semantic)
         self.members = members
         self.typename = typename
 
@@ -1482,18 +1490,19 @@ class MemberList(Named):
         members = []
         for name in names:
             name = Symto.from_token(parser.token, Token.Text, '') if name is None else name
-            members.append(Member(parser.namespace(), name, userAnnotations, sysAnnotations, semantic, typename))
+            members.append(Member(parser.references, parser.namespace(), name, userAnnotations, sysAnnotations, semantic, typename))
         
-        return MemberList(parser.namespace(), name, userAnnotations, sysAnnotations, semantic, members, typename)
+        return MemberList(parser.references, parser.namespace(), name, userAnnotations, sysAnnotations, semantic, members, typename)
 
 class Struct(TemplateObject, Namespace):
     """A structure."""
 
-    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body):
+    def __init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic, body):
         """
         Initialize the object.
 
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             userAnnotations ([objects.Annotation]): The user annotations.
@@ -1501,8 +1510,8 @@ class Struct(TemplateObject, Namespace):
             semantic (lexer.Symto): The semantic annotation.
             body ([lexer.Symto]): The template body.
         """
-        Namespace.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic)
-        TemplateObject.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body)
+        Namespace.__init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic)
+        TemplateObject.__init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic, body)
 
     def validate(self):
         """Validate the object."""
@@ -1538,7 +1547,7 @@ class Struct(TemplateObject, Namespace):
 
         # Register the struct with the current namespace
         parent = parser.namespace()
-        struct = Struct(parent, token, userAnnotations, sysAnnotations, semantic, None)
+        struct = Struct(parser.references, parent, token, userAnnotations, sysAnnotations, semantic, None)
         parser.namespaceStack.append(struct)
         try:
             if isTemplate:
@@ -1571,17 +1580,14 @@ class Struct(TemplateObject, Namespace):
         """
         return Struct.parse_template(parser, False)
 
-    def generate_from_template(self, prettyString, *, asAnonymous=True):
+    def generate_from_template(self, prettyString):
         """
         Generate a template string from the parsed object.
 
         Args:
             prettyString (formatter.PrettyString): The string to append the Function to.
-            asAnonymous (bool): Set this to True, if the template should be emitted with an anonymous name.
         """
         prettyString += 'struct '
-        if not asAnonymous:
-            prettyString += str(self.token)
 
 class Alias(TemplateObject):
     """
@@ -1592,11 +1598,12 @@ class Alias(TemplateObject):
     """
 
     @Decorators.validated
-    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body, targetTypename):
+    def __init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic, body, targetTypename):
         """
         Initialize the object.
 
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             userAnnotations ([objects.Annotation]): The user annotations.
@@ -1605,7 +1612,7 @@ class Alias(TemplateObject):
             body ([lexer.Symto]): The template body.
             targetTypename (objects.Typename): The target typename.
         """
-        TemplateObject.__init__(self, parent, token, userAnnotations, sysAnnotations, semantic, body)
+        TemplateObject.__init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic, body)
         self.targetTypename = targetTypename
     
     def validate(self):
@@ -1650,7 +1657,7 @@ class Alias(TemplateObject):
 
         # Register the struct with the current namespace
         parent = parser.namespace()
-        alias = Alias(parent, token, userAnnotations, sysAnnotations, semantic, body, targetTypename)
+        alias = Alias(parser.references, parent, token, userAnnotations, sysAnnotations, semantic, body, targetTypename)
         if not isTemplate:
             parent.objects.append(alias)
 
@@ -1669,17 +1676,14 @@ class Alias(TemplateObject):
         """
         return Alias.parse_template(parser, False)
 
-    def generate_from_template(self, prettyString, *, asAnonymous=True):
+    def generate_from_template(self, prettyString):
         """
         Generate a template string from the parsed object.
 
         Args:
             prettyString (formatter.PrettyString): The string to append the Function to.
-            asAnonymous (bool): Set this to True, if the template should be emitted with an anonymous name.
         """
         prettyString += 'using '
-        if not asAnonymous:
-            prettyString += str(self.token)
 
 class Annotation:
     """
@@ -1855,11 +1859,12 @@ class Typename(Locatable):
     """
 
     @Decorators.validated
-    def __init__(self, parent, scope, *, templateParameters=None, dims=None):
+    def __init__(self, references, parent, scope, *, templateParameters=None, dims=None):
         """
         Initialize the object.
 
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             scope ([lexer.Symto]): The scope token list.
             templateParameters ([[lexer.Symto]]): A template parameter list for each entry in the scope.
@@ -1867,7 +1872,7 @@ class Typename(Locatable):
         """
         assert scope
 
-        super().__init__(parent, scope[-1].anchor)
+        super().__init__(references, parent, scope[-1].anchor)
         self.scope = scope
         
         # Overwrite the scope strings
@@ -1910,16 +1915,17 @@ class Typename(Locatable):
         return Symto(Token.Name, "$System", "", "void", 1, 1)
 
     @staticmethod
-    def default_return_typename(parent):
+    def default_return_typename(references, parent):
         """
         Return the default return typename.
 
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
         Returns:
             objects.Typename: The default return typename.
         """
-        return Typename(parent, [Typename.default_return_typename_token()])
+        return Typename(references, parent, [Typename.default_return_typename_token()])
 
     def is_default_return_typename(self):
         """
@@ -1990,7 +1996,7 @@ class Typename(Locatable):
                 token = parser.match_any_kind(parameterMask)
                 if token is None:
                     break
-                templateParameters.append(TemplateParameter(None, token, [], [], None, token))
+                templateParameters.append(TemplateParameter(parser.references, None, token, [], [], None, token))
                 parser.match(',')
             parser.expect('>')
         return templateParameters
@@ -2056,7 +2062,7 @@ class Typename(Locatable):
 
         dim = Typename.parse_array_dimensions(parser)
         parent = parser.namespace()
-        return Typename(parent, scope, templateParameters=templateParams, dims=dim)
+        return Typename(parser.references, parent, scope, templateParameters=templateParams, dims=dim)
 
     @staticmethod
     def parse(parser):
@@ -2073,14 +2079,30 @@ class Typename(Locatable):
             raise TypenameExpectedError(parser.token.anchor)
         return typename
 
+    @staticmethod
+    def from_location(references, location):
+        """
+        Create a typename from a location.
+        
+        Args:
+            references ([objects.Reference]): The references at the specified location.
+            location (objects.Location): The location.
+        Returns:
+            objects.Typename: The corresponding typename.
+        """
+        scope = [Symto(Token.String, "", "", rl.name, 0, 0) for rl in location]
+        templateParams = [[Symto(Token.String, "", "", p.name, 0, 0) for p in rl.templateParameters] for rl in location]
+        return Typename(references, None, scope, templateParameters=templateParams)
+
 class TemplateParameter(Named):
     """A template parameter."""
 
-    def __init__(self, parent, token, userAnnotations, sysAnnotations, semantic, partialMatch):
+    def __init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic, partialMatch):
         """
         Initialize the object.
 
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             userAnnotations ([objects.Annotation]): The user annotations.
@@ -2088,8 +2110,7 @@ class TemplateParameter(Named):
             semantic (lexer.Symto): The semantic annotation.
             partialMatch (lexer.Symto or None): A token that represents the partial template mask.
         """
-        super().__init__(parent, token, userAnnotations, sysAnnotations, semantic)
-        
+        super().__init__(references, parent, token, userAnnotations, sysAnnotations, semantic)
         self.partialMatch = partialMatch
 
     @staticmethod
@@ -2114,7 +2135,7 @@ class TemplateParameter(Named):
         partialMatch = parser.expect_kind(Token.String) if parser.match("=") else None
 
         semantic = Annotation.parse_semantic(parser)
-        return TemplateParameter(parser.namespace(), name, userAnnotations, sysAnnotations, semantic, partialMatch)
+        return TemplateParameter(parser.references, parser.namespace(), name, userAnnotations, sysAnnotations, semantic, partialMatch)
 
     def __str__(self):
         """
@@ -2155,11 +2176,12 @@ class Template(Named):
     """
 
     @Decorators.validated
-    def __init__(self, parent, userAnnotations, sysAnnotations, semantic, parameters, obj):
+    def __init__(self, references, parent, userAnnotations, sysAnnotations, semantic, parameters, obj):
         """
         Initialize the object.
 
         Args:
+            references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             userAnnotations ([objects.Annotation]): The user annotations.
             sysAnnotations ([objects.Annotation]): The system annotations.
@@ -2167,7 +2189,7 @@ class Template(Named):
             parameters ([objects.TemplateParameter]): The template parameter list.
             obj (objects.TemplateObject): The template object attached to this template.
         """
-        super().__init__(parent, obj.token, userAnnotations, sysAnnotations, semantic)
+        super().__init__(references, parent, obj.token, userAnnotations, sysAnnotations, semantic)
         self.obj = obj
         self.parameters = parameters
 
@@ -2214,7 +2236,7 @@ class Template(Named):
 
         # Template body
         if self.obj.semantic is not None:
-            result += ': ' + self.obj.semantic.text
+            result += ': ' + str(self.obj.semantic)
         result += ' {'
         result += '\n'
         result.indentLevel += 1
@@ -2266,7 +2288,7 @@ class Template(Named):
 
         # Register the template with the current namespace
         parent = parser.namespace()
-        template = Template(parent, userAnnotations, sysAnnotations, semantic, parameters, obj)
+        template = Template(parser.references, parent, userAnnotations, sysAnnotations, semantic, parameters, obj)
         parent.objects.append(template)
 
         return template

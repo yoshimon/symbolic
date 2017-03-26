@@ -20,28 +20,29 @@ class Dependency:
     A dependency within a project.
 
     Attributes:
-        obj (object): The object behind the dependency.
+        locatable (objects.Locatable): The object behind the dependency.
         location (objects.Location): The location of the object in the library.
         references ([objects.Reference]): The references that are seen by this dependency.
         isPrivate (bool): True, if the object is private. Otherwise False.
         isDeprecated (bool): True, if the object is deprecated. Otherwise False.
     """
 
-    def __init__(self, references, obj):
+    def __init__(self, locatable):
         """
         Initialize the object.
 
         Args:
-            references ([objects.Reference]): The references list.
-            obj (object): The object behind the dependency.
+            locatable (objects.Locatable): The object behind the dependency.
         """
-        self.obj = obj
-        self.location = obj.location()
-        self.references = references
+        self.locatable = locatable
+
+        # Cache some members from the locatable.
+        self.location = locatable.location()
+        self.references = locatable.references
         
         # Two system annotations are valid for all dependencies: private, deprecate
-        self.isPrivate = Annotation.has('private', obj.sysAnnotations) if obj is isinstance(obj, Named) else False
-        self.isDeprecated = Annotation.has('deprecated', obj.sysAnnotations) if obj is isinstance(obj, Named) else False
+        self.isPrivate = Annotation.has('private', locatable.sysAnnotations) if locatable is isinstance(locatable, Named) else False
+        self.isDeprecated = Annotation.has('deprecated', locatable.sysAnnotations) if locatable is isinstance(locatable, Named) else False
 
 class LocationConflict:
     """
@@ -103,6 +104,17 @@ class NavigationResult:
         self.libName = libName
         self.resolvedDependencyLocation = resolvedDependencyLocation
 
+    def __eq__(self, other):
+        """
+        Return whether two navigation results point to the same location.
+        
+        Args:
+            other (dag.NavigationResult): The navigation result to compare with.
+        Returns:
+            bool: True, if both results point to the same location. Otherwise False.
+        """
+        return self.libName == other.libName and id(self.resolvedDependencyLocation) == id(other.resolvedDependencyLocation)
+
 class ProjectDependencyCollection:
     """
     A colllection of dependencies within a project.
@@ -115,7 +127,7 @@ class ProjectDependencyCollection:
         locationConflicts ([objects.LocationConflict]): A list of location conflicts.
     """
 
-    def __init__(self):
+    def __init__(self, userTypeLocationStrings):
         """Initialize the object."""
         self.unresolvedDependencies = list()
         self.libraries = {} # The libraries lookup table
@@ -126,6 +138,23 @@ class ProjectDependencyCollection:
         self.templateLinks = {} # Maps locations to template instantiation results.
         self.functions = [] # An internal cache of function objects inside the current library.
         self._libLocationNavResults = {} # Maps tags (object Ids) to their resolved navigation result.
+
+        # Cache the user-specified locations for numeric types.
+        lexer = SymbolicLexer() #libName=self.libName, fileName="$UserData/{0}".format(str(dependencyLocatable.token)))
+
+        # Generate a parsable token stream now.
+        # TODO: generate Int and Float types, save them. Check number AST.
+        # If LHS is ID => Reference, Non-Reference
+        # If LHS is Number => Non-Reference
+        userTypeIntLocationTokens = lexer.tokenize(userTypeLocationStrings.intLocation)
+        userTypeFloatLocationTokens = lexer.tokenize(userTypeLocationStrings.floatLocation)
+
+        # Analyze the token stream.
+        parser = UnitParser(lexer.libName, lexer.fileName, userTypeIntLocationTokens)
+        intNamespace = parser.parse()
+
+        self.intLocation = Location()
+        self.floatLocation = Location()
 
         # Initialize function table that maps ExpressionAtomKinds to AST verification functions.
         self._astVerifiers = {
@@ -138,15 +167,17 @@ class ProjectDependencyCollection:
             ExpressionAtomKind.BinaryOp: self._verify_ast_binary_op
         }
 
-    def _verify_ast_var(self, atom, children, localVars, newLocalVars, isOptional):
+    def _verify_ast_var(self, container, atom, children, localVars, newLocalVars, isOptional):
         """
         Verify an AST with a variable atom type.
 
         Args:
+            container (objects.Locatable): The locatable container (parent) object.
             atom (objects.ExpressionAtom): The root atom.
             children (objects.ExpressionAST): The child nodes.
             localVars (dict): Lookup table that maps variable names to resolved locations.
-            newLocalVars
+            newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
+            isOptional (bool): State flag which indicates that the query should not throw an error on failure.
         Returns:
             dag.NavigationResult: The location of the resulting type of this AST.
         """
@@ -158,73 +189,118 @@ class ProjectDependencyCollection:
         # Return the navigation result.
         return varNR
 
-    def _verify_ast_number(self, atom, children, localVars, newLocalVars, isOptional):
+    def _verify_ast_number(self, container, atom, children, localVars, newLocalVars, isOptional):
         """
         Verifies an AST with a number atom type.
 
         Args:
+            container (objects.Locatable): The locatable container (parent) object.
             atom (objects.ExpressionAtom): The root atom.
             children (objects.ExpressionAST): The child nodes.
+            localVars (dict): Lookup table that maps variable names to resolved locations.
+            newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
+            isOptional (bool): State flag which indicates that the query should not throw an error on failure.
         Returns:
             dag.NavigationResult: The location of the resulting type of this AST.
         """
-        pass
+        # Navigate to the numeric type.
+        if atom.token.kind in [Token.Number.Integer, Token.Number.Hex]:
+            # Int
+            intDep = Typename.from_location(container.references, self.intLocation)
+            self.navigate_dependency(intDep)
+        elif atom.token.kind == Token.Number.Float:
+            # Float
+            floatDep = Typename.from_location(container.references, self.floatLocation)
+            self.navigate_dependency(floatDep)
+        else:
+            assert(False)
 
-    def _verify_ast_function(self, atom, children, localVars, newLocalVars, isOptional):
+    def _verify_ast_function(self, container, atom, children, localVars, newLocalVars, isOptional):
         """
         Verify an AST with a function atom type.
 
         Args:
+            container (objects.Locatable): The locatable container (parent) object.
             atom (objects.ExpressionAtom): The root atom.
             children (objects.ExpressionAST): The child nodes.
+            localVars (dict): Lookup table that maps variable names to resolved locations.
+            newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
+            isOptional (bool): State flag which indicates that the query should not throw an error on failure.
         Returns:
             dag.NavigationResult: The location of the resulting type of this AST.
         """
         pass
 
-    def _verify_ast_array(self, atom, children, localVars, newLocalVars, isOptional):
+    def _verify_ast_array(self, container, atom, children, localVars, newLocalVars, isOptional):
         """
         Verifies an AST with an array atom type.
 
         Args:
+            container (objects.Locatable): The locatable container (parent) object.
             atom (objects.ExpressionAtom): The root atom.
             children (objects.ExpressionAST): The child nodes.
+            localVars (dict): Lookup table that maps variable names to resolved locations.
+            newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
+            isOptional (bool): State flag which indicates that the query should not throw an error on failure.
         Returns:
             dag.NavigationResult: The location of the resulting type of this AST.
         """
         pass
 
-    def _verify_ast_template(self, atom, children, localVars, newLocalVars, isOptional):
+    def _verify_ast_template(self, container, atom, children, localVars, newLocalVars, isOptional):
         """
         Verify an AST with a template atom type.
 
         Args:
+            container (objects.Locatable): The locatable container (parent) object.
             atom (objects.ExpressionAtom): The root atom.
             children (objects.ExpressionAST): The child nodes.
+            localVars (dict): Lookup table that maps variable names to resolved locations.
+            newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
+            isOptional (bool): State flag which indicates that the query should not throw an error on failure.
         Returns:
             dag.NavigationResult: The location of the resulting type of this AST.
         """
         pass
 
-    def _verify_ast_unary_op(self, atom, children, localVars, newLocalVars, isOptional):
+    def _verify_ast_unary_op(self, container, atom, children, localVars, newLocalVars, isOptional):
         """
         Verifies an AST with a unary operator atom type.
 
         Args:
+            container (objects.Locatable): The locatable container (parent) object.
             atom (objects.ExpressionAtom): The root atom.
             children (objects.ExpressionAST): The child nodes.
+            localVars (dict): Lookup table that maps variable names to resolved locations.
+            newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
+            isOptional (bool): State flag which indicates that the query should not throw an error on failure.
         Returns:
             dag.NavigationResult: The location of the resulting type of this AST.
         """
         pass
 
-    def _verify_ast_binary_op(self, atom, children, localVars, newLocalVars, isOptional):
+    def _try_find_function(self, container, nameToken, kind, parameters):
+        """
+
+        """
+        # Assemble a dummy function to get a location (signature).
+        locatable = Function(container.references, container, nameToken, [], [], None, None, kind, None, None, parameters)
+        dependency = Dependency(locatable)
+
+        # Try to find a matching overload.
+        return self.try_navigate_dependency(dependency)
+
+    def _verify_ast_binary_op(self, container, atom, children, localVars, newLocalVars, isOptional):
         """
         Verify an AST with a binary operator atom type.
 
         Args:
+            container (objects.Locatable): The locatable container (parent) object.
             atom (objects.ExpressionAtom): The root atom.
             children (objects.ExpressionAST): The child nodes.
+            localVars (dict): Lookup table that maps variable names to resolved locations.
+            newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
+            isOptional (bool): State flag which indicates that the query should not throw an error on failure.
         Returns:
             dag.NavigationResult: The location of the resulting type of this AST.
         """
@@ -232,50 +308,102 @@ class ProjectDependencyCollection:
 
         left, right = children[0], children[1]
 
-        if atom.token.isLValueOp and not self._is_lvalue(left):
-            raise LValueRequiredError(atom.token.anchor)
+        # See if the left-hand side is an L-value.
+        isLeftLValue = self._is_lvalue(left)
+
+        #if atom.token.isLValueOp and not isLeftLValue:
+        #    raise LValueRequiredError(atom.token.anchor)
             
         # If this is the = operator then the LHS does not have to have a deducable type.
         # A missing LHS type would indicate that we have a new variable declaration in that case.
         isAssignmentOp = atom.token == "="
             
-        leftNR = self._verify_expression_ast(localVars, newLocalVars, left, isOptional=isAssignmentOp)
-        rightNR = self._verify_expression_ast(localVars, newLocalVars, right)
+        leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isAssignmentOp)
+        rightNR = self._verify_expression_ast_recursive(container, localVars, right, newLocalVars)
 
-        if leftNR is None:
+        # Is the LHS a new variable?
+        if leftNR is None and isLeftLValue:
             assert(isAssignmentOp)
                 
             if left.atom.kind == ExpressionAtomKind.Var:
-                # New variable.
+                # It has to be a new local variable.
                 varToken = left.atom.token
                 varName = str(varToken)
                 if varName in newLocalVars:
                     raise VariableAlreadyExistsError(varToken)
 
                 newLocalVars[varName] = rightNR
+
+                # TODO:
             else:
                 # Must be an extension.
+                # TODO:
                 pass
+        else:
+            # These should be unique.
+            assert(len(leftNR.resolvedDependencyLocation.dependencies) == 1)
+            assert(len(rightNR.resolvedDependencyLocation.dependencies) == 1)
 
-        # Lookup the operator now.
+            references = container.references
+
+            # Find the assignment operator.
+            # Look at all possible permutations.
+            leftDep = leftNR.resolvedDependencyLocation.dependencies[0]
+            rightDep = rightNR.resolvedDependencyLocation.dependencies[0]
+
+            # Build typenames for the resolved locations.
+            pLeftTypename = Typename.from_location(references, leftDep.location)
+            pRightTypename = Typename.from_location(references, rightDep.location)
+
+            # Turn them into parameters.
+            pLeft = Parameter(container, left.atom.token, [], [], None, pLeftTypename, isLeftLValue)
+            pRight = Parameter(container, right.atom.token, [], [], None, pRightTypename, False)
+                    
+            # Try to find a match for the signature.
+            possibleMatch = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
+            if possibleMatch is not None:
+                return possibleMatch
+
+            raise BinaryOperatorOverloadNotFound(atom.token)
+
+    def _better_overload(self, a, b):
+        """
+        Compare to overloads and return the overload that best matches a given signature.
+        """
+        pass
+
+    def navigate_by_tag(self, tag):
+        """
+        Navigate to a location by its tag.
+        
+        Args:
+            tag(int or None): The tag associated with the location.
+        Returns:
+            dag.NavigationResult or None: The navigation result or None if no matching location was found.
+        """
+        return self._libLocationNavResults.get(tag, None)
     
-    def navigate(self, errorAnchor, requester, references, parent, location, tag):
+    def try_navigate(self, errorAnchor, references, parent, location, tag):
         """
         Navigate to a location.
 
         Args:
             errorAnchor (lexer.Anchor): The anchor to use in case an exception is thrown.
-            requester (dag.Dependency): The dependency that requests the navigation.
-            references ([objects.Reference]): The library references.
+            references ([objects.Reference]): The references to use for the navigation.
             parent (objects.Locatable or None): The parent object to start the search at.
                 The navigation will start the the parent and, on failure, move up the
                 hierarchy until a match is found.
             location (objects.Location): The location.
-            tag (int): A tag to associate with this navigation operation. Used for caching
+            tag (int or None): A tag to associate with this navigation operation. Used for caching
                 navigation results.
         Returns:
-            dag.NavigationResult: The resolved location.
+            dag.NavigationResult or None: The resolved location or None, if no match was found.
         """
+        # Lookup from ID cache.
+        result = self.navigate_by_tag(tag)
+        if result is not None:
+            return result
+
         # Navigate the library tree first (explicit library name)
         # Fall back to reference order in unit, if no match possible
         offset = 0 # The offset where the object name begins
@@ -352,11 +480,41 @@ class ProjectDependencyCollection:
 
                     for dependency in bestMatches:
                         dependencyRL = dependency.location[i]
-                        dependencyObj = dependency.obj
+                        dependencyLocatable = dependency.locatable
 
-                        # If it is an alias then we have to lookup the aliased type instead
-                        # since aliases don't have any sublocations.
-                        if isinstance(dependencyObj, Alias):
+                        if isinstance(dependencyLocatable, Function):
+                            # Validate requested and found signature.
+                            requestedParams = rl.parameters
+                            foundParams = dependencyRL.parameters
+
+                            # Both lists are guaranteed to be the same length here.
+                            # We just need to check the target locations.
+                            assert(len(requestedParams) == len(foundParams))
+                            parameterMismatch = False
+                            for paramIndex, paramA in enumerate(requestedParams):
+                                paramB = foundParams[paramIndex]
+
+                                # Reference qualifiers have to match.
+                                if paramA.isRef != paramB.isRef:
+                                    parameterMismatch = True
+                                    break
+
+                                paramTypenameA = paramA.typename
+                                paramTypenameB = paramB.typename
+
+                                # Both typenames must resolve to the same location.
+                                paramANR = self.navigate_dependency(Dependency(paramTypenameA))
+                                paramBNR = self.navigate_dependency(Dependency(paramTypenameB))
+
+                                if paramANR != paramBNR:
+                                    parameterMismatch = True
+                                    break
+
+                            if parameterMismatch:
+                                continue
+                        elif isinstance(dependencyLocatable, Alias):
+                            # If it is an alias then we have to lookup the aliased type instead
+                            # since aliases don't have any sublocations.
                             # But only do that if this is not the last relative location
                             # since we are actually looking for the Alias in that case.
                             if i != len(location.path) - 1:
@@ -364,25 +522,24 @@ class ProjectDependencyCollection:
                                 aliasNavResult = self.navigate_alias_base(aliasNavResult)
                                 libName = aliasNavResult.libName
                                 resolvedDependencyLocation = aliasNavResult.resolvedDependencyLocation
-                        elif isinstance(dependencyObj, Template):
+                        elif isinstance(dependencyLocatable, Template):
                             # Lazily instantiate templates, if we encounter one.
                             # Make sure we did not instantiate the template already.
                             templateInstanceArgs =  ", ".join(str(p) for p in rl.templateParameters)
-                            requesterReferences = requester.references
-                            importLibs = ", ".join(str(ref) for ref in requesterReferences)
+                            importLibs = ", ".join(str(ref) for ref in references)
                             importLibs = " using {0}".format(importLibs) if importLibs else importLibs
                             dependencyLocationStr = "{0} with <{1}>{2}".format(str(dependency.location), templateInstanceArgs, importLibs)
 
                             if dependencyLocationStr not in self.templateLinks:
                                 # Generate the translation unit for the template.
-                                templateSrc = dependencyObj.generate_translation_unit()
+                                templateSrc = dependencyLocatable.generate_translation_unit()
 
                                 # Run the pre-processor on the source.
                                 # TODO: run pre-processor based on the location
                                 ppTemplateSrc = templateSrc # self.preprocessor.run(templateSrc, LIBNAME, PPT)
 
                                 # Lex the unit so we can parse it.
-                                lexer = SymbolicLexer(libName=self.libName, fileName="$Templates/{0}".format(str(dependencyObj.token)))
+                                lexer = SymbolicLexer(libName=self.libName, fileName="$Templates/{0}".format(str(dependencyLocatable.token)))
 
                                 # Plugin the template substitutions for the lexer.
                                 templateSubs = { str(dependencyRL.templateParameters[i].token): str(parameter.token)[1:-1] for i, parameter in enumerate(rl.templateParameters) }
@@ -393,23 +550,25 @@ class ProjectDependencyCollection:
 
                                 # Analyze the token stream.
                                 parser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
-                                parseResult = parser.parse()
+                                rootNamespace = parser.parse()
 
                                 # Lookup the template object
-                                templateObj = parseResult.rootNamespace.objects[0]
-                                templateObj.parent = dependencyObj.parent
-                                templateObj.grandParent = dependencyObj.grandParent
-                                templateObj.grandParentWithoutRoot = dependencyObj.grandParentWithoutRoot
+                                templateObj = rootNamespace.objects[0]
+                                templateObj.parent = dependencyLocatable.parent
+                                templateObj.grandParent = dependencyLocatable.grandParent
+                                templateObj.grandParentWithoutRoot = dependencyLocatable.grandParentWithoutRoot
 
                                 # Bind the location to a template.
                                 self.templateLinks[dependencyLocationStr] = templateObj
 
                                 # Insert it into the collection so we can look it up.
-                                self.insert_unit(requesterReferences, parseResult.rootNamespace)
+                                # Update the references to match the call site.
+                                rootNamespace.references = references
+                                self.insert_unit(rootNamespace)
                         
                             # Use template links to jump to the right location, which is anonymous.
-                            templateObj = self.templateLinks[dependencyLocationStr]
-                            templateNavResult = self.navigate(dependencyObj.token.anchor, requester, references, templateObj.parent, templateObj.location(), id(templateObj))
+                            templateDep = Dependency(self.templateLinks[dependencyLocationStr])
+                            templateNavResult = self.navigate_dependency(templateDep)
                             templateAliasNavResult = self.navigate_alias_base(templateNavResult)
                             resolvedDependencyLocation = templateAliasNavResult.resolvedDependencyLocation
 
@@ -427,7 +586,7 @@ class ProjectDependencyCollection:
                 break
 
         if not locationFound:
-            raise DependencyNotFoundError(errorAnchor, location)
+            return None
 
         result = NavigationResult(resolvedLibName, lookup)
 
@@ -437,16 +596,49 @@ class ProjectDependencyCollection:
 
         return result
 
-    def insert(self, references, obj):
+    def navigate(self, errorAnchor, references, parent, location, tag):
+        """
+        Navigate to a location.
+
+        Args:
+            errorAnchor (lexer.Anchor): The anchor to use in case an exception is thrown.
+            references ([objects.Reference]): The references to use for the navigation.
+            parent (objects.Locatable or None): The parent object to start the search at.
+                The navigation will start the the parent and, on failure, move up the
+                hierarchy until a match is found.
+            location (objects.Location): The location.
+            tag (int or None): A tag to associate with this navigation operation. Used for caching
+                navigation results.
+        Returns:
+            dag.NavigationResult: The resolved location.
+        """
+        navResult = self.try_navigate(errorAnchor, references, parent, location, tag)
+        if navResult is None:
+            raise DependencyNotFoundError(errorAnchor, location)
+        return navResult
+
+    def navigate_parent(self, dependency):
+        """
+        Navigate to the parent of a dependency.
+
+        Args:
+            dependency (dag.Dependency): The dependency to find the parent of.
+        Returns:
+            dag.NavigationResult: The navigation result.
+        """
+        locatable = dependency.locatable
+        location = dependency.location
+        return self.navigate(locatable.anchor, locatable.references, locatable.grandParentWithoutRoot, location[:-1], id(locatable))
+
+    def insert(self, locatable):
         """
         Insert an object into the dependency collection.
 
         Args:
-            references ([objects.Reference]): The references list.
-            obj (object): The object to insert.
+            locatable (objects.Locatable): The object to insert.
         """
         # Create and cache the dependency
-        dependency = Dependency(references, obj)
+        dependency = Dependency(locatable)
         dependencyLocation = dependency.location
         rl = dependencyLocation[-1]
 
@@ -454,7 +646,7 @@ class ProjectDependencyCollection:
             self.unresolvedDependencies.append(dependency)
         else:
             # Navigate to parent
-            navResult = self.navigate(obj.token.anchor, dependency, references, obj.grandParentWithoutRoot, dependencyLocation[:-1], id(obj))
+            navResult = self.navigate_parent(dependency)
             lookup = navResult.resolvedDependencyLocation.subLocations
 
             # Make sure that no duplicate object in this namespace exists
@@ -467,7 +659,7 @@ class ProjectDependencyCollection:
 
                     # If the location kinds are different then it is ambigous
                     if rl.kind != otherDependencyRL.kind:
-                        raise DuplicateNameError(obj.anchor, otherDependency.obj.anchor)
+                        raise DuplicateNameError(locatable.anchor, otherDependency.locatable.anchor)
 
                     # If the template and signature matches then it might be a conflict
                     if rl.might_be_equal_to(otherDependencyRL):
@@ -483,40 +675,40 @@ class ProjectDependencyCollection:
             else:
                 lookup[rl.name] = ResolvedDependencyLocation([dependency], {})
 
-    def insert_unit(self, references, rootNamespace):
+    def insert_unit(self, rootNamespace):
         """
         Insert an unresolved translation unit into the collection.
 
         Args:
-            references ([objects.Reference]): The library import references.
             rootNamespace (objects.Namespace): The global namespace.
         """
         # Create a dependency for every object
-        objs = deque(rootNamespace.objects)
-        while objs:
-            obj = objs.popleft()
+        references = rootNamespace.references
+        locatables = deque(rootNamespace.objects)
+        while locatables:
+            locatable = locatables.popleft()
 
             # Register it
-            self.insert(references, obj)
+            self.insert(locatable)
 
             # Recursive objects (Namespaces, Functions)
-            children = getattr(obj, "objects", None)
-            objs += children if children is not None else []
+            children = getattr(locatable, "objects", None)
+            locatables += children if children is not None else []
 
             # Connect immediate unresolved dependencies
-            if isinstance(obj, Function):
+            if isinstance(locatable, Function):
                 # The unknown return type
-                self.insert(references, obj.returnTypename)
+                self.insert(locatable.returnTypename)
 
                 # The unknown parameter types
-                for parameter in obj.parameters:
-                    self.insert(references, parameter.typename)
+                for parameter in locatable.parameters:
+                    self.insert(parameter.typename)
 
                 # Remember this function for instruction verification later.
-                self.functions.append(obj)
-            elif isinstance(obj, Alias):
+                self.functions.append(locatable)
+            elif isinstance(locatable, Alias):
                 # The unknown typename
-                self.insert(references, obj.targetTypename)
+                self.insert(locatable.targetTypename)
 
     def begin_library(self, libName):
         """
@@ -567,11 +759,10 @@ class ProjectDependencyCollection:
             
             while unresolvedDependencies:
                 dependency = unresolvedDependencies.popleft()
-                obj = dependency.obj
 
                 # The name has to be resolvable by now
                 # Catching unresolved objects will spawn templates, if encountered
-                self.links[dependency] = self.navigate(obj.anchor, dependency, dependency.references, obj.parent, dependency.location, id(obj))
+                self.links[dependency] = self.navigate_dependency(dependency)
 
                 # Add the unresolved dependencies to the queue
                 unresolvedDependencies += self.unresolvedDependencies
@@ -612,54 +803,69 @@ class ProjectDependencyCollection:
 
         for obj in func.objects:
             if isinstance(obj, Instruction):
-                self._verify_instruction(localVars, obj)
+                self._verify_instruction(func, localVars, obj)
 
-    def _verify_instruction(self, localVars, instruction):
+    def _verify_instruction(self, container, localVars, instruction):
         """
         Verify an instruction.
 
         Args:
+            container (objects.Locatable): The locatable container (parent) object.
             localVars (dict): The local variables.
             instruction (objects.Instruction): The instruction to verify.
         """
-        newLocalVars = {}
-
         # Verify the AST.
         if instruction.kind == InstructionKind.Expression:
             # We don't care about the expression type.
-            self._verify_expression_ast(localVars, newLocalVars, instruction.expression.ast)
+            self._verify_expression_ast(container, localVars, instruction.expression.ast)
         elif instruction.kind in [InstructionKind.Break, InstructionKind.Continue]:
             # Make sure we are inside a loop.
             if not state != ScopeState.Loop:
-                raise NotInsideLoopError(instruction.token.anchor)
+                raise NotInsideLoopError(instruction.anchor)
         elif instruction.kind == InstructionKind.Return:
-            exprTypeLocation = self._verify_expression_ast(localVars, newLocalVars, instruction.expression.ast)
+            exprTypeLocation = self._verify_expression_ast(container, localVars, instruction.expression.ast)
             
-            # Return statements are not allowed to introduce new variables.
-            if localVars:
-                raise DeclarationInReturnError(instruction.token.anchor)
-
             # Make sure the expression type matches the function return type.
             func = instruction.parent
             assert(isinstance(func, Function))
             return exprTypeLocation == func.returnTypename
         elif instruction.kind == InstructionKind.If:
-            exprType = self._verify_expression_ast(localVars, newLocalVars, instruction.expression.ast)
+            exprType = self._verify_expression_ast(container, localVars, instruction.expression.ast)
 
             # Make sure the return type evaluates to bool.
             
         elif instruction.kind == InstructionKind.Elif:
             pass
 
-    def _verify_expression_ast(self, localVars, newLocalVars, ast, *, isOptional=False):
+    def _verify_expression_ast(self, container, localVars, ast, *, isOptional=False):
         """
         Verify an expression.
 
         Args:
+            container (objects.Locatable): The locatable container (parent) object.
             localVars (dict): Visible variable declarations.
-            newLocalVars (dict): New variable declarations.
             ast (objects.ExpressionAST): The expression AST to verify.
             isOptional (bool): Indicates whether the result of this function can be optionally None.
+        Returns:
+            dag.NavigationResult or None: The navigation result after searching for the type of the expression.
+        """
+        newLocalVars = {}
+
+        result = self._verify_expression_ast_recursive(container, localVars, ast, newLocalVars, isOptional=isOptional)
+        localVars.update(newLocalVars)
+
+        return result
+
+    def _verify_expression_ast_recursive(self, container, localVars, ast, newLocalVars, *, isOptional=False):
+        """
+        Verify an expression.
+
+        Args:
+            container (objects.Locatable): The locatable container (parent) object.
+            localVars (dict): Visible variable declarations.
+            ast (objects.ExpressionAST): The expression AST to verify.
+            isOptional (bool): Indicates whether the result of this function can be optionally None.
+            newLocalVars (dict): New local variables.
         Returns:
             dag.NavigationResult or None: The navigation result after searching for the type of the expression.
         """
@@ -670,7 +876,7 @@ class ProjectDependencyCollection:
         assert(atom.kind in self._astVerifiers)
 
         # Invoke the verification handler.
-        return self._astVerifiers[atom.kind](atom, children, localVars, newLocalVars, isOptional)
+        return self._astVerifiers[atom.kind](container, atom, children, localVars, newLocalVars, isOptional)
 
     @staticmethod
     def _is_lvalue(ast):
@@ -702,13 +908,13 @@ class ProjectDependencyCollection:
 
         # There should only be one alias dependency at this location.
         dependencies = navResult.resolvedDependencyLocation.dependencies
-        dependency = next((dependency for dependency in dependencies if isinstance(dependency.obj, Alias)), None)
+        dependency = next((dependency for dependency in dependencies if isinstance(dependency.locatable, Alias)), None)
         if dependency is None:
             return None
 
         # Navigate to the target type.
-        targetTypename = dependency.obj.targetTypename
-        return self.navigate(targetTypename.anchor, dependency, dependency.references, dependency.obj.parent, targetTypename.location(), id(targetTypename))
+        targetTypenameDependency = Dependency(dependency.locatable.targetTypename)
+        return self.navigate_dependency(targetTypenameDependency)
 
     def navigate_alias_base(self, navResult):
         """
@@ -729,7 +935,7 @@ class ProjectDependencyCollection:
             
             result = nextResult
 
-    def navigate_dependency(self, dependency):
+    def try_navigate_dependency(self, dependency):
         """
         Navigate using a dependency as the target.
 
@@ -738,7 +944,21 @@ class ProjectDependencyCollection:
         Returns:
             dag.NavigationResult: The navigation result.
         """
-        return self.links[dependency] if dependency in self.links else self.navigate(dependency.obj.token, dependency, dependency.references, dependency.obj.parent, dependency.location, id(dependency.obj))
+        return self.links[dependency] if dependency in self.links else self.try_navigate(dependency.locatable.anchor, dependency.locatable.references, dependency.locatable.parent, dependency.location, id(dependency.locatable))
+
+    def navigate_dependency(self, dependency):
+        """
+        Navigate using a dependency as the target.
+
+        Args:
+            dependency (dag.Dependency): The dependency to lookup.
+        Returns:
+            dag.NavigationResult or None: The navigation result or None, if not match was found.
+        """
+        navResult = self.try_navigate_dependency(dependency)
+        if navResult is None:
+            raise DependencyNotFoundError(dependency.locatable.anchor, dependency.location)
+        return navResult
 
     def _solve_location_conflicts(self):
         """Solve all known location conflicts."""
@@ -759,8 +979,8 @@ class ProjectDependencyCollection:
             # lookup the resolved locations for the types.
             for p0, p1 in zip(dep0Params, dep1Params):
                 # Create a dependency for the parameters
-                p0Dep = Dependency(dep0.references, p0)
-                p1Dep = Dependency(dep1.references, p1)
+                p0Dep = Dependency(p0)
+                p1Dep = Dependency(p1)
 
                 # Try to find the actual dependency location.
                 p0Resolved = self.navigate_dependency(p0Dep)
@@ -780,7 +1000,7 @@ class ProjectDependencyCollection:
                     break
 
             if isConflict:
-                raise DuplicateParameterSignatureError(dep0.obj.token.anchor, dep1.obj.token.anchor)
+                raise DuplicateParameterSignatureError(dep0.locatable.anchor, dep1.locatable.anchor)
 
         self.locationConflicts = []
 

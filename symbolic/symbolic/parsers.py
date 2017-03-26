@@ -60,7 +60,7 @@ class BaseParser:
         self.token = self.advance()
 
         self.tokenStateStack = []
-        self.namespaceStack = [Namespace(None, Symto(Token.Text, libName, fileName, '', 1, 1), [], [], None)] # Global namespace
+        self.namespaceStack = []
 
     def advance(self):
         """
@@ -471,19 +471,6 @@ class BaseParser:
                         tokens.append(self.consume())
         return tokens
 
-class ParseResult:
-    """
-    The result of a parsing operation.
-
-    Attributes:
-        references ([objects.Reference]): The references.
-        rootNamespace (objects.Namespace): The root namespace.
-    """
-
-    def __init__(self, references, rootNamespace):
-        self.references = references
-        self.rootNamespace = rootNamespace
-
 class UnitParser(BaseParser):
     """A parser for symbolic source files (units)."""
 
@@ -589,7 +576,7 @@ class UnitParser(BaseParser):
         Parse the active token stream.
         
         Returns:
-            objects.ParseResult: The list of references and the global (root) namespace object.
+            objects.Namespace: The global (root) namespace object.
         """
         # Reset stream position
         self.reset(self.libName, self.fileName, self.tokens)
@@ -597,10 +584,13 @@ class UnitParser(BaseParser):
         # References first
         self.references = self.parse_all_references()
 
+        # Initialize the root namespace.
+        self.namespaceStack = [Namespace(self.references, None, Symto(Token.Text, self.libName, self.fileName, '', 1, 1), [], [], None)] # Global namespace
+
         # Parse, starting at the global namespace
         self.gather_namespace_objects()
 
         if not self.is_eof():
             raise ExpectedEOFError(self.token.anchor)
 
-        return ParseResult(self.references, self.namespaceStack.pop())
+        return self.namespaceStack.pop()

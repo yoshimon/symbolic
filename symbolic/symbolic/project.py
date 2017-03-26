@@ -220,16 +220,16 @@ class Project:
 
                 # Parse the unit and extract an object representation
                 unitParser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
-                parseResult = unitParser.parse()
+                rootNamespace = unitParser.parse()
 
                 # Make sure that all references are valid (specified in the .manifest)
-                for ref in parseResult.references:
+                for ref in rootNamespace.references:
                     refLibName = str(ref)
                     if refLibName != libName and refLibName not in libConfig.references:
                         raise UnknownLibraryReferenceError(ref.anchor, ref)
 
                 # Create a dependency graph for the unit
-                dependencyCollection.insert_unit(parseResult.references, parseResult.rootNamespace)
+                dependencyCollection.insert_unit(rootNamespace)
 
             # Signal that we are done with this library
             dependencyCollection.end_library()
