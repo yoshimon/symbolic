@@ -495,7 +495,7 @@ class UnitParser(BaseParser):
 
         return None
 
-    def gather_objects(self, classes, matchAfterSuccess = None, args = []):
+    def gather_objects(self, classes, matchAfterSuccess = None, args = None):
         """
         Gather a list of parsable objects.
 
@@ -507,6 +507,7 @@ class UnitParser(BaseParser):
             object: The first match or None, if no object was gathered.
         """
         result = []
+        args = [] if args is None else args
         while True:
             o = self.try_parse_any(classes, args)
             if o is None:
@@ -571,12 +572,13 @@ class UnitParser(BaseParser):
         """
         return self.namespaceStack[-1]
 
-    def parse(self):
+    def parse_root_references_only(self):
         """
-        Parse the active token stream.
-        
-        Returns:
-            objects.Namespace: The global (root) namespace object.
+        Parse the beginning of the current token stream.
+
+        This includes references and the root namespace setup.
+        This will transform the parser into a "ready" state to issue
+        manual parsing commands.
         """
         # Reset stream position
         self.reset(self.libName, self.fileName, self.tokens)
@@ -586,6 +588,18 @@ class UnitParser(BaseParser):
 
         # Initialize the root namespace.
         self.namespaceStack = [Namespace(self.references, None, Symto(Token.Text, self.libName, self.fileName, '', 1, 1), [], [], None)] # Global namespace
+
+    def parse(self):
+        """
+        Parse the active token stream.
+
+        The root does not have to manually parsed.
+        
+        Returns:
+            objects.Namespace: The global (root) namespace object.
+        """
+        # Setup the parser.
+        self.parse_root_references_only()
 
         # Parse, starting at the global namespace
         self.gather_namespace_objects()

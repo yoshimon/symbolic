@@ -139,6 +139,8 @@ class Symto:
         self.anchor = Anchor(libName, fileName, line, column)
         self.isTerminal = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex, Token.Name, Token.Literal.String]
         self.isNumber = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex]
+        self.isInteger = self.kind in [Token.Number.Integer, Token.Number.Hex]
+        self.isFloat = self.kind == Token.Number.Float
         
         # Op (for convenience)
         self.isOp = kind == Token.Operator
@@ -244,7 +246,6 @@ class SymbolicLexer(RegexLexer):
             (r'(\d+\.\d*|\.\d+|\d+)[eE][+-]?\d+', Number.Float),
             (r'(\d+\.\d*|\.\d+|\d+[fF])[fF]?', Number.Float),
             (r'0x[0-9a-fA-F]+', Number.Hex),
-            (r'0[a-zA-Z]+', Error),
             (r'\d+', Number.Integer),
             (r'(<<|<<=|>>|>>=|~=|\|=|&=|^=|\+=|\*=|%=|-=|==|!=|<=|>=|&&|\|\|)', Operator),
             (r'[@.~!%^&*+-=|?:<>/\[\]]', Operator),
@@ -253,6 +254,7 @@ class SymbolicLexer(RegexLexer):
             (r'[,;(){}\\]', Punctuation),
             (r'\s', Text),
             (r'\n', Text),
+            (r'0[a-zA-Z]+', Error)
         ],
     }
 

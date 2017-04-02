@@ -505,15 +505,19 @@ class LValueRequiredError(SourceError):
 class BinaryOperatorOverloadNotFound(SourceError):
     """An exception class, that indicates that a binary operator overload was not found."""
 
-    def __init__(self, token):
+    def __init__(self, token, lhs, rhs):
         """
         Initialize the object.
 
         Args:
             token (lexer.Symto): The binary operator token.
+            lhs (objects.Typename): The left-hand side typename.
+            rhs (objects.Typename): The right-hand side typename.
         """
         super().__init__(token.anchor)
         self.token = token
+        self.lhs = lhs
+        self.rhs = rhs
 
     def __str__(self):
         """
@@ -522,4 +526,4 @@ class BinaryOperatorOverloadNotFound(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + 'Could not find any matching binary operator overloads for "{0}".'.format(str(self.token))
+        return super().__str__() + 'Could not find any matching binary operator overloads for "{0}({1}, {2})".'.format(str(self.token), str(self.lhs), str(self.rhs))

@@ -185,7 +185,7 @@ class Project:
         orderedLibs = dependencyGraph.resolve()
 
         # Create a new dependency collection for this project
-        dependencyCollection = ProjectDependencyCollection()
+        dependencyCollection = ProjectDependencyCollection(self.projConfig.systemTypes)
 
         # Translate each library by going through all *.sym files
         for libName, libConfig in orderedLibs:

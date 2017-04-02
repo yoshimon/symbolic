@@ -84,6 +84,34 @@ class ResolvedDependencyLocation:
         self.dependencies = dependencies if dependencies else []
         self.subLocations = subLocations if subLocations else {}
 
+class NavigationQuery:
+    """
+    Represents a navigation query inside a project dependency collection.
+
+    Attributes:
+        _uid (str): The UID of the query.
+    """
+
+    def __init__(self, references, parent, location):
+        """
+        Initialize the object.
+
+        Args:
+            references (list): The references list.
+            parent (objects.Locatable): The parent locatable object.
+            location (objects.Location): The location to find.
+        """
+        self._uid = "{0} {1} {2}".format(repr(references), repr(id(parent)), repr(location))
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return self._uid
+
 class NavigationResult:
     """
     A result of a navigation operation.
@@ -137,24 +165,45 @@ class ProjectDependencyCollection:
         self.libName = None # The name of the library that is being monitored.
         self.templateLinks = {} # Maps locations to template instantiation results.
         self.functions = [] # An internal cache of function objects inside the current library.
-        self._libLocationNavResults = {} # Maps tags (object Ids) to their resolved navigation result.
+        self._libLocationNavResults = {} # Maps navigation queries to their resolved navigation result.
 
         # Cache the user-specified locations for numeric types.
-        lexer = SymbolicLexer() #libName=self.libName, fileName="$UserData/{0}".format(str(dependencyLocatable.token)))
+        lexer = SymbolicLexer(libName=None, fileName=None)
 
-        # Generate a parsable token stream now.
-        # TODO: generate Int and Float types, save them. Check number AST.
-        # If LHS is ID => Reference, Non-Reference
-        # If LHS is Number => Non-Reference
-        userTypeIntLocationTokens = lexer.tokenize(userTypeLocationStrings.intLocation)
-        userTypeFloatLocationTokens = lexer.tokenize(userTypeLocationStrings.floatLocation)
+        # Maps native types to user-specified typename locations
+        nativeTypenames = ["int", "float", "bool", "void"]
+        validUserTypeLocationStrings = { k: str(v) for k, v in userTypeLocationStrings.items() if k in nativeTypenames }
+        self.nativeTypenameLocations = { k: None for k in nativeTypenames }
 
-        # Analyze the token stream.
-        parser = UnitParser(lexer.libName, lexer.fileName, userTypeIntLocationTokens)
-        intNamespace = parser.parse()
+        for nativeTypename, userLocationString in validUserTypeLocationStrings.items():
+            lexer.fileName = "$SystemTypes/{0}".format(nativeTypename)
 
-        self.intLocation = Location()
-        self.floatLocation = Location()
+            # Convert the user location string to a token stream.
+            userTypeLocationTokens = lexer.tokenize(userLocationString)
+
+            # Setup a parser to analyze that token stream.
+            parser = UnitParser(lexer.libName, lexer.fileName, userTypeLocationTokens)
+
+            # This will only >setup< the root namespace, i.e. an anonymous namespace
+            # containing the references within the translation unit.
+            # It will not parse any objects within the root namespace.
+            parser.parse_root_references_only()
+
+            # The function above parses references but we do not want / allow that.
+            # Make sure we didn't actually parse any references.
+            if parser.references:
+                raise InvalidTypenameError(parser.namespaceStack[-1].anchor)
+
+            # Now try to parse the typename.
+            typename = Typename.parse(parser)
+
+            # Make sure nothing follows after the typename.
+            # Again, we only want the typename, nothing else.
+            if not parser.is_eof():
+                raise ExpectedEOFError(typename.anchor)
+
+            # Extract the location from the typename.
+            self.nativeTypenameLocations[nativeTypename] = typename.location()
 
         # Initialize function table that maps ExpressionAtomKinds to AST verification functions.
         self._astVerifiers = {
@@ -204,16 +253,18 @@ class ProjectDependencyCollection:
             dag.NavigationResult: The location of the resulting type of this AST.
         """
         # Navigate to the numeric type.
-        if atom.token.kind in [Token.Number.Integer, Token.Number.Hex]:
+        if atom.token.isInteger:
             # Int
-            intDep = Typename.from_location(container.references, self.intLocation)
-            self.navigate_dependency(intDep)
-        elif atom.token.kind == Token.Number.Float:
+            typename = Typename.from_location(container.references, self.nativeTypenameLocations["int"])
+        elif atom.token.isFloat:
             # Float
-            floatDep = Typename.from_location(container.references, self.floatLocation)
-            self.navigate_dependency(floatDep)
+            typename = Typename.from_location(container.references, self.nativeTypenameLocations["float"])
         else:
-            assert(False)
+            raise DevError()
+
+        dependency = Dependency(typename)
+        result = self.navigate_dependency(dependency)
+        return result
 
     def _verify_ast_function(self, container, atom, children, localVars, newLocalVars, isOptional):
         """
@@ -310,9 +361,6 @@ class ProjectDependencyCollection:
 
         # See if the left-hand side is an L-value.
         isLeftLValue = self._is_lvalue(left)
-
-        #if atom.token.isLValueOp and not isLeftLValue:
-        #    raise LValueRequiredError(atom.token.anchor)
             
         # If this is the = operator then the LHS does not have to have a deducable type.
         # A missing LHS type would indicate that we have a new variable declaration in that case.
@@ -333,12 +381,11 @@ class ProjectDependencyCollection:
                     raise VariableAlreadyExistsError(varToken)
 
                 newLocalVars[varName] = rightNR
-
-                # TODO:
+                return rightNR
             else:
                 # Must be an extension.
                 # TODO:
-                pass
+                return None
         else:
             # These should be unique.
             assert(len(leftNR.resolvedDependencyLocation.dependencies) == 1)
@@ -351,9 +398,12 @@ class ProjectDependencyCollection:
             leftDep = leftNR.resolvedDependencyLocation.dependencies[0]
             rightDep = rightNR.resolvedDependencyLocation.dependencies[0]
 
+            leftTypenameLocation = Location([RelativeLocation(LocationKind.Reference, leftNR.libName)] + leftDep.location.path)
+            rightTypenameLocation = Location([RelativeLocation(LocationKind.Reference, rightNR.libName)] + rightDep.location.path)
+
             # Build typenames for the resolved locations.
-            pLeftTypename = Typename.from_location(references, leftDep.location)
-            pRightTypename = Typename.from_location(references, rightDep.location)
+            pLeftTypename = Typename.from_location(references, leftTypenameLocation)
+            pRightTypename = Typename.from_location(references, rightTypenameLocation)
 
             # Turn them into parameters.
             pLeft = Parameter(container, left.atom.token, [], [], None, pLeftTypename, isLeftLValue)
@@ -362,9 +412,14 @@ class ProjectDependencyCollection:
             # Try to find a match for the signature.
             possibleMatch = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
             if possibleMatch is not None:
-                return possibleMatch
+                # Lookup the return type.
+                func = possibleMatch.resolvedDependencyLocation.dependencies[0].locatable
+                funcRetTypename = func.returnTypename
+                funcRetTypenameDep = Dependency(funcRetTypename)
+                funcRetTypenameNR = self.navigate_dependency(funcRetTypenameDep)
+                return funcRetTypenameNR
 
-            raise BinaryOperatorOverloadNotFound(atom.token)
+            raise BinaryOperatorOverloadNotFound(atom.token, pLeftTypename, pRightTypename)
 
     def _better_overload(self, a, b):
         """
@@ -372,18 +427,7 @@ class ProjectDependencyCollection:
         """
         pass
 
-    def navigate_by_tag(self, tag):
-        """
-        Navigate to a location by its tag.
-        
-        Args:
-            tag(int or None): The tag associated with the location.
-        Returns:
-            dag.NavigationResult or None: The navigation result or None if no matching location was found.
-        """
-        return self._libLocationNavResults.get(tag, None)
-    
-    def try_navigate(self, errorAnchor, references, parent, location, tag):
+    def try_navigate(self, errorAnchor, references, parent, location):
         """
         Navigate to a location.
 
@@ -394,18 +438,17 @@ class ProjectDependencyCollection:
                 The navigation will start the the parent and, on failure, move up the
                 hierarchy until a match is found.
             location (objects.Location): The location.
-            tag (int or None): A tag to associate with this navigation operation. Used for caching
-                navigation results.
         Returns:
             dag.NavigationResult or None: The resolved location or None, if no match was found.
         """
         # Lookup from ID cache.
-        result = self.navigate_by_tag(tag)
+        navQuery = NavigationQuery(references, parent, location)
+        result = self._libLocationNavResults.get(str(navQuery), None)
         if result is not None:
             return result
 
-        # Navigate the library tree first (explicit library name)
-        # Fall back to reference order in unit, if no match possible
+        # Navigate the library tree first (explicit library name).
+        # Fall back to reference order in unit, if no match possible.
         offset = 0 # The offset where the object name begins
         lookup = self.libraries
         for i, rl in enumerate(location):
@@ -439,7 +482,8 @@ class ProjectDependencyCollection:
             locationsWithoutLibName.append(otherLocationWithoutLibName)
             currentParent = currentParent.parent
 
-        locationsWithoutLibName.append(Location(locationWithoutLibName))
+        if location:
+            locationsWithoutLibName.append(Location([location[-1]]))
 
         # Find the library and the object in the library
         lookup = None
@@ -592,11 +636,11 @@ class ProjectDependencyCollection:
 
         # Cache the result.
         # This is used to lookup function parameter typename locations later.
-        self._libLocationNavResults[tag] = result
+        self._libLocationNavResults[navQuery] = result
 
         return result
 
-    def navigate(self, errorAnchor, references, parent, location, tag):
+    def navigate(self, errorAnchor, references, parent, location):
         """
         Navigate to a location.
 
@@ -607,12 +651,10 @@ class ProjectDependencyCollection:
                 The navigation will start the the parent and, on failure, move up the
                 hierarchy until a match is found.
             location (objects.Location): The location.
-            tag (int or None): A tag to associate with this navigation operation. Used for caching
-                navigation results.
         Returns:
             dag.NavigationResult: The resolved location.
         """
-        navResult = self.try_navigate(errorAnchor, references, parent, location, tag)
+        navResult = self.try_navigate(errorAnchor, references, parent, location)
         if navResult is None:
             raise DependencyNotFoundError(errorAnchor, location)
         return navResult
@@ -628,7 +670,7 @@ class ProjectDependencyCollection:
         """
         locatable = dependency.locatable
         location = dependency.location
-        return self.navigate(locatable.anchor, locatable.references, locatable.grandParentWithoutRoot, location[:-1], id(locatable))
+        return self.navigate(locatable.anchor, locatable.references, locatable.grandParentWithoutRoot, location[:-1])
 
     def insert(self, locatable):
         """
@@ -797,8 +839,8 @@ class ProjectDependencyCollection:
 
         # Push the function parameters as local variables.
         for p in func.parameters:
-            pId = id(p.typename)
-            pNR = self._libLocationNavResults[pId]
+            pDep = Dependency(p.typename)
+            pNR = self.navigate_dependency(pDep)
             localVars[str(p.token)] = pNR
 
         for obj in func.objects:
@@ -944,7 +986,7 @@ class ProjectDependencyCollection:
         Returns:
             dag.NavigationResult: The navigation result.
         """
-        return self.links[dependency] if dependency in self.links else self.try_navigate(dependency.locatable.anchor, dependency.locatable.references, dependency.locatable.parent, dependency.location, id(dependency.locatable))
+        return self.links[dependency] if dependency in self.links else self.try_navigate(dependency.locatable.anchor, dependency.locatable.references, dependency.locatable.parent, dependency.location)
 
     def navigate_dependency(self, dependency):
         """
