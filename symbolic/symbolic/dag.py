@@ -264,6 +264,7 @@ class ProjectDependencyCollection:
 
         dependency = Dependency(typename)
         result = self.navigate_dependency(dependency)
+        result = self.navigate_alias_base(result)
         return result
 
     def _verify_ast_function(self, container, atom, children, localVars, newLocalVars, isOptional):
@@ -417,6 +418,7 @@ class ProjectDependencyCollection:
                 funcRetTypename = func.returnTypename
                 funcRetTypenameDep = Dependency(funcRetTypename)
                 funcRetTypenameNR = self.navigate_dependency(funcRetTypenameDep)
+                funcRetTypenameNR = self.navigate_alias_base(funcRetTypenameNR)
                 return funcRetTypenameNR
 
             raise BinaryOperatorOverloadNotFound(atom.token, pLeftTypename, pRightTypename)
@@ -549,6 +551,9 @@ class ProjectDependencyCollection:
                                 # Both typenames must resolve to the same location.
                                 paramANR = self.navigate_dependency(Dependency(paramTypenameA))
                                 paramBNR = self.navigate_dependency(Dependency(paramTypenameB))
+                                
+                                paramANR = self.navigate_alias_base(paramANR)
+                                paramBNR = self.navigate_alias_base(paramBNR)
 
                                 if paramANR != paramBNR:
                                     parameterMismatch = True
