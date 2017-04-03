@@ -151,7 +151,6 @@ class Symto:
                 self.isBinaryLeftAssociative = op[1]
                 self.isBinaryRightAssociative = not self.isBinaryLeftAssociative
                 self.binaryPrecedence = op[0]
-                self.isLValueOp = text in Ops.lvalue
             
             self.isUnaryOp = text in Ops.unary
             if self.isUnaryOp:
@@ -247,7 +246,7 @@ class SymbolicLexer(RegexLexer):
             (r'(\d+\.\d*|\.\d+|\d+[fF])[fF]?', Number.Float),
             (r'0x[0-9a-fA-F]+', Number.Hex),
             (r'\d+', Number.Integer),
-            (r'(<<|<<=|>>|>>=|~=|\|=|&=|^=|\+=|\*=|%=|-=|==|!=|<=|>=|&&|\|\|)', Operator),
+            (r'(:=|<<|<<=|>>|>>=|~=|\|=|&=|^=|\+=|\*=|%=|-=|==|!=|<=|>=|&&|\|\|)', Operator),
             (r'[@.~!%^&*+-=|?:<>/\[\]]', Operator),
             (r"'[^\']*'", String),
             (r'"[^\"]*"', String),
@@ -433,6 +432,7 @@ class Ops:
             '~': [2, False],
             '*': [2, False],
             '&': [2, False],
+            '++': [2, False],
             }
 
     binary = {
@@ -467,6 +467,7 @@ class Ops:
             
             '||': [12, True],
             
+            ':=': [14, False],
             '=': [14, False],
             '+=': [14, False],
             '-=': [14, False],
@@ -478,6 +479,4 @@ class Ops:
             '&=': [14, False],
             '^=': [14, False],
             '|=': [14, False],
-            }
-
-    lvalue = { "=", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^=", "|=" }
+        }

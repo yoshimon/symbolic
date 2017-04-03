@@ -333,13 +333,16 @@ class ProjectDependencyCollection:
 
     def _try_find_function(self, container, nameToken, kind, parameters):
         """
+        Try to find a function matching a given signature.
 
+        Args:
+            container (objects.Locatable): The locatable container (parent) object.
+            nameToken (lexer.Symto): A token with the name of the function to look for.
+            kind (objects.FunctionKind): The function kind to look for.
+            parameters (list of objects.Parameter): The parameter signature.
         """
-        # Assemble a dummy function to get a location (signature).
         locatable = Function(container.references, container, nameToken, [], [], None, None, kind, None, None, parameters)
         dependency = Dependency(locatable)
-
-        # Try to find a matching overload.
         return self.try_navigate_dependency(dependency)
 
     def _verify_ast_binary_op(self, container, atom, children, localVars, newLocalVars, isOptional):
@@ -360,33 +363,26 @@ class ProjectDependencyCollection:
 
         left, right = children[0], children[1]
 
-        # See if the left-hand side is an L-value.
-        isLeftLValue = self._is_lvalue(left)
-            
         # If this is the = operator then the LHS does not have to have a deducable type.
         # A missing LHS type would indicate that we have a new variable declaration in that case.
-        isAssignmentOp = atom.token == "="
+        isNewVarOp = atom.token == ":="
             
-        leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isAssignmentOp)
+        leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isNewVarOp)
         rightNR = self._verify_expression_ast_recursive(container, localVars, right, newLocalVars)
 
         # Is the LHS a new variable?
-        if leftNR is None and isLeftLValue:
-            assert(isAssignmentOp)
-                
-            if left.atom.kind == ExpressionAtomKind.Var:
-                # It has to be a new local variable.
-                varToken = left.atom.token
-                varName = str(varToken)
-                if varName in newLocalVars:
-                    raise VariableAlreadyExistsError(varToken)
+        if isNewVarOp:
+            if left.atom.kind != ExpressionAtomKind.Var:
+                raise LValueRequiredError(atom.token)
 
-                newLocalVars[varName] = rightNR
-                return rightNR
-            else:
-                # Must be an extension.
-                # TODO:
-                return None
+            # It has to be a new local variable.
+            varToken = left.atom.token
+            varName = str(varToken)
+            if varName in newLocalVars or varName in localVars:
+                raise VariableAlreadyExistsError(varToken)
+
+            newLocalVars[varName] = rightNR
+            return rightNR
         else:
             # These should be unique.
             assert(len(leftNR.resolvedDependencyLocation.dependencies) == 1)
@@ -406,12 +402,27 @@ class ProjectDependencyCollection:
             pLeftTypename = Typename.from_location(references, leftTypenameLocation)
             pRightTypename = Typename.from_location(references, rightTypenameLocation)
 
+            isLeftLValue = self._is_lvalue(left)
+            isRightLValue = self._is_lvalue(right)
+
             # Turn them into parameters.
             pLeft = Parameter(container, left.atom.token, [], [], None, pLeftTypename, isLeftLValue)
-            pRight = Parameter(container, right.atom.token, [], [], None, pRightTypename, False)
+            pRight = Parameter(container, right.atom.token, [], [], None, pRightTypename, isRightLValue)
                     
             # Try to find a match for the signature.
             possibleMatch = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
+
+            if possibleMatch is None:
+                # Try it again with non-ref versions.
+                pLeft.isRef = not pLeft.isRef
+                possibleMatch = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
+                if possibleMatch is None:
+                    pRight.isRef = not pRight.isRef
+                    possibleMatch = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
+                    if possibleMatch is None:
+                        pLeft.isRef = not pLeft.isRef
+                        possibleMatch = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
+
             if possibleMatch is not None:
                 # Lookup the return type.
                 func = possibleMatch.resolvedDependencyLocation.dependencies[0].locatable
@@ -422,12 +433,6 @@ class ProjectDependencyCollection:
                 return funcRetTypenameNR
 
             raise BinaryOperatorOverloadNotFound(atom.token, pLeftTypename, pRightTypename)
-
-    def _better_overload(self, a, b):
-        """
-        Compare to overloads and return the overload that best matches a given signature.
-        """
-        pass
 
     def try_navigate(self, errorAnchor, references, parent, location):
         """
