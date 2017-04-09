@@ -11,23 +11,23 @@ signatures. This can lead to duplicate code and hence redundancy. The following 
 .. code-block:: cpp
 
     import hlsl;
-    
+
     int add(int a, int b)
     {
         return a + b;
     }
-    
+
     float add(float a, float b)
     {
         return a + b;
     }
-    
+
     void f()
     {
         add(1, 2);
         add(1.0, 2.0);
     }
-    
+
 Both versions of :code:`add` look similar and differ solely by the types that are passed in.
 
 Solution
@@ -38,19 +38,19 @@ to implement certain concepts.
 .. code-block:: cpp
 
     import hlsl;
-    
+
     template<T>
     T add(T a, T b)
     {
         return a + b;
     }
-    
+
     void f()
     {
         add(1, 2);
         add(1.0, 2.0);
     }
-    
+
 A single template can be used to handle both cases by substituting the correct types for the signature after a symbolic matching pass.
 Templates behave similar to macros in the C language, except that they emit new translation units into the translator when referenced
 instead of an in-place transformation of the source code. Looking at the example above, the call to :code:`int add(int, int)`
@@ -69,10 +69,10 @@ namespaces and structs. A unified syntax for templates is introduced:
     {
         ...
     }
-   
+
 where :code:`<TEMPLATE_OBJECT>` is the object to be templated, :code:`<T0>, <T1>, ..., <TN>` are the *template parameters*
 and the corresponding, optional values :code:`<T0P>, <T1P>, ..., <TNP>` are the *partial specialization masks*.
-See  `Partial Specialization`_ for more information on partial template specialization. 
+See  `Partial Specialization`_ for more information on partial template specialization.
 
 .. role:: note_info
 
@@ -83,7 +83,7 @@ Partial Specialization
 ----------------------
 Partial specialization can be used to specialize a template when one or more of its parameters match a user-defined pattern.
 This can be useful when certain template parameter values should be treated differently than others.
-Partial specializations take precedence over their unspecialized counterparts and other partial specializations 
+Partial specializations take precedence over their unspecialized counterparts and other partial specializations
 with less matches. See `Example 3 - Partial Specialization`_ which demonstrates partial template specialization.
 
 Concatenation
@@ -119,8 +119,6 @@ piece of source code:
 
 .. code-block:: cpp
 
-    import hlsl;
-
     struct int;                   // 1. Location: int<>()
 
     struct f                      // 2. Location: f<>()
@@ -131,10 +129,10 @@ piece of source code:
         g(int)
         {
             template<Param>       // 5. Location: f<>().g<>(int).h<T0>()
-            struct h(Param);
+            struct h;
 
             template<"int">       // 6. Location: f<>().g<>(int).h<T0="int">()
-            struct h(int);        // Will resolve to 3. Location.
+            struct h;             // Will resolve to 3. Location.
 
             struct i              // 7. Location: f<>().g<>(int).i<>()
             {
@@ -153,15 +151,8 @@ within the same library that instantiated the template. The object will be anony
 can refer to the same template without generating conflicting locations. The translator will keep track of an internal table that
 reduces duplicate template instantiations. However, duplicate instantiations will only be detected if they match exactly, that is when
 their template parameters and imported libraries are identical. The new translation unit will then be parsed and analyzed like every
-other unit using the references at the instantiators site. Assuming we want to instantiate :code:`h<"float">` in the example above,
-the new, hidden translation unit will look like this:
-
-.. code-block:: cpp
-
-    struct (float);
-
-The translator will create a link to this anonymized object by mapping it to the template location so that it can be navigated to
-internally.
+other unit using the references at the instantiators site. The translator will create a link to this anonymized object by mapping it
+to the template location so that it can be navigated to internally.
 
 During the lexing step, all template parameters will be substituted with their corresponding values. Whenever
 a template parameter gets substituted, the translator will blacklist the substitution of that same parameter within the substituted
@@ -190,21 +181,19 @@ A common use-case is to create generic data structures. The following code snipp
 
 .. code-block:: cpp
 
-    import hlsl;
-    
     template<First, Second>
     struct a_type
     {
         First a;
         Second b;
     }
-    
+
     void f(ref a_type<"int", "float"> p)
     {
         p.a = 42;
         p.b = 0.0;
     }
-    
+
 
 Example 2 - Type Generation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -212,8 +201,6 @@ Templates can be used to generate new types. The following code snippet demonstr
 
 .. code-block:: cpp
 
-    import hlsl;
-    
     // Allow external injection of source code into this type.
     template<Type, Injection>
     struct generated
@@ -221,7 +208,7 @@ Templates can be used to generate new types. The following code snippet demonstr
         Type a;
         Injection
     }
-    
+
     int add(generated<"int", "Type b; Type c;"> p)
     {
         return p.a + p.b + p.c;
@@ -233,8 +220,6 @@ This example illustrates partial template specialization.
 
 .. code-block:: cpp
 
-    import hlsl;
-    
     template<T0>
     struct a_type
     {

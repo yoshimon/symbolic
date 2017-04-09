@@ -143,6 +143,25 @@ class NavigationResult:
         """
         return self.libName == other.libName and id(self.resolvedDependencyLocation) == id(other.resolvedDependencyLocation)
 
+class AstNavigationResult:
+    """
+    A navigation result used during the AST validation phase.
+
+    This is a convenience class to extract from a navigation result with an expected dependency match count of exactly one.
+    """
+
+    def __init__(self, navResult):
+        """
+        Initialize the object.
+
+        Args:
+            navResult (dag.NavigationResult): The navigation result to wrap.
+        """
+        assert(len(navResult.resolvedDependencyLocation.dependencies) == 1)
+
+        self.dependency = navResult.resolvedDependencyLocation.dependencies[0]
+        self.explicitLocation = Location([RelativeLocation(LocationKind.Reference, navResult.libName)] + self.dependency.location.path)
+
 class ProjectDependencyCollection:
     """
     A colllection of dependencies within a project.
@@ -216,6 +235,29 @@ class ProjectDependencyCollection:
             ExpressionAtomKind.BinaryOp: self._verify_ast_binary_op
         }
 
+    def _ast_navigate_dependency(self, locatable):
+        """
+        Navigate to a locatable object.
+
+        Args:
+            locatable (objects.Locatable): The locatable object to search for.
+        Returns:
+            dag.AstNavigationResult: The navigation result.
+        """
+        dependency = Dependency(locatable)
+        navResult = self.navigate_dependency(dependency)
+        if navResult is None:
+            return None
+
+        astNavResult = AstNavigationResult(navResult)
+
+        # Navigate through aliases down to base.
+        if astNavResult.explicitLocation.path[-1].kind == LocationKind.Type:
+            navResult = self.navigate_alias_base(navResult)
+            astNavResult = AstNavigationResult(navResult)
+        
+        return astNavResult
+
     def _verify_ast_var(self, container, atom, children, localVars, newLocalVars, isOptional):
         """
         Verify an AST with a variable atom type.
@@ -228,7 +270,7 @@ class ProjectDependencyCollection:
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
         Returns:
-            dag.NavigationResult: The location of the resulting type of this AST.
+            dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         # Lookup the resolved variable type.
         varNR = localVars.get(str(atom.token), None)
@@ -250,7 +292,7 @@ class ProjectDependencyCollection:
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
         Returns:
-            dag.NavigationResult: The location of the resulting type of this AST.
+            dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         # Navigate to the numeric type.
         if atom.token.isInteger:
@@ -262,9 +304,7 @@ class ProjectDependencyCollection:
         else:
             raise DevError()
 
-        dependency = Dependency(typename)
-        result = self.navigate_dependency(dependency)
-        result = self.navigate_alias_base(result)
+        result = self._ast_navigate_dependency(typename)
         return result
 
     def _verify_ast_function(self, container, atom, children, localVars, newLocalVars, isOptional):
@@ -279,7 +319,7 @@ class ProjectDependencyCollection:
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
         Returns:
-            dag.NavigationResult: The location of the resulting type of this AST.
+            dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         pass
 
@@ -295,7 +335,7 @@ class ProjectDependencyCollection:
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
         Returns:
-            dag.NavigationResult: The location of the resulting type of this AST.
+            dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         pass
 
@@ -311,7 +351,7 @@ class ProjectDependencyCollection:
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
         Returns:
-            dag.NavigationResult: The location of the resulting type of this AST.
+            dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         pass
 
@@ -327,7 +367,7 @@ class ProjectDependencyCollection:
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
         Returns:
-            dag.NavigationResult: The location of the resulting type of this AST.
+            dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         pass
 
@@ -340,10 +380,14 @@ class ProjectDependencyCollection:
             nameToken (lexer.Symto): A token with the name of the function to look for.
             kind (objects.FunctionKind): The function kind to look for.
             parameters (list of objects.Parameter): The parameter signature.
+        Returns:
+            dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         locatable = Function(container.references, container, nameToken, [], [], None, None, kind, None, None, parameters)
         dependency = Dependency(locatable)
-        return self.try_navigate_dependency(dependency)
+        navResult = self.try_navigate_dependency(dependency)
+        result = AstNavigationResult(navResult) if navResult is not None else None
+        return result
 
     def _verify_ast_binary_op(self, container, atom, children, localVars, newLocalVars, isOptional):
         """
@@ -357,7 +401,7 @@ class ProjectDependencyCollection:
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
         Returns:
-            dag.NavigationResult: The location of the resulting type of this AST.
+            dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         assert(len(children) == 2)
 
@@ -384,55 +428,36 @@ class ProjectDependencyCollection:
             newLocalVars[varName] = rightNR
             return rightNR
         else:
-            # These should be unique.
-            assert(len(leftNR.resolvedDependencyLocation.dependencies) == 1)
-            assert(len(rightNR.resolvedDependencyLocation.dependencies) == 1)
-
-            references = container.references
-
-            # Find the assignment operator.
-            # Look at all possible permutations.
-            leftDep = leftNR.resolvedDependencyLocation.dependencies[0]
-            rightDep = rightNR.resolvedDependencyLocation.dependencies[0]
-
-            leftTypenameLocation = Location([RelativeLocation(LocationKind.Reference, leftNR.libName)] + leftDep.location.path)
-            rightTypenameLocation = Location([RelativeLocation(LocationKind.Reference, rightNR.libName)] + rightDep.location.path)
-
             # Build typenames for the resolved locations.
-            pLeftTypename = Typename.from_location(references, leftTypenameLocation)
-            pRightTypename = Typename.from_location(references, rightTypenameLocation)
+            leftTypename = Typename.from_location(container.references, leftNR.explicitLocation)
+            rightTypename = Typename.from_location(container.references, rightNR.explicitLocation)
 
             isLeftLValue = self._is_lvalue(left)
             isRightLValue = self._is_lvalue(right)
 
             # Turn them into parameters.
-            pLeft = Parameter(container, left.atom.token, [], [], None, pLeftTypename, isLeftLValue)
-            pRight = Parameter(container, right.atom.token, [], [], None, pRightTypename, isRightLValue)
+            pLeft = Parameter(container, left.atom.token, [], [], None, leftTypename, isLeftLValue)
+            pRight = Parameter(container, right.atom.token, [], [], None, rightTypename, isRightLValue)
                     
             # Try to find a match for the signature.
-            possibleMatch = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
-
-            if possibleMatch is None:
+            possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
+            if possibleMatchNR is None:
                 # Try it again with non-ref versions.
                 pLeft.isRef = not pLeft.isRef
-                possibleMatch = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
-                if possibleMatch is None:
+                possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
+                if possibleMatchNR is None:
                     pRight.isRef = not pRight.isRef
-                    possibleMatch = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
-                    if possibleMatch is None:
+                    possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
+                    if possibleMatchNR is None:
                         pLeft.isRef = not pLeft.isRef
-                        possibleMatch = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
+                        possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
 
-            if possibleMatch is not None:
+            if possibleMatchNR is not None:
                 # Lookup the return type.
-                func = possibleMatch.resolvedDependencyLocation.dependencies[0].locatable
-                funcRetTypename = func.returnTypename
-                funcRetTypenameDep = Dependency(funcRetTypename)
-                funcRetTypenameNR = self.navigate_dependency(funcRetTypenameDep)
-                funcRetTypenameNR = self.navigate_alias_base(funcRetTypenameNR)
+                funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename)
                 return funcRetTypenameNR
 
-            raise BinaryOperatorOverloadNotFound(atom.token, pLeftTypename, pRightTypename)
+            raise BinaryOperatorOverloadNotFound(atom.token, pLeft, pRight)
 
     def try_navigate(self, errorAnchor, references, parent, location):
         """
@@ -849,8 +874,7 @@ class ProjectDependencyCollection:
 
         # Push the function parameters as local variables.
         for p in func.parameters:
-            pDep = Dependency(p.typename)
-            pNR = self.navigate_dependency(pDep)
+            pNR = self._ast_navigate_dependency(p.typename)
             localVars[str(p.token)] = pNR
 
         for obj in func.objects:
@@ -880,7 +904,8 @@ class ProjectDependencyCollection:
             # Make sure the expression type matches the function return type.
             func = instruction.parent
             assert(isinstance(func, Function))
-            return exprTypeLocation == func.returnTypename
+            #exprTypeLocation == func.returnTypename
+            pass
         elif instruction.kind == InstructionKind.If:
             exprType = self._verify_expression_ast(container, localVars, instruction.expression.ast)
 
