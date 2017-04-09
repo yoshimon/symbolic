@@ -527,3 +527,27 @@ class BinaryOperatorOverloadNotFound(SourceError):
             str: The string representation.
         """
         return super().__str__() + 'Could not find any matching binary operator overloads for "{0}({1}, {2})".'.format(str(self.token), str(self.lhs), str(self.rhs))
+
+class UnaryOperatorOverloadNotFound(SourceError):
+    """An exception class, that indicates that a unary operator overload was not found."""
+
+    def __init__(self, token, typename):
+        """
+        Initialize the object.
+
+        Args:
+            token (lexer.Symto): The unary operator token.
+            typename (objects.Typename): The typename of the operator parameter.
+        """
+        super().__init__(token.anchor)
+        self.token = token
+        self.typename = typename
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + 'Could not find any matching unary operator overloads for "{0}({1})".'.format(str(self.token), str(self.typename))

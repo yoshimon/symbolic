@@ -229,7 +229,7 @@ class ProjectDependencyCollection:
             ExpressionAtomKind.Var: self._verify_ast_var,
             ExpressionAtomKind.Number: self._verify_ast_number,
             ExpressionAtomKind.FunctionEnd: self._verify_ast_function,
-            ExpressionAtomKind.ArrayEnd: self._verify_ast_array,
+            ExpressionAtomKind.ArrayBegin: self._verify_ast_array,
             ExpressionAtomKind.TemplateEnd: self._verify_ast_template,
             ExpressionAtomKind.UnaryOp: self._verify_ast_unary_op,
             ExpressionAtomKind.BinaryOp: self._verify_ast_binary_op
@@ -369,7 +369,29 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
-        pass
+        assert(len(children) == 1)
+
+        # Extract child information.
+        child = children[0]
+        childNR = self._verify_expression_ast_recursive(container, localVars, child, newLocalVars)
+        childTypename = Typename.from_location(container.references, childNR.explicitLocation)
+        isChildLValue = self._is_lvalue(child)
+
+        # Lookup the operator.
+        childParameter = Parameter(container, child.atom.token, [], [], None, childTypename, isChildLValue)
+        possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [childParameter])
+
+        if possibleMatchNR is None:
+            # Try it again with non-ref versions.
+            childParameter.isRef = not childParameter.isRef
+            possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [childParameter])
+
+        if possibleMatchNR is not None:
+            # Lookup the return type.
+            funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename)
+            return funcRetTypenameNR
+
+        raise UnaryOperatorOverloadNotFound(atom.token, childTypename)
 
     def _try_find_function(self, container, nameToken, kind, parameters):
         """
