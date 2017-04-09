@@ -45,7 +45,11 @@ class Anchor:
         Returns:
             str: The string representation.
         """
-        return "'{0}' in {1} @ ({2}, {3})".format(self.fileName, self.libName, self.line, self.column)
+        fileName = "'{0}'".format(self.fileName) if self.fileName else ""
+        libName = (" in {0}" if fileName else "In {0}").format(self.libName) if self.libName else ""
+        line = " @ ({0}, {1})".format(self.line, self.column) if (fileName or libName) and self.line and self.column else ""
+        total = fileName + libName + line
+        return total
 
 class Symto:
     """

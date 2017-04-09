@@ -46,7 +46,8 @@ class SourceError(Exception):
         Returns:
             str: The string representation.
         """
-        return "{0}: ".format(str(self.anchor))
+        anchorStr = str(self.anchor)
+        return "{0}: ".format(anchorStr) if anchorStr else ""
 
 class DevError(Exception):
     """An exception class, that indicates a developer error (bug)."""
@@ -502,7 +503,7 @@ class LValueRequiredError(SourceError):
         """
         return super().__str__() + 'L-value required.'.format(str(self.anchor))
 
-class BinaryOperatorOverloadNotFound(SourceError):
+class BinaryOperatorOverloadNotFoundError(SourceError):
     """An exception class, that indicates that a binary operator overload was not found."""
 
     def __init__(self, token, lhs, rhs):
@@ -528,7 +529,7 @@ class BinaryOperatorOverloadNotFound(SourceError):
         """
         return super().__str__() + 'Could not find any matching binary operator overloads for "{0}({1}, {2})".'.format(str(self.token), str(self.lhs), str(self.rhs))
 
-class UnaryOperatorOverloadNotFound(SourceError):
+class UnaryOperatorOverloadNotFoundError(SourceError):
     """An exception class, that indicates that a unary operator overload was not found."""
 
     def __init__(self, token, typename):
@@ -551,3 +552,27 @@ class UnaryOperatorOverloadNotFound(SourceError):
             str: The string representation.
         """
         return super().__str__() + 'Could not find any matching unary operator overloads for "{0}({1})".'.format(str(self.token), str(self.typename))
+
+class InvalidArrayIndexTypeError(SourceError):
+    """An exception class, that indicates that an array index is not a valid type."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + 'Invalid array index type. Array indices must be integers.'
+
+class MemberNotFoundError(SourceError):
+    """An exception class, that indicates that a struct member was not found."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + 'Could not find member.'

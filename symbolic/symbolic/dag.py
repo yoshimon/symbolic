@@ -27,13 +27,15 @@ class Dependency:
         isDeprecated (bool): True, if the object is deprecated. Otherwise False.
     """
 
-    def __init__(self, locatable):
+    def __init__(self, libName, locatable):
         """
         Initialize the object.
 
         Args:
+            libName (str): The library that created the dependency.
             locatable (objects.Locatable): The object behind the dependency.
         """
+        self.libName = libName
         self.locatable = locatable
 
         # Cache some members from the locatable.
@@ -43,6 +45,27 @@ class Dependency:
         # Two system annotations are valid for all dependencies: private, deprecate
         self.isPrivate = Annotation.has('private', locatable.sysAnnotations) if locatable is isinstance(locatable, Named) else False
         self.isDeprecated = Annotation.has('deprecated', locatable.sysAnnotations) if locatable is isinstance(locatable, Named) else False
+
+    def __eq__(self, other):
+        """
+        Return whether two dependencies are identical.
+        
+        Args:
+            other (objects.Dependency): The dependency to compare with.
+        Returns:
+            bool: True, if both dependencies point to the same library. Otherwise False.
+        """
+        return self.libName == other.libName and self.location == other.location and self.references == other.references
+
+    def __hash__(self):
+        """
+        Return a hash value for this object.
+
+        Returns:
+            int: The hash value.
+        """
+        h0 = ("{0} {1} {2}".format(str(self.libName), str(self.location), str(self.references))).__hash__()
+        return h0
 
 class LocationConflict:
     """
@@ -162,6 +185,17 @@ class AstNavigationResult:
         self.dependency = navResult.resolvedDependencyLocation.dependencies[0]
         self.explicitLocation = Location([RelativeLocation(LocationKind.Reference, navResult.libName)] + self.dependency.location.path)
 
+    def __eq__(self, other):
+        """
+        Return whether two navigation results point to the same location.
+        
+        Args:
+            other (dag.NavigationResult): The navigation result to compare with.
+        Returns:
+            bool: True, if both results point to the same location. Otherwise False.
+        """
+        return self.explicitLocation == other.explicitLocation
+
 class ProjectDependencyCollection:
     """
     A colllection of dependencies within a project.
@@ -228,23 +262,25 @@ class ProjectDependencyCollection:
         self._astVerifiers = {
             ExpressionAtomKind.Var: self._verify_ast_var,
             ExpressionAtomKind.Number: self._verify_ast_number,
-            ExpressionAtomKind.FunctionEnd: self._verify_ast_function,
+            ExpressionAtomKind.FunctionBegin: self._verify_ast_function,
             ExpressionAtomKind.ArrayBegin: self._verify_ast_array,
-            ExpressionAtomKind.TemplateEnd: self._verify_ast_template,
+            ExpressionAtomKind.TemplateBegin: self._verify_ast_template,
             ExpressionAtomKind.UnaryOp: self._verify_ast_unary_op,
             ExpressionAtomKind.BinaryOp: self._verify_ast_binary_op
         }
 
-    def _ast_navigate_dependency(self, locatable):
+    def _ast_navigate_dependency(self, locatable, *, libName=None):
         """
         Navigate to a locatable object.
 
         Args:
             locatable (objects.Locatable): The locatable object to search for.
+            libName (str): The library to navigate in.
         Returns:
             dag.AstNavigationResult: The navigation result.
         """
-        dependency = Dependency(locatable)
+        searchLibName = self.libName if libName is None else libName
+        dependency = Dependency(searchLibName, locatable)
         navResult = self.navigate_dependency(dependency)
         if navResult is None:
             return None
@@ -258,7 +294,30 @@ class ProjectDependencyCollection:
         
         return astNavResult
 
-    def _verify_ast_var(self, container, atom, children, localVars, newLocalVars, isOptional):
+    def _ast_try_navigate_dependency(self, locatable):
+        """
+        Try to navigate to a locatable object.
+
+        Args:
+            locatable (objects.Locatable): The locatable object to search for.
+        Returns:
+            dag.AstNavigationResult or None: The navigation result or None.
+        """
+        dependency = Dependency(self.libName, locatable)
+        navResult = self.try_navigate_dependency(dependency)
+        if navResult is None:
+            return None
+
+        astNavResult = AstNavigationResult(navResult)
+
+        # Navigate through aliases down to base.
+        if astNavResult.explicitLocation.path[-1].kind == LocationKind.Type:
+            navResult = self.navigate_alias_base(navResult)
+            astNavResult = AstNavigationResult(navResult)
+        
+        return astNavResult
+
+    def _verify_ast_var(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
         """
         Verify an AST with a variable atom type.
 
@@ -269,9 +328,24 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
+            struct (dag.AstNavigationResult or None): If the container is the struct operator, this is the struct on the LHS. Otherwise None.
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
+        # Handle struct members.
+        if struct is not None:
+            memberName = str(atom.token)
+            memberTypename = struct.dependency.locatable.member_typename(atom.token.anchor, memberName)
+            structLib = str(struct.explicitLocation[0])
+            memberNR = self._ast_navigate_dependency(memberTypename, libName=structLib)
+            return memberNR
+
+        # Handle boolean values: true, false.
+        if atom.token in ["true", "false"]:
+            boolTypename = self.native_bool_typename(container.references)
+            navResult = self._ast_navigate_dependency(boolTypename)
+            return navResult
+
         # Lookup the resolved variable type.
         varNR = localVars.get(str(atom.token), None)
         if not isOptional and varNR is None:
@@ -280,7 +354,7 @@ class ProjectDependencyCollection:
         # Return the navigation result.
         return varNR
 
-    def _verify_ast_number(self, container, atom, children, localVars, newLocalVars, isOptional):
+    def _verify_ast_number(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
         """
         Verifies an AST with a number atom type.
 
@@ -291,23 +365,24 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
+            struct (dag.AstNavigationResult or None): If the container is a struct, this is a reference to that struct.
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         # Navigate to the numeric type.
         if atom.token.isInteger:
             # Int
-            typename = Typename.from_location(container.references, self.nativeTypenameLocations["int"])
+            typename = self.native_int_typename(container.references)
         elif atom.token.isFloat:
             # Float
-            typename = Typename.from_location(container.references, self.nativeTypenameLocations["float"])
+            typename = self.native_float_typename(container.references)
         else:
             raise DevError()
 
         result = self._ast_navigate_dependency(typename)
         return result
 
-    def _verify_ast_function(self, container, atom, children, localVars, newLocalVars, isOptional):
+    def _verify_ast_function(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
         """
         Verify an AST with a function atom type.
 
@@ -318,12 +393,13 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
+            struct (dag.AstNavigationResult or None): If the container is a struct, this is a reference to that struct.
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         pass
 
-    def _verify_ast_array(self, container, atom, children, localVars, newLocalVars, isOptional):
+    def _verify_ast_array(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
         """
         Verifies an AST with an array atom type.
 
@@ -334,12 +410,76 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
+            struct (dag.AstNavigationResult or None): If the container is a struct, this is a reference to that struct.
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
-        pass
+        assert(len(children) == 1)
 
-    def _verify_ast_template(self, container, atom, children, localVars, newLocalVars, isOptional):
+        # Extract child information.
+        child = children[0]
+        childNR = self._verify_expression_ast_recursive(container, localVars, child, newLocalVars)
+        childTypename = Typename.from_location(container.references, childNR.explicitLocation)
+        
+        # Make sure the child (here: array index) resolves to an integer.
+        intTypename = self.native_int_typename(container.references)
+        intNR = self._ast_navigate_dependency(intTypename)
+
+        if childNR != intNR:
+            raise InvalidArrayIndexTypeError(atom.token.anchor)
+
+        # Return the type of the underlying object.
+        # Lookup the variable or extension.
+
+
+        return childNR
+
+    def native_typename(self, references, name):
+        """
+        Return the native int typename.
+
+        Args:
+            references (list): The references to associate with the typename.
+            name (str): The native type name.
+        Returns:
+            Typename: The typename.
+        """
+        return Typename.from_location(references, self.nativeTypenameLocations[name])
+
+    def native_int_typename(self, references):
+        """
+        Return the native int typename.
+
+        Args:
+            references (list): The references to associate with the typename.
+        Returns:
+            Typename: The typename.
+        """
+        return self.native_typename(references, "int")
+
+    def native_float_typename(self, references):
+        """
+        Return the native float typename.
+
+        Args:
+            references (list): The references to associate with the typename.
+        Returns:
+            Typename: The typename.
+        """
+        return self.native_typename(references, "float")
+
+    def native_bool_typename(self, references):
+        """
+        Return the native bool typename.
+
+        Args:
+            references (list): The references to associate with the typename.
+        Returns:
+            Typename: The typename.
+        """
+        return self.native_typename(references, "bool")
+
+    def _verify_ast_template(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
         """
         Verify an AST with a template atom type.
 
@@ -350,12 +490,13 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
+            struct (dag.AstNavigationResult or None): If the container is a struct, this is a reference to that struct.
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         pass
 
-    def _verify_ast_unary_op(self, container, atom, children, localVars, newLocalVars, isOptional):
+    def _verify_ast_unary_op(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
         """
         Verifies an AST with a unary operator atom type.
 
@@ -366,6 +507,7 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
+            struct (dag.AstNavigationResult or None): If the container is a struct, this is a reference to that struct.
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
@@ -391,7 +533,7 @@ class ProjectDependencyCollection:
             funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename)
             return funcRetTypenameNR
 
-        raise UnaryOperatorOverloadNotFound(atom.token, childTypename)
+        raise UnaryOperatorOverloadNotFoundError(atom.token, childTypename)
 
     def _try_find_function(self, container, nameToken, kind, parameters):
         """
@@ -406,12 +548,10 @@ class ProjectDependencyCollection:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         locatable = Function(container.references, container, nameToken, [], [], None, None, kind, None, None, parameters)
-        dependency = Dependency(locatable)
-        navResult = self.try_navigate_dependency(dependency)
-        result = AstNavigationResult(navResult) if navResult is not None else None
-        return result
+        navResult = self._ast_try_navigate_dependency(locatable)
+        return navResult
 
-    def _verify_ast_binary_op(self, container, atom, children, localVars, newLocalVars, isOptional):
+    def _verify_ast_binary_op(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
         """
         Verify an AST with a binary operator atom type.
 
@@ -422,6 +562,7 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
+            struct (dag.AstNavigationResult or None): If the container is a struct, this is a reference to that struct.
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
@@ -432,9 +573,14 @@ class ProjectDependencyCollection:
         # If this is the = operator then the LHS does not have to have a deducable type.
         # A missing LHS type would indicate that we have a new variable declaration in that case.
         isNewVarOp = atom.token == ":="
+        isStructOp = atom.token == "."
             
         leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isNewVarOp)
-        rightNR = self._verify_expression_ast_recursive(container, localVars, right, newLocalVars)
+        leftStruct = leftNR if isStructOp else None
+        rightNR = self._verify_expression_ast_recursive(container, localVars, right, newLocalVars, struct=leftStruct)
+
+        if isStructOp:
+            return rightNR
 
         # Is the LHS a new variable?
         if isNewVarOp:
@@ -479,7 +625,7 @@ class ProjectDependencyCollection:
                 funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename)
                 return funcRetTypenameNR
 
-            raise BinaryOperatorOverloadNotFound(atom.token, pLeft, pRight)
+            raise BinaryOperatorOverloadNotFoundError(atom.token, pLeft, pRight)
 
     def try_navigate(self, errorAnchor, references, parent, location):
         """
@@ -600,9 +746,12 @@ class ProjectDependencyCollection:
                                 paramTypenameA = paramA.typename
                                 paramTypenameB = paramB.typename
 
+                                paramDepA = Dependency(self.libName, paramTypenameA)
+                                paramDepB = Dependency(self.libName, paramTypenameB)
+
                                 # Both typenames must resolve to the same location.
-                                paramANR = self.navigate_dependency(Dependency(paramTypenameA))
-                                paramBNR = self.navigate_dependency(Dependency(paramTypenameB))
+                                paramANR = self.navigate_dependency(paramDepA)
+                                paramBNR = self.navigate_dependency(paramDepB)
                                 
                                 paramANR = self.navigate_alias_base(paramANR)
                                 paramBNR = self.navigate_alias_base(paramBNR)
@@ -668,7 +817,7 @@ class ProjectDependencyCollection:
                                 self.insert_unit(rootNamespace)
                         
                             # Use template links to jump to the right location, which is anonymous.
-                            templateDep = Dependency(self.templateLinks[dependencyLocationStr])
+                            templateDep = Dependency(self.libName, self.templateLinks[dependencyLocationStr])
                             templateNavResult = self.navigate_dependency(templateDep)
                             templateAliasNavResult = self.navigate_alias_base(templateNavResult)
                             resolvedDependencyLocation = templateAliasNavResult.resolvedDependencyLocation
@@ -737,7 +886,7 @@ class ProjectDependencyCollection:
             locatable (objects.Locatable): The object to insert.
         """
         # Create and cache the dependency
-        dependency = Dependency(locatable)
+        dependency = Dependency(self.libName, locatable)
         dependencyLocation = dependency.location
         rl = dependencyLocation[-1]
 
@@ -808,6 +957,9 @@ class ProjectDependencyCollection:
             elif isinstance(locatable, Alias):
                 # The unknown typename
                 self.insert(locatable.targetTypename)
+            elif isinstance(locatable, MemberList):
+                # Unknown member types.
+                self.insert(locatable.typename)
 
     def begin_library(self, libName):
         """
@@ -936,7 +1088,7 @@ class ProjectDependencyCollection:
         elif instruction.kind == InstructionKind.Elif:
             pass
 
-    def _verify_expression_ast(self, container, localVars, ast, *, isOptional=False):
+    def _verify_expression_ast(self, container, localVars, ast):
         """
         Verify an expression.
 
@@ -944,18 +1096,17 @@ class ProjectDependencyCollection:
             container (objects.Locatable): The locatable container (parent) object.
             localVars (dict): Visible variable declarations.
             ast (objects.ExpressionAST): The expression AST to verify.
-            isOptional (bool): Indicates whether the result of this function can be optionally None.
         Returns:
             dag.NavigationResult or None: The navigation result after searching for the type of the expression.
         """
         newLocalVars = {}
 
-        result = self._verify_expression_ast_recursive(container, localVars, ast, newLocalVars, isOptional=isOptional)
+        result = self._verify_expression_ast_recursive(container, localVars, ast, newLocalVars)
         localVars.update(newLocalVars)
 
         return result
 
-    def _verify_expression_ast_recursive(self, container, localVars, ast, newLocalVars, *, isOptional=False):
+    def _verify_expression_ast_recursive(self, container, localVars, ast, newLocalVars, *, isOptional=False, struct=None):
         """
         Verify an expression.
 
@@ -963,8 +1114,9 @@ class ProjectDependencyCollection:
             container (objects.Locatable): The locatable container (parent) object.
             localVars (dict): Visible variable declarations.
             ast (objects.ExpressionAST): The expression AST to verify.
-            isOptional (bool): Indicates whether the result of this function can be optionally None.
             newLocalVars (dict): New local variables.
+            isOptional (bool): Indicates whether the result of this function can be optionally None.
+            struct (dag.AstNavigationResult or None): If the container is a struct, this is a reference to that struct.
         Returns:
             dag.NavigationResult or None: The navigation result after searching for the type of the expression.
         """
@@ -975,7 +1127,7 @@ class ProjectDependencyCollection:
         assert(atom.kind in self._astVerifiers)
 
         # Invoke the verification handler.
-        return self._astVerifiers[atom.kind](container, atom, children, localVars, newLocalVars, isOptional)
+        return self._astVerifiers[atom.kind](container, atom, children, localVars, newLocalVars, isOptional, struct)
 
     @staticmethod
     def _is_lvalue(ast):
@@ -1012,7 +1164,7 @@ class ProjectDependencyCollection:
             return None
 
         # Navigate to the target type.
-        targetTypenameDependency = Dependency(dependency.locatable.targetTypename)
+        targetTypenameDependency = Dependency(self.libName, dependency.locatable.targetTypename)
         return self.navigate_dependency(targetTypenameDependency)
 
     def navigate_alias_base(self, navResult):
@@ -1078,8 +1230,8 @@ class ProjectDependencyCollection:
             # lookup the resolved locations for the types.
             for p0, p1 in zip(dep0Params, dep1Params):
                 # Create a dependency for the parameters
-                p0Dep = Dependency(p0)
-                p1Dep = Dependency(p1)
+                p0Dep = Dependency(self.libName, p0)
+                p1Dep = Dependency(self.libName, p1)
 
                 # Try to find the actual dependency location.
                 p0Resolved = self.navigate_dependency(p0Dep)

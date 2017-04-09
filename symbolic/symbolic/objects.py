@@ -397,6 +397,17 @@ class Reference(Named):
         """
         return str(self.token)
 
+    def __eq__(self, other):
+        """
+        Return whether two references point to the same library.
+        
+        Args:
+            other (objects.Reference): The reference to compare with.
+        Returns:
+            bool: True, if both references point to the same library. Otherwise False.
+        """
+        return str(self) == str(other)
+
 class Namespace(Named):
     """
     A namespace within a library.
@@ -1525,6 +1536,24 @@ class Struct(TemplateObject, Namespace):
             objects.Location: A location within the library.
         """
         return self.default_location(LocationKind.Type)
+
+    def member_typename(self, errorAnchor, memberName):
+        """
+        Return the typename for a member.
+
+        Args:
+            memberName (str): The member to search for.
+        Returns:
+            objects.Typename: The typename.
+        """
+        for obj in self.objects:
+            if isinstance(obj, MemberList):
+                memberList = obj
+                for member in memberList.members:
+                    if member.token == memberName:
+                        return memberList.typename
+
+        raise MemberNotFoundError(errorAnchor)
 
     @staticmethod
     def parse_template(parser, isTemplate):
