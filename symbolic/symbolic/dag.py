@@ -591,7 +591,7 @@ class ProjectDependencyCollection:
         isNewVarOp = atom.token == ":="
         isStructOp = atom.token == "."
             
-        leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isNewVarOp)
+        leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isNewVarOp, struct=struct)
         leftStruct = leftNR if isStructOp else None
         rightNR = self._verify_expression_ast_recursive(container, localVars, right, newLocalVars, struct=leftStruct)
 
