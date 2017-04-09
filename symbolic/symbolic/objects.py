@@ -959,7 +959,7 @@ class Expression(Named):
                             stack.pop()
                 elif t.kind is Operator:
                     # Assume this is a unary op
-                    kind = ExpressionAtomKind.UnaryOp if (t.isUnaryOp and prev is None) or (prev is not None and prev.text != ')' and not prev.isTerminal) else ExpressionAtomKind.BinaryOp
+                    kind = ExpressionAtomKind.UnaryOp if (t.isUnaryOp and prev is None) or (prev is not None and prev.text not in [")", "]"] and not prev.isTerminal) else ExpressionAtomKind.BinaryOp
                     o1 = t
                 
                     # Binary operator
@@ -2031,36 +2031,42 @@ class Typename(Locatable):
         return templateParameters
 
     @staticmethod
-    def parse_array_dimensions(parser):
+    def try_parse_array_dimensions(parser):
         """
         Parse the array dimensions.
 
         Args:
             parser (parsers.UnitParser): The parser to use.
         Returns:
-            [int]: The array dimensions.
+            [int] or None: The array dimensions.
         """
         dims = []
-        if parser.match('['):
-            missingBounds = True
-            while True:
-                # Known bounds
-                token = parser.match_kind(Token.Number.Integer)
-                if token is not None:
-                    dims += [token]
-                    missingBounds = False
-                else:
-                    # Unknown bounds
-                    if missingBounds:
-                        dims += [None]
-                        missingBounds = False
+        
+        if not parser.match("["):
+            return dims
 
-                    token = parser.token
-                    if parser.match(','):
-                        missingBounds = True
-                    else:
-                        break
-            parser.expect(']')
+        missingBounds = True
+        while True:
+            # Known bounds
+            token = parser.match_kind(Token.Number.Integer)
+            if token is not None:
+                dims += [token]
+                missingBounds = False
+            else:
+                # Unknown bounds
+                if missingBounds:
+                    dims += [None]
+                    missingBounds = False
+
+                token = parser.token
+                if parser.match(','):
+                    missingBounds = True
+                else:
+                    break
+
+        if not parser.match("]"):
+            return None
+
         return dims
 
     @staticmethod
@@ -2089,7 +2095,10 @@ class Typename(Locatable):
             else:
                 break
 
-        dim = Typename.parse_array_dimensions(parser)
+        dim = Typename.try_parse_array_dimensions(parser)
+        if dim is None:
+            return None
+
         parent = parser.namespace()
         return Typename(parser.references, parent, scope, templateParameters=templateParams, dims=dim)
 

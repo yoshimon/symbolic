@@ -269,41 +269,18 @@ class ProjectDependencyCollection:
             ExpressionAtomKind.BinaryOp: self._verify_ast_binary_op
         }
 
-    def _ast_navigate_dependency(self, locatable, *, libName=None):
-        """
-        Navigate to a locatable object.
-
-        Args:
-            locatable (objects.Locatable): The locatable object to search for.
-            libName (str): The library to navigate in.
-        Returns:
-            dag.AstNavigationResult: The navigation result.
-        """
-        searchLibName = self.libName if libName is None else libName
-        dependency = Dependency(searchLibName, locatable)
-        navResult = self.navigate_dependency(dependency)
-        if navResult is None:
-            return None
-
-        astNavResult = AstNavigationResult(navResult)
-
-        # Navigate through aliases down to base.
-        if astNavResult.explicitLocation.path[-1].kind == LocationKind.Type:
-            navResult = self.navigate_alias_base(navResult)
-            astNavResult = AstNavigationResult(navResult)
-        
-        return astNavResult
-
-    def _ast_try_navigate_dependency(self, locatable):
+    def _ast_try_navigate_dependency(self, locatable, *, libName=None):
         """
         Try to navigate to a locatable object.
 
         Args:
             locatable (objects.Locatable): The locatable object to search for.
+            libName (str): The library to navigate in.
         Returns:
             dag.AstNavigationResult or None: The navigation result or None.
         """
-        dependency = Dependency(self.libName, locatable)
+        searchLibName = self.libName if libName is None else libName
+        dependency = Dependency(searchLibName, locatable)
         navResult = self.try_navigate_dependency(dependency)
         if navResult is None:
             return None
@@ -316,6 +293,41 @@ class ProjectDependencyCollection:
             astNavResult = AstNavigationResult(navResult)
         
         return astNavResult
+
+    def _ast_navigate_dependency(self, locatable, *, libName=None):
+        """
+        Navigate to a locatable object.
+
+        Args:
+            locatable (objects.Locatable): The locatable object to search for.
+            libName (str): The library to navigate in.
+        Returns:
+            dag.AstNavigationResult: The navigation result.
+        """
+        navResult = self._ast_try_navigate_dependency(locatable, libName=libName)
+        if navResult is None:
+            raise DependencyNotFoundError(locatable.token.anchor, locatable.location())
+        
+        return navResult
+
+    def _try_verify_ast_member(self, atom, struct):
+        """
+        Verify a struct member in an AST.
+
+        Args:
+            atom (objects.ExpressionAtom): The root atom.
+            struct (dag.AstNavigationResult or None): The struct to query.
+        Returns:
+            dag.AstNavigationResult or None: The location of the resulting type of this AST.
+        """
+        if struct is None:
+            return None
+
+        memberName = str(atom.token)
+        memberTypename = struct.dependency.locatable.member_typename(atom.token.anchor, memberName)
+        structLib = str(struct.explicitLocation[0])
+        memberNR = self._ast_try_navigate_dependency(memberTypename, libName=structLib)
+        return memberNR
 
     def _verify_ast_var(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
         """
@@ -332,13 +344,15 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
-        # Handle struct members.
-        if struct is not None:
-            memberName = str(atom.token)
-            memberTypename = struct.dependency.locatable.member_typename(atom.token.anchor, memberName)
-            structLib = str(struct.explicitLocation[0])
-            memberNR = self._ast_navigate_dependency(memberTypename, libName=structLib)
+        # Try to lookup a membver.
+        memberNR = self._try_verify_ast_member(atom, struct)
+        if memberNR:
             return memberNR
+
+        # Handle struct members and extensions.
+        if struct is not None:
+            # Try extensions.
+            pass
 
         # Handle boolean values: true, false.
         if atom.token in ["true", "false"]:
@@ -430,9 +444,11 @@ class ProjectDependencyCollection:
 
         # Return the type of the underlying object.
         # Lookup the variable or extension.
+        memberNR = self._try_verify_ast_member(atom, struct)
+        if memberNR:
+            return memberNR
 
-
-        return childNR
+        raise DevError()
 
     def native_typename(self, references, name):
         """

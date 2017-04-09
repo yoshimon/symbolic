@@ -251,10 +251,10 @@ class SymbolicLexer(RegexLexer):
             (r'0x[0-9a-fA-F]+', Number.Hex),
             (r'\d+', Number.Integer),
             (r'(:=|<<|<<=|>>|>>=|~=|\|=|&=|^=|\+=|\*=|%=|-=|==|!=|<=|>=|&&|\|\|)', Operator),
-            (r'[@.~!%^&*+-=|?:<>/\[\]]', Operator),
+            (r'[@.~!%^&*+-=|?:<>/]', Operator),
             (r"'[^\']*'", String),
             (r'"[^\"]*"', String),
-            (r'[,;(){}\\]', Punctuation),
+            (r'[,;()\[\]{}\\]', Punctuation),
             (r'\s', Text),
             (r'\n', Text),
             (r'0[a-zA-Z]+', Error)
