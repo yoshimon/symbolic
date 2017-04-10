@@ -30,6 +30,8 @@ class BaseParser:
         Initialize the object.
 
         Args:
+            libName (str): The library name.
+            fileName (str): The file name.
             tokens ([lexer.Symto]): The token list.
         """
         self.reset(libName, fileName, tokens)
@@ -48,6 +50,8 @@ class BaseParser:
         Reset the parser.
 
         Args:
+            libName (str): The library name.
+            fileName (str): The file name.
             tokens ([lexer.Symto]): The token stream.
         """
         self.libName = libName
@@ -319,7 +323,7 @@ class BaseParser:
             optionalKind (Token): The default token kind to use if no matching token is found.
             optionalText (str): The default token text to use if no matching token is found.
         Returns:
-            lexer.Symto: 
+            lexer.Symto: The matched token or the default token, if matching failed.
         """
         token = self.match_kind(kind)
         return Symto.from_token(self.token, optionalKind, optionalText) if token is None else token
