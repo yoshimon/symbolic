@@ -10,7 +10,11 @@ signatures. This can lead to duplicate code and hence redundancy. The following 
 
 .. code-block:: cpp
 
-    import hlsl;
+    struct int;
+    int operator+(int, int);
+    
+    struct float;
+    float operator+(float, float);
 
     int add(int a, int b)
     {
@@ -37,7 +41,8 @@ to implement certain concepts.
 
 .. code-block:: cpp
 
-    import hlsl;
+    template<T>
+    T operator+(T, T);
 
     template<T>
     T add(T a, T b)
@@ -128,11 +133,11 @@ piece of source code:
         template<>                // 4. Location: f<>().g<>(int)
         g(int)
         {
-            template<Param>       // 5. Location: f<>().g<>(int).h<T0>()
+            template<T>           // 5. Location: f<>().g<>(int).h<T0>()
             struct h;
 
             template<"int">       // 6. Location: f<>().g<>(int).h<T0="int">()
-            struct h;             // Will resolve to 3. Location.
+            struct h;
 
             struct i              // 7. Location: f<>().g<>(int).i<>()
             {
@@ -160,15 +165,15 @@ string to prevent an infinite substitution recursion.
 
 .. code-block:: cpp
 
-    template<T0>
+    template<T>
     struct a_type
     {
-        T0
+        T
     }
 
-    f(a_type<"Some T0 Here">);
+    f(a_type<"T;">);
 
-In the example above, the template parameter :code:`T0` will only be substituted once by :code:`Some T0 Here`. The :code:`T0`
+In the example above, the template parameter :code:`T` will only be substituted once by :code:`T;`. The :code:`T`
 token inside the substituted string will not be replaced so that the substitution phase ends after the first pass.
 
 Examples
@@ -177,15 +182,15 @@ This section contains examples that illustrate different uses of templates.
 
 Example 1 - Generic Structures
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-A common use-case is to create generic data structures. The following code snippet demonstrates this:
+A common use-case is to create generic data structures.
 
 .. code-block:: cpp
 
-    template<First, Second>
+    template<T0, T1>
     struct a_type
     {
-        First a;
-        Second b;
+        T0 a;
+        T1 b;
     }
 
     void f(ref a_type<"int", "float"> p)
@@ -197,15 +202,15 @@ A common use-case is to create generic data structures. The following code snipp
 
 Example 2 - Type Generation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Templates can be used to generate new types. The following code snippet demonstrates this:
+Templates can be used to generate new types.
 
 .. code-block:: cpp
 
     // Allow external injection of source code into this type.
-    template<Type, Injection>
+    template<T, Injection>
     struct generated
     {
-        Type a;
+        T a;
         Injection
     }
 
@@ -247,7 +252,7 @@ This example illustrates partial template specialization.
 
 Example 4 - Concatenation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-This example illustrates partial template specialization.
+This example illustrates template token concatenation.
 
 .. code-block:: cpp
 
