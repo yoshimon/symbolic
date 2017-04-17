@@ -576,3 +576,15 @@ class MemberNotFoundError(SourceError):
             str: The string representation.
         """
         return super().__str__() + 'Could not find member.'
+
+class InvalidArrayDimensionsError(SourceError):
+    """An exception class, that indicates that an invalid array bounds was provided."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + 'Invalid array dimensions.'

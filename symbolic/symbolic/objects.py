@@ -71,20 +71,23 @@ class RelativeLocation:
         name (str): The location name.
         templateParameters ([objects.TemplateParameter]): The template parameters.
         parameters ([objects.Parameter]): The signature.
+        dims ([int]): The array dimensions. This is only meaningful on leaf location.
     """
 
-    def __init__(self, kind, name, *, templateParameters=None, parameters=None):
+    def __init__(self, kind, name, *, templateParameters=None, parameters=None, dims=None):
         """Initialize the object.
         Args:
             kind (objects.LocationKind): The location type specifier.
             name (str): The location name.
             templateParameters ([objects.TemplateParameter]): The template parameters.
             parameters ([objects.Parameter]): The signature.
+            dims ([int]): The array dimensions. This is only meaningful on leaf location.
         """
         self.kind = kind
         self.name = name
         self.templateParameters = templateParameters if templateParameters is not None else []
         self.parameters = parameters if parameters is not None else []
+        self.dims = [] if dims is None else dims
 
     def is_plain(self):
         """
@@ -894,18 +897,19 @@ class Expression(Named):
                 if t1 is not None:
                     # Function, Template
                     if t.kind == Token.Name:
-                        if t1.text == '(':
+                        t1s = str(t1)
+                        if t1s == '(':
                             kind = ExpressionAtomKind.FunctionBegin
                             states.append(State.Function)
                             stack.append(ExpressionAtom(t, ExpressionAtomKind.FunctionEnd))
                             isNextOpenParenFunction = True
-                        elif t1.text == '[':
+                        elif t1s == '[':
                             kind = ExpressionAtomKind.ArrayBegin
                             states.append(State.Array)
                             stack.append(ExpressionAtom(t, ExpressionAtomKind.ArrayEnd))
-                        elif t1.text == '<':
+                        elif t1s == '<':
                             # K=2 lookahead
-                            if (not t2 is None) and (t2.kind == Token.Literal.String or t2.text == ">"):
+                            if (not t2 is None) and (t2.kind == Token.Literal.String or str(t2) == ">"):
                                 kind = ExpressionAtomKind.TemplateBegin
                                 states.append(State.Template)
                                 stack.append(ExpressionAtom(t, ExpressionAtomKind.TemplateEnd))
@@ -915,7 +919,7 @@ class Expression(Named):
                 # We can fetch a literal in the next cycle again
                 wasLastTerminal = False
 
-                if t.text == ',':
+                if str(t) == ',':
                     # Tuples > 1 are not allowed
                     if states[-1] == State.Tuple:
                         raise InvalidExpressionError(t.anchor)
@@ -931,19 +935,19 @@ class Expression(Named):
 
                     # Add comma as delimiter
                     out.append(ExpressionAtom(t, ExpressionAtomKind.Delimiter))
-                elif (t.isOpenBracket and t.text != '<') or (t.text == '<' and states[-1] == State.Template):
-                    if t.text == '(':
+                elif (t.isOpenBracket and str(t) != '<') or (str(t) == '<' and states[-1] == State.Template):
+                    if str(t) == '(':
                         # Is this a potential tuple?
                         if not isNextOpenParenFunction:
                             states.append(State.Tuple)
                         else:
                             isNextOpenParenFunction = False
-                    elif t.text == '[':
+                    elif str(t) == '[':
                         if states[-1] != State.Array:
                             raise MissingArrayTypeError(t.anchor)
 
                     stack.append(ExpressionAtom(t, -1))
-                elif (t.isCloseBracket and t.text != '>') or (t.text == '>' and states[-1] == State.Template): # Special case for template >
+                elif (t.isCloseBracket and str(t) != '>') or (str(t) == '>' and states[-1] == State.Template): # Special case for template >
                     # Keep track of how many parameters were added
                     if Algorithm.pop_while(stack, lambda atom: not atom.token == t.matchingOpenBracket, lambda atom: out.append(atom)):
                         raise MissingBracketsError(t.anchor)
@@ -959,7 +963,7 @@ class Expression(Named):
                             stack.pop()
                 elif t.kind is Operator:
                     # Assume this is a unary op
-                    kind = ExpressionAtomKind.UnaryOp if (t.isUnaryOp and prev is None) or (prev is not None and prev.text not in [")", "]"] and not prev.isTerminal) else ExpressionAtomKind.BinaryOp
+                    kind = ExpressionAtomKind.UnaryOp if (t.isUnaryOp and prev is None) or (prev is not None and str(prev) not in [")", "]"] and not prev.isTerminal) else ExpressionAtomKind.BinaryOp
                     o1 = t
                 
                     # Binary operator
@@ -1289,7 +1293,7 @@ class Function(TemplateObject, Namespace):
                     extensionTypename = None
 
                     # Operators require 1 extra token
-                    if name.text == 'operator':
+                    if str(name) == 'operator':
                         kind = FunctionKind.Operator
                         name = parser.expect_kind(Token.Operator)
 
@@ -1750,7 +1754,7 @@ class Annotation:
         for annotation in collection:
             result += open + str(annotation.token)
             if len(annotation.args) > 0:
-                result += '(' + ', '.join([t.text for t in annotation.args]) + ')'
+                result += '(' + ', '.join([str(t) for t in annotation.args]) + ')'
             if close is not None:
                 result += close
             result += '\n'
@@ -1792,7 +1796,7 @@ class Annotation:
         """
         token = parser.expect_kind(Token.Name)
         parameters = parser.fetch_block('(', ')')
-        parameters = [p for p in parameters if p.text != ',']
+        parameters = [p for p in parameters if str(p) != ',']
         return Annotation(token, parameters)
 
     @staticmethod
@@ -1911,12 +1915,8 @@ class Typename(Locatable):
         if templateParameters is None:
             templateParameters = [[] for _ in scope]
 
-        # Generate args if necessary
-        if dims is None:
-            dims = []
-
         self.templateParameters = templateParameters
-        self.dims = dims
+        self.dims = [] if dims is None else dims
 
     def validate(self):
         """Validate the object."""
@@ -1931,7 +1931,9 @@ class Typename(Locatable):
         Returns:
             objects.Location: An unresolved location within the library pointed to by this typename.
         """
-        return Location([RelativeLocation(LocationKind.Unresolved, s, templateParameters=self.templateParameters[i]) for i, s in enumerate(self.scopeStrings)])
+        loc = Location([RelativeLocation(LocationKind.Unresolved, s, templateParameters=self.templateParameters[i]) for i, s in enumerate(self.scopeStrings)])
+        loc[-1].dims = self.dims
+        return loc
 
     @staticmethod
     def default_return_typename_token():
@@ -1994,7 +1996,7 @@ class Typename(Locatable):
             # Template args
             if templateParameters:
                 s += '<'
-                s += ', '.join(parameter.text for parameter in templateParameters)
+                s += ', '.join(str(parameter) for parameter in templateParameters)
                 s += '>'
 
             strings.append(s)
@@ -2002,7 +2004,7 @@ class Typename(Locatable):
         # Array dims
         if self.dims:
             s += '['
-            s += ', '.join(arg.text if arg is not None else ':' for arg in self.dims)
+            s += ', '.join(str(arg) if arg is not None else ':' for arg in self.dims)
             s += ']'
 
         return '.'.join(strings)
@@ -2050,12 +2052,16 @@ class Typename(Locatable):
             # Known bounds
             token = parser.match_kind(Token.Number.Integer)
             if token is not None:
-                dims += [token]
+                dim = int(str(token))
+                if dim < Language.minArrayDim:
+                    raise InvalidArrayDimensionsError(token.anchor)
+
+                dims.append(dim)
                 missingBounds = False
             else:
                 # Unknown bounds
                 if missingBounds:
-                    dims += [None]
+                    dims.append(None)
                     missingBounds = False
 
                 token = parser.token

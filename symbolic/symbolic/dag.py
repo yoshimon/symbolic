@@ -310,26 +310,26 @@ class ProjectDependencyCollection:
         
         return navResult
 
-    def _try_verify_ast_member(self, atom, struct):
+    def _try_verify_ast_member(self, atom, lhs):
         """
         Verify a struct member in an AST.
 
         Args:
             atom (objects.ExpressionAtom): The root atom.
-            struct (dag.AstNavigationResult or None): The struct to query.
+            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
         Returns:
             dag.AstNavigationResult or None: The location of the resulting type of this AST.
         """
-        if struct is None:
+        if lhs is None:
             return None
 
         memberName = str(atom.token)
-        memberTypename = struct.dependency.locatable.member_typename(atom.token.anchor, memberName)
-        structLib = str(struct.explicitLocation[0])
+        memberTypename = lhs.dependency.locatable.member_typename(atom.token.anchor, memberName)
+        structLib = str(lhs.explicitLocation[0])
         memberNR = self._ast_try_navigate_dependency(memberTypename, libName=structLib)
         return memberNR
 
-    def _verify_ast_var(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
+    def _verify_ast_var(self, container, atom, children, localVars, newLocalVars, isOptional, lhs):
         """
         Verify an AST with a variable atom type.
 
@@ -340,17 +340,17 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            struct (dag.AstNavigationResult or None): If the container is the struct operator, this is the struct on the LHS. Otherwise None.
+            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         # Try to lookup a membver.
-        memberNR = self._try_verify_ast_member(atom, struct)
+        memberNR = self._try_verify_ast_member(atom, lhs)
         if memberNR:
             return memberNR
 
         # Handle struct members and extensions.
-        if struct is not None:
+        if lhs is not None:
             # Try extensions.
             pass
 
@@ -362,15 +362,22 @@ class ProjectDependencyCollection:
 
         # Lookup the resolved variable type.
         varNR = localVars.get(str(atom.token), None)
-        if not isOptional and varNR is None:
+        if varNR is not None:
+            return varNR
+
+        # Try to resolve it as a type (last chance!)
+        typeNR = self._try_verify_ast_typename(container.references, atom.token, children, lhs)
+        if typeNR is not None:
+            return typeNR
+
+        if not isOptional:
             raise VariableNotFoundError(atom.token)
 
-        # Return the navigation result.
-        return varNR
+        return None
 
-    def _verify_ast_number(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
+    def _try_verify_ast_typename(self, references, token, children, lhs):
         """
-        Verifies an AST with a number atom type.
+        Verify an AST with a typename.
 
         Args:
             container (objects.Locatable): The locatable container (parent) object.
@@ -379,7 +386,31 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            struct (dag.AstNavigationResult or None): If the container is a struct, this is a reference to that struct.
+            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+        Returns:
+            dag.AstNavigationResult: The location of the resulting type of this AST.
+        """
+        rhsLocation = Location([RelativeLocation(LocationKind.Type, str(token))])
+        rhsTypename = Typename.from_location(references, rhsLocation)
+        if lhs is not None:
+            fullTypename = rhsTypename
+        else:
+            fullTypename = rhsTypename
+        typeNR = self._ast_try_navigate_dependency(fullTypename)
+        return typeNR
+
+    def _verify_ast_number(self, container, atom, children, localVars, newLocalVars, isOptional, lhs):
+        """
+        Verify an AST with a number atom type.
+
+        Args:
+            container (objects.Locatable): The locatable container (parent) object.
+            atom (objects.ExpressionAtom): The root atom.
+            children (objects.ExpressionAST): The child nodes.
+            localVars (dict): Lookup table that maps variable names to resolved locations.
+            newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
+            isOptional (bool): State flag which indicates that the query should not throw an error on failure.
+            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
@@ -391,12 +422,12 @@ class ProjectDependencyCollection:
             # Float
             typename = self.native_float_typename(container.references)
         else:
-            raise DevError()
+            assert(False)
 
         result = self._ast_navigate_dependency(typename)
         return result
 
-    def _verify_ast_function(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
+    def _verify_ast_function(self, container, atom, children, localVars, newLocalVars, isOptional, lhs):
         """
         Verify an AST with a function atom type.
 
@@ -407,15 +438,15 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            struct (dag.AstNavigationResult or None): If the container is a struct, this is a reference to that struct.
+            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         pass
 
-    def _verify_ast_array(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
+    def _verify_ast_array(self, container, atom, children, localVars, newLocalVars, isOptional, lhs):
         """
-        Verifies an AST with an array atom type.
+        Verify an AST with an array atom type.
 
         Args:
             container (objects.Locatable): The locatable container (parent) object.
@@ -424,31 +455,53 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            struct (dag.AstNavigationResult or None): If the container is a struct, this is a reference to that struct.
+            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
-        assert(len(children) == 1)
-
         # Extract child information.
-        child = children[0]
-        childNR = self._verify_expression_ast_recursive(container, localVars, child, newLocalVars)
-        childTypename = Typename.from_location(container.references, childNR.explicitLocation)
+        for child in children:
+            childNR = self._verify_expression_ast_recursive(container, localVars, child, newLocalVars)
+            childTypename = Typename.from_location(container.references, childNR.explicitLocation)
         
-        # Make sure the child (here: array index) resolves to an integer.
-        intTypename = self.native_int_typename(container.references)
-        intNR = self._ast_navigate_dependency(intTypename)
+            # Make sure the child (here: array index) resolves to an integer.
+            intTypename = self.native_int_typename(container.references)
+            intNR = self._ast_navigate_dependency(intTypename)
 
-        if childNR != intNR:
-            raise InvalidArrayIndexTypeError(atom.token.anchor)
+            if childNR != intNR:
+                raise InvalidArrayIndexTypeError(atom.token.anchor)
 
         # Return the type of the underlying object.
-        # Lookup the variable or extension.
-        memberNR = self._try_verify_ast_member(atom, struct)
+        # Try it as a member first.
+        memberNR = self._try_verify_ast_member(atom, lhs)
         if memberNR:
             return memberNR
 
-        raise DevError()
+        # TODO: Now try it as an extension.
+
+        # Try it as a typename.
+        typeNR = self._try_verify_ast_typename(container.references, atom.token, children, lhs)
+        if typeNR is not None:
+            # Deduce array dimensions and append to typename (array declaration).
+            dims = [] if children else [None]
+            for child in children:
+                if child.kind != Token.Number.Integer:
+                    raise InvalidArrayIndexTypeError(child.atom.token.anchor)
+
+                dim = int(str(child.atom.token))
+                if dim < Language.minArrayDim:
+                    raise InvalidArrayDimensionsError(child.atom.token)
+
+                dims.append(dim)
+
+            # TODO: create new typename
+            typeNR.explicitLocation[-1].dims = dims
+            return typeNR
+
+        if lhs is None:
+            raise MissingArrayTypeError(atom.token.anchor)
+
+        assert(False)
 
     def native_typename(self, references, name):
         """
@@ -495,7 +548,7 @@ class ProjectDependencyCollection:
         """
         return self.native_typename(references, "bool")
 
-    def _verify_ast_template(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
+    def _verify_ast_template(self, container, atom, children, localVars, newLocalVars, isOptional, lhs):
         """
         Verify an AST with a template atom type.
 
@@ -506,13 +559,13 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            struct (dag.AstNavigationResult or None): If the container is a struct, this is a reference to that struct.
+            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         pass
 
-    def _verify_ast_unary_op(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
+    def _verify_ast_unary_op(self, container, atom, children, localVars, newLocalVars, isOptional, lhs):
         """
         Verifies an AST with a unary operator atom type.
 
@@ -523,7 +576,7 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            struct (dag.AstNavigationResult or None): If the container is a struct, this is a reference to that struct.
+            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
@@ -567,7 +620,7 @@ class ProjectDependencyCollection:
         navResult = self._ast_try_navigate_dependency(locatable)
         return navResult
 
-    def _verify_ast_binary_op(self, container, atom, children, localVars, newLocalVars, isOptional, struct):
+    def _verify_ast_binary_op(self, container, atom, children, localVars, newLocalVars, isOptional, lhs):
         """
         Verify an AST with a binary operator atom type.
 
@@ -578,7 +631,7 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            struct (dag.AstNavigationResult or None): If the container is a struct, this is a reference to that struct.
+            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
@@ -591,9 +644,9 @@ class ProjectDependencyCollection:
         isNewVarOp = atom.token == ":="
         isStructOp = atom.token == "."
             
-        leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isNewVarOp, struct=struct)
-        leftStruct = leftNR if isStructOp else None
-        rightNR = self._verify_expression_ast_recursive(container, localVars, right, newLocalVars, struct=leftStruct)
+        leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isNewVarOp, lhs=lhs)
+        leftResolved = leftNR if isStructOp else None
+        rightNR = self._verify_expression_ast_recursive(container, localVars, right, newLocalVars, lhs=leftResolved)
 
         if isStructOp:
             return rightNR
@@ -1122,7 +1175,7 @@ class ProjectDependencyCollection:
 
         return result
 
-    def _verify_expression_ast_recursive(self, container, localVars, ast, newLocalVars, *, isOptional=False, struct=None):
+    def _verify_expression_ast_recursive(self, container, localVars, ast, newLocalVars, *, isOptional=False, lhs=None):
         """
         Verify an expression.
 
@@ -1132,7 +1185,7 @@ class ProjectDependencyCollection:
             ast (objects.ExpressionAST): The expression AST to verify.
             newLocalVars (dict): New local variables.
             isOptional (bool): Indicates whether the result of this function can be optionally None.
-            struct (dag.AstNavigationResult or None): If the container is a struct, this is a reference to that struct.
+            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
         Returns:
             dag.NavigationResult or None: The navigation result after searching for the type of the expression.
         """
@@ -1143,7 +1196,7 @@ class ProjectDependencyCollection:
         assert(atom.kind in self._astVerifiers)
 
         # Invoke the verification handler.
-        return self._astVerifiers[atom.kind](container, atom, children, localVars, newLocalVars, isOptional, struct)
+        return self._astVerifiers[atom.kind](container, atom, children, localVars, newLocalVars, isOptional, lhs)
 
     @staticmethod
     def _is_lvalue(ast):

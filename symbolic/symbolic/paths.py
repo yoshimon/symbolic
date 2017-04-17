@@ -31,7 +31,7 @@ class VirtualPath:
         Returns:
             str: The path string.
         """
-        return self.text
+        return self.expanded().text
 
     def __iadd__(self, other):
         """
@@ -153,7 +153,7 @@ class VirtualPath:
         Returns:
             bool: True, if the path exists. Otherwise False.
         """
-        return os.path.exists(str(self.expanded()))
+        return os.path.exists(str(self))
 
     def expanded(self):
         """
@@ -165,7 +165,7 @@ class VirtualPath:
             paths.VirtualPath: The expanded path.
         """
         # Copy the current text
-        text = str(self)
+        text = self.text
 
         # Replace all variable placeholders
         text = re.sub(r"(?<!\\)\${?(^[^\d\W]\w*\Z)}?", lambda m: self.vars[m.group()], text)
@@ -175,7 +175,7 @@ class VirtualPath:
         text = os.path.expandvars(text)
         
         # Normalize it
-        text = os.path.normpath(text)
+        text = os.path.realpath(text)
 
         # The expanded text
         return VirtualPath(text)
@@ -187,7 +187,7 @@ class VirtualPath:
         Returns:
             paths.VirtualPath: The modified path.
         """
-        self.text = str(self.expanded())
+        self.text = str(self)
         return self
 
     def open(self, *args):
@@ -197,7 +197,7 @@ class VirtualPath:
         Returns:
             file: The file object.
         """
-        return open(str(self.expanded()), *args)
+        return open(str(self), *args)
 
     def folder_name(self):
         """
@@ -218,7 +218,7 @@ class VirtualPath:
         Returns:
             iterable: The enumerated files.
         """
-        libFileSearchMask = str((self + mask).expanded())
+        libFileSearchMask = str(self + mask)
         return (VirtualPath(filePath) for filePath in glob.iglob(libFileSearchMask, recursive=searchRecursive))
 
     def read_all_text(self):

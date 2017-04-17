@@ -80,7 +80,7 @@ class LibraryConfiguration:
         self.ppt = PPT(optFilePath=filePath.with_extension(".pp"))
 
         # Extract the library name from the path
-        self.libName = str(filePath.expanded().folder_name())
+        self.libName = filePath.expanded().folder_name().text
 
         if filePath:
             with filePath.open() as jsonLibFileData:
@@ -90,7 +90,7 @@ class LibraryConfiguration:
 
                 # Load references
                 for ref in jsonLibFileLibrary.get("references", []):
-                    self.references.append(str(VirtualPath(ref).expanded().last()))
+                    self.references.append(VirtualPath(ref).expanded().last().text)
 
                 # Load the user pre-processor
                 jsonLibFilePP = jsonLibFileLibrary.get("preprocessor", {})

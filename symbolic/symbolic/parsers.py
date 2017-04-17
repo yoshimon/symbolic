@@ -337,7 +337,7 @@ class BaseParser:
         success = val is not None
         if success:
             # Make sure < operators are not confused with template brackets
-            if val.text == '<':
+            if str(val) == '<':
                 if not self.peek_kind(Token.Literal.String):
                     self.back()
                     return False
@@ -413,14 +413,14 @@ class BaseParser:
             return False
 
         # Make sure > operators are not confused with template brackets
-        if val.text == '>':
+        if str(val) == '>':
             if not wasPreviousString:
                 self.back()
                 return False
 
         # The indices into both tables have to match
-        i = SymbolicLexer.openBrackets.index(stack[-1].text)
-        j = SymbolicLexer.closeBrackets.index(val.text)
+        i = SymbolicLexer.openBrackets.index(str(stack[-1]))
+        j = SymbolicLexer.closeBrackets.index(str(val))
         success = i == j
         if success:
             stack.pop()
@@ -555,7 +555,7 @@ class UnitParser(BaseParser):
             semantic = Annotation.parse_semantic(self)
             self.expect(';')
 
-            refStrList = [t.text for t in refTokens]
+            refStrList = [str(t) for t in refTokens]
             refString = '.'.join(refStrList)
             token = Symto.from_token(refTokens[0], Token.Token, refString)
             ref = Reference(token, userAnnotations, sysAnnotations, semantic)

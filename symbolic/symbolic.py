@@ -27,7 +27,7 @@ def main():
     projConfigFilePath = VirtualPath(args.path)
 
     # Change the working directory to the project path
-    os.chdir(str(projConfigFilePath.directory_path().expanded()))
+    os.chdir(str(projConfigFilePath.directory_path()))
 
     # Load and translate the project
     project = Project(projConfigFilePath)

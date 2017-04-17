@@ -106,7 +106,7 @@ class PrettyString:
             result += ' ' * (t.anchor.column - previousColumnEnd)
 
             # Now append the token
-            result += t.text
+            result += str(t)
             previousLine = t.anchor.line
-            previousColumnEnd = t.anchor.column + len(t.text)
+            previousColumnEnd = t.anchor.column + len(str(t))
         return result

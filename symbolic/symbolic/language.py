@@ -10,6 +10,7 @@ class Language:
         invalidNames ({str}): A set of invalid object names.
         tokenConcatenation (str): The token concatenator. Used within templates.
         sysAnnotations ({str}): All system annotation names.
+        minArrayDim (int): The minimum array dimensions.
     """
 
     keywords = { 'if', 'elif', 'else', 'return', 'for', 'while', 'do', 'break', 'continue' }
@@ -17,3 +18,4 @@ class Language:
     invalidNames = systemTypenames.union(keywords)
     tokenConcatenation = r"><" # As agreed upon by the committee (reviewed by eppo). 
     sysAnnotations = { 'static', 'private', 'noconstructor', 'deprecate' }
+    minArrayDim = 1

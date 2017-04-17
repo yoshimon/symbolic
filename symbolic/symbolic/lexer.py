@@ -82,7 +82,7 @@ class Symto:
         Returns:
             [str]: The string list.
         """
-        return map(lambda t: t.text if t is not None else none, l)
+        return map(lambda t: str(t) if t is not None else none, l)
 
     @staticmethod
     def join(l, c='.', none=None):
@@ -310,6 +310,15 @@ class SymbolicLexer(RegexLexer):
                 self.line = line
                 self.column = column
 
+            def __str__(self):
+                """
+                Return a string representation of the object.
+
+                Returns:
+                    str: The string representation.
+                """
+                return self.text
+
         # The member contains the right, unmodified text.
         text = self._unmodifiedText
 
@@ -349,14 +358,15 @@ class SymbolicLexer(RegexLexer):
             for t in newTokens:
                 # Return the unpacked token.
                 # NOTE: packing / unpacking is required to work nicely with pygments.
-                yield 0, t.kind, _TokenValue(t.text, line, column)
+                yield 0, t.kind, _TokenValue(str(t), line, column)
             
                 # Adjust line and column counters
-                if t.text == '\n':
+                ts = str(t)
+                if ts == '\n':
                     line += 1
                     column = 1
                 else:
-                    column += len(t.text)
+                    column += len(ts)
 
     def analyse_text(text):
         """
@@ -384,7 +394,7 @@ class SymbolicLexer(RegexLexer):
         self.subs = subs
         self._unmodifiedText = text
         # Convert pygments tokens to Symbolic tokens
-        tokens = [Symto(t[0], self.libName, self.fileName, t[1].text, t[1].line, t[1].column) for t in tokens]
+        tokens = [Symto(t[0], self.libName, self.fileName, str(t[1]), t[1].line, t[1].column) for t in tokens]
         self._unmodifiedText = None
         self.subs = None
         
@@ -407,10 +417,10 @@ class SymbolicLexer(RegexLexer):
                 skipNext = False
                 continue
 
-            if t.text == Language.tokenConcatenation:
+            if str(t) == Language.tokenConcatenation:
                 # Concat if possible.
                 if (i > 0) and (i < len(tokens) - 1):
-                    newTokens[-1] = Symto.from_token(tokens[i-1], Token.Name, tokens[i-1].text + tokens[i+1].text)
+                    newTokens[-1] = Symto.from_token(tokens[i-1], Token.Name, str(tokens[i-1]) + str(tokens[i+1]))
                     skipNext = True
             else:
                 newTokens.append(t)
