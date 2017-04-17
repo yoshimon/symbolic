@@ -115,6 +115,8 @@ class RelativeLocation:
             self.name == other.name and
             len(self.parameters) == len(other.parameters) and
             all(p0.isRef == p1.isRef for p0, p1 in zip(self.parameters, other.parameters)) and
+            len(self.dims) == len(other.dims) and
+            self.dims == other.dims and
             Algorithm.zip_all(self.templateParameters, other.templateParameters,
                               lambda p0, p1: p0.partialMatch is None or p1.partialMatch is None or p0.partialMatch == p1.partialMatch)
         )
@@ -127,8 +129,9 @@ class RelativeLocation:
             str: The string representation of the object.
         """
         templateStr = "<{0}>".format(Algorithm.join_comma(self.templateParameters)) if self.templateParameters else ""
+        dimsStr = "[{0}]".format(Algorithm.join_comma(self.dims)) if self.dims else ""
         parameterStr = "({0})".format(Algorithm.join_comma(self.parameters)) if self.parameters else ""
-        return self.name + templateStr + parameterStr
+        return self.name + templateStr + dimsStr + parameterStr
 
     def __eq__(self, other):
         """
@@ -142,7 +145,8 @@ class RelativeLocation:
         return (self.kind == other.kind) and \
             (self.name == other.name) and \
             (self.parameters == other.parameters) and \
-            (self.templateParameters == other.templateParameters)
+            (self.templateParameters == other.templateParameters) and \
+            (self.dims == other.dims)
 
 class Location:
     """
@@ -275,7 +279,7 @@ class Locatable:
             objects.Location: A location within the library.
         """
         # Force this to be implemented by all derived classes
-        raise DevError()
+        assert(False)
 
 class Named(Locatable):
     """
@@ -319,7 +323,7 @@ class Named(Locatable):
         """Validate the object."""
         raise DevError()
 
-    def default_location(self, kind, templateParameters=None, parameters=None):
+    def default_location(self, kind, *, templateParameters=None, parameters=None):
         """
         Return the default location within the library.
         
@@ -331,7 +335,7 @@ class Named(Locatable):
             objects.Location: A location within the library.
         """
         rl = [RelativeLocation(kind, str(self.token), templateParameters=templateParameters, parameters=parameters)]
-        if (self.parent) and (self.parent.parent):
+        if self.parent and self.parent.parent:
             return Location(self.parent.location().path + rl)
         else:
             return Location(rl)
@@ -932,6 +936,9 @@ class Expression(Named):
                     if states[-1] != State.Array:
                         if out[-1].kind in [ExpressionAtomKind.Delimiter, ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.TemplateBegin]:
                             raise InvalidExpressionError(t.anchor)
+                    else:
+                        # Add placeholder unbounded array dimensions.
+                        out.append(ExpressionAtom(None, ExpressionAtomKind.Number))
 
                     # Add comma as delimiter
                     out.append(ExpressionAtom(t, ExpressionAtomKind.Delimiter))
@@ -1008,7 +1015,7 @@ class Expression(Named):
                 argStack.append(root)
                 parent = root
             elif atom.kind in [ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.ArrayEnd, ExpressionAtomKind.TemplateEnd]:
-                numArgs = argCount+1
+                numArgs = argCount + 1
                 if len(argStack) < numArgs:
                     raise InvalidExpressionError(atom.token.anchor)
 
@@ -1967,6 +1974,15 @@ class Typename(Locatable):
         """
         return self == Typename.default_return_typename_token()
 
+    def base(self):
+        """
+        Return the base typename without array bounds.
+
+        Returns:
+            objects.Typename: The base typename.
+        """
+        return Typename(self.references, self.parent, self.scope, templateParameters=self.templateParameters)
+
     def __eq__(self, other):
         """
         Return whether two typename objects are equal.
@@ -2136,7 +2152,7 @@ class Typename(Locatable):
         """
         scope = [Symto(Token.String, "", "", rl.name, 0, 0) for rl in location]
         templateParams = [[Symto(Token.String, "", "", p.name, 0, 0) for p in rl.templateParameters] for rl in location]
-        return Typename(references, None, scope, templateParameters=templateParams)
+        return Typename(references, None, scope, templateParameters=templateParams, dims=location[-1].dims)
 
 class TemplateParameter(Named):
     """A template parameter."""

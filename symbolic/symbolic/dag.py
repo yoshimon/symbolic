@@ -414,8 +414,8 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
-        # Navigate to the numeric type.
-        if atom.token.isInteger:
+        # Navigate to the numeric type (None stands for INFINITY).
+        if atom.token is None or atom.token.isInteger:
             # Int
             typename = self.native_int_typename(container.references)
         elif atom.token.isFloat:
@@ -483,18 +483,22 @@ class ProjectDependencyCollection:
         typeNR = self._try_verify_ast_typename(container.references, atom.token, children, lhs)
         if typeNR is not None:
             # Deduce array dimensions and append to typename (array declaration).
-            dims = [] if children else [None]
+            dims = []
             for child in children:
-                if child.kind != Token.Number.Integer:
-                    raise InvalidArrayIndexTypeError(child.atom.token.anchor)
+                cat = child.atom.token
+                if cat is not None and cat.kind != Token.Number.Integer:
+                    raise InvalidArrayIndexTypeError(cat.anchor)
 
-                dim = int(str(child.atom.token))
-                if dim < Language.minArrayDim:
-                    raise InvalidArrayDimensionsError(child.atom.token)
+                if cat is not None:
+                    dim = int(str(cat))
+                    if dim < Language.minArrayDim:
+                        raise InvalidArrayDimensionsError(cat)
+                else:
+                    dim = None
 
                 dims.append(dim)
 
-            # TODO: create new typename
+            # Create a new typename.
             typeNR.explicitLocation[-1].dims = dims
             return typeNR
 
@@ -955,7 +959,7 @@ class ProjectDependencyCollection:
             locatable (objects.Locatable): The object to insert.
         """
         # Create and cache the dependency
-        dependency = Dependency(self.libName, locatable)
+        dependency = Dependency(self.libName, locatable.base())
         dependencyLocation = dependency.location
         rl = dependencyLocation[-1]
 
