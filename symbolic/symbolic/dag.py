@@ -40,6 +40,7 @@ class Dependency:
 
         # Cache some members from the locatable.
         self.location = locatable.location()
+        self.baseLocation = self.location.base()
         self.references = locatable.references
         
         # Two system annotations are valid for all dependencies: private, deprecate
@@ -55,7 +56,7 @@ class Dependency:
         Returns:
             bool: True, if both dependencies point to the same library. Otherwise False.
         """
-        return self.libName == other.libName and self.location == other.location and self.references == other.references
+        return self.libName == other.libName and self.baseLocation == other.baseLocation and self.references == other.references
 
     def __hash__(self):
         """
@@ -64,7 +65,7 @@ class Dependency:
         Returns:
             int: The hash value.
         """
-        h0 = ("{0} {1} {2}".format(str(self.libName), str(self.location), str(self.references))).__hash__()
+        h0 = ("{0} {1} {2}".format(str(self.libName), str(self.baseLocation), str(self.references))).__hash__()
         return h0
 
 class LocationConflict:
@@ -124,7 +125,10 @@ class NavigationQuery:
             parent (objects.Locatable): The parent locatable object.
             location (objects.Location): The location to find.
         """
-        self._uid = "{0} {1} {2}".format(repr(references), repr(id(parent)), repr(location))
+        refStr = "[{0}]".format(",".join(str(ref) for ref in references))
+        parentStr = str(parent)
+        locationStr = str(location)
+        self._uid = "{0} {1} {2}".format(refStr, parentStr, locationStr)
 
     def __str__(self):
         """
@@ -135,6 +139,26 @@ class NavigationQuery:
         """
         return self._uid
 
+    def __eq__(self, other):
+        """
+        Return whether two queries are identical.
+        
+        Args:
+            other (objects.NavigationQuery): The query to compare with.
+        Returns:
+            bool: True, if both queries point to the same library. Otherwise False.
+        """
+        return self._uid == other._uid
+
+    def __hash__(self):
+        """
+        Return a hash value for this object.
+
+        Returns:
+            int: The hash value.
+        """
+        return self._uid.__hash__()
+
 class NavigationResult:
     """
     A result of a navigation operation.
@@ -142,18 +166,21 @@ class NavigationResult:
     Attributes:
         libName (str): The library name.
         resolvedDependencyLocation ([dag.ResolvedDependencyLocation]): The resolved dependency location.
+        dependency (dag.Dependency): The matched dependency.
     """
 
-    def __init__(self, libName, resolvedDependencyLocation):
+    def __init__(self, libName, resolvedDependencyLocation, dependency):
         """
         Initialize the object.
 
         Args:
             libName (str): The library name.
             resolvedDependencyLocation ([dag.ResolvedDependencyLocation]): The resolved dependency location.
+            dependency (dag.Dependency): The matched dependency.
         """
         self.libName = libName
         self.resolvedDependencyLocation = resolvedDependencyLocation
+        self.dependency = dependency
 
     def __eq__(self, other):
         """
@@ -180,10 +207,29 @@ class AstNavigationResult:
         Args:
             navResult (dag.NavigationResult): The navigation result to wrap.
         """
-        assert(len(navResult.resolvedDependencyLocation.dependencies) == 1)
-
-        self.dependency = navResult.resolvedDependencyLocation.dependencies[0]
+        self.dependency = navResult.dependency
         self.explicitLocation = Location([RelativeLocation(LocationKind.Reference, navResult.libName)] + self.dependency.location.path)
+
+    def as_array(self, dims):
+        """
+        Return the navigation result as an array type.
+
+        This function returns a navigation result with the same dependency, but the explicit location
+        will have the array dimensions set.
+
+        Returns:
+            dag.AstNavigationResult: The same result as an array.
+        """
+        resolvedDependencyLocation = ResolvedDependencyLocation([self.dependency])
+        navResult = NavigationResult(self.explicitLocation[0].name, resolvedDependencyLocation, self.dependency)
+        arrayNR = AstNavigationResult(navResult)
+        
+        # We need to modify the last relative location so copy the path.
+        copiedPath = Location([RelativeLocation(p.kind, p.name, templateParameters=p.templateParameters, parameters=p.parameters, dims=p.dims) for p in self.dependency.location.path])
+        arrayNR.explicitLocation = copiedPath
+        arrayNR.explicitLocation[-1].dims = dims
+        
+        return arrayNR
 
     def __eq__(self, other):
         """
@@ -256,7 +302,11 @@ class ProjectDependencyCollection:
                 raise ExpectedEOFError(typename.anchor)
 
             # Extract the location from the typename.
-            self.nativeTypenameLocations[nativeTypename] = typename.location()
+            typenameLoc = typename.location()
+            if typenameLoc.dims():
+                raise NativeTypenameArrayError(str(typenameLoc))
+
+            self.nativeTypenameLocations[nativeTypename] = typenameLoc
 
         # Initialize function table that maps ExpressionAtomKinds to AST verification functions.
         self._astVerifiers = {
@@ -306,7 +356,7 @@ class ProjectDependencyCollection:
         """
         navResult = self._ast_try_navigate_dependency(locatable, libName=libName)
         if navResult is None:
-            raise DependencyNotFoundError(locatable.token.anchor, locatable.location())
+            raise DependencyNotFoundError(locatable.anchor, locatable.location())
         
         return navResult
 
@@ -480,8 +530,8 @@ class ProjectDependencyCollection:
         # TODO: Now try it as an extension.
 
         # Try it as a typename.
-        typeNR = self._try_verify_ast_typename(container.references, atom.token, children, lhs)
-        if typeNR is not None:
+        baseTypeNR = self._try_verify_ast_typename(container.references, atom.token, children, lhs)
+        if baseTypeNR is not None:
             # Deduce array dimensions and append to typename (array declaration).
             dims = []
             for child in children:
@@ -499,8 +549,8 @@ class ProjectDependencyCollection:
                 dims.append(dim)
 
             # Create a new typename.
-            typeNR.explicitLocation[-1].dims = dims
-            return typeNR
+            arrayTypeNR = baseTypeNR.as_array(dims)
+            return arrayTypeNR
 
         if lhs is None:
             raise MissingArrayTypeError(atom.token.anchor)
@@ -762,6 +812,7 @@ class ProjectDependencyCollection:
         lookup = None
         resolvedLibName = None
         locationFound = False
+        matchedDependency = None
         for libName in libNameGen:
             # Assume this library contains the dependency
             resolvedLibName = libName
@@ -785,18 +836,18 @@ class ProjectDependencyCollection:
                     dependencies = resolvedDependencyLocation.dependencies
 
                     # Perform ADL to filter out potential matches.
-                    possibleMatches = filter(lambda dependency: i < len(dependency.location) and rl.might_be_equal_to(dependency.location[i]), dependencies)
+                    possibleMatches = filter(lambda dependency: i < len(dependency.baseLocation) and rl.might_be_equal_to(dependency.baseLocation[i]), dependencies)
                     if not possibleMatches:
                         continue
 
                     # Find the best match out of the possible matches by counting the number of
                     # partial matches. The highest match count wins.
                     countPartialMatches = lambda templateParameters: functools.reduce(lambda numMatches, p: numMatches + 1 if p.partialMatch is not None else 0, templateParameters, 0) 
-                    dependencyCmp = lambda a, b: countPartialMatches(b.location[i].templateParameters) - countPartialMatches(a.location[i].templateParameters)
+                    dependencyCmp = lambda a, b: countPartialMatches(b.baseLocation[i].templateParameters) - countPartialMatches(a.baseLocation[i].templateParameters)
                     bestMatches = sorted(possibleMatches, key=functools.cmp_to_key(dependencyCmp))
 
                     for dependency in bestMatches:
-                        dependencyRL = dependency.location[i]
+                        dependencyRL = dependency.baseLocation[i]
                         dependencyLocatable = dependency.locatable
 
                         if isinstance(dependencyLocatable, Function):
@@ -818,6 +869,11 @@ class ProjectDependencyCollection:
 
                                 paramTypenameA = paramA.typename
                                 paramTypenameB = paramB.typename
+
+                                # Array dimensions have to match.
+                                if paramTypenameA.dims != paramTypenameB.dims:
+                                    parameterMismatch = True
+                                    break
 
                                 paramDepA = Dependency(self.libName, paramTypenameA)
                                 paramDepB = Dependency(self.libName, paramTypenameB)
@@ -851,7 +907,7 @@ class ProjectDependencyCollection:
                             templateInstanceArgs =  ", ".join(str(p) for p in rl.templateParameters)
                             importLibs = ", ".join(str(ref) for ref in references)
                             importLibs = " using {0}".format(importLibs) if importLibs else importLibs
-                            dependencyLocationStr = "{0} with <{1}>{2}".format(str(dependency.location), templateInstanceArgs, importLibs)
+                            dependencyLocationStr = "{0} with <{1}>{2}".format(str(dependency.baseLocation), templateInstanceArgs, importLibs)
 
                             if dependencyLocationStr not in self.templateLinks:
                                 # Generate the translation unit for the template.
@@ -876,7 +932,7 @@ class ProjectDependencyCollection:
                                 rootNamespace = parser.parse()
 
                                 # Lookup the template object
-                                templateObj = rootNamespace.objects[0]
+                                templateObj = rootNamespace.locatables[0]
                                 templateObj.parent = dependencyLocatable.parent
                                 templateObj.grandParent = dependencyLocatable.grandParent
                                 templateObj.grandParentWithoutRoot = dependencyLocatable.grandParentWithoutRoot
@@ -898,6 +954,7 @@ class ProjectDependencyCollection:
                         # Step down this namespace
                         allSubLocationsFound = True
                         lookup = resolvedDependencyLocation
+                        matchedDependency = dependency
                         break
 
                 if allSubLocationsFound:
@@ -911,11 +968,11 @@ class ProjectDependencyCollection:
         if not locationFound:
             return None
 
-        result = NavigationResult(resolvedLibName, lookup)
+        result = NavigationResult(resolvedLibName, lookup, matchedDependency)
 
         # Cache the result.
         # This is used to lookup function parameter typename locations later.
-        self._libLocationNavResults[navQuery] = result
+        self._libLocationNavResults[str(navQuery)] = result
 
         return result
 
@@ -948,7 +1005,7 @@ class ProjectDependencyCollection:
             dag.NavigationResult: The navigation result.
         """
         locatable = dependency.locatable
-        location = dependency.location
+        location = dependency.baseLocation
         return self.navigate(locatable.anchor, locatable.references, locatable.grandParentWithoutRoot, location[:-1])
 
     def insert(self, locatable):
@@ -959,9 +1016,8 @@ class ProjectDependencyCollection:
             locatable (objects.Locatable): The object to insert.
         """
         # Create and cache the dependency
-        dependency = Dependency(self.libName, locatable.base())
-        dependencyLocation = dependency.location
-        rl = dependencyLocation[-1]
+        dependency = Dependency(self.libName, locatable)
+        rl = dependency.baseLocation[-1]
 
         if rl.kind == LocationKind.Unresolved:
             self.unresolvedDependencies.append(dependency)
@@ -976,7 +1032,7 @@ class ProjectDependencyCollection:
 
                 # See if parameter signature and template parameter count matches
                 for otherDependency in existingDependencies:
-                    otherDependencyRL = otherDependency.location[-1]
+                    otherDependencyRL = otherDependency.baseLocation[-1]
 
                     # If the location kinds are different then it is ambigous
                     if rl.kind != otherDependencyRL.kind:
@@ -1005,7 +1061,7 @@ class ProjectDependencyCollection:
         """
         # Create a dependency for every object
         references = rootNamespace.references
-        locatables = deque(rootNamespace.objects)
+        locatables = deque(rootNamespace.locatables)
         while locatables:
             locatable = locatables.popleft()
 
@@ -1013,7 +1069,7 @@ class ProjectDependencyCollection:
             self.insert(locatable)
 
             # Recursive objects (Namespaces, Functions)
-            children = getattr(locatable, "objects", None)
+            children = getattr(locatable, "locatables", None)
             locatables += children if children is not None else []
 
             # Connect immediate unresolved dependencies
@@ -1124,9 +1180,9 @@ class ProjectDependencyCollection:
             pNR = self._ast_navigate_dependency(p.typename)
             localVars[str(p.token)] = pNR
 
-        for obj in func.objects:
-            if isinstance(obj, Instruction):
-                self._verify_instruction(func, localVars, obj)
+        for locatable in func.locatables:
+            if isinstance(locatable, Instruction):
+                self._verify_instruction(func, localVars, locatable)
 
     def _verify_instruction(self, container, localVars, instruction):
         """
@@ -1268,7 +1324,7 @@ class ProjectDependencyCollection:
         Returns:
             dag.NavigationResult: The navigation result.
         """
-        return self.links[dependency] if dependency in self.links else self.try_navigate(dependency.locatable.anchor, dependency.locatable.references, dependency.locatable.parent, dependency.location)
+        return self.links[dependency] if dependency in self.links else self.try_navigate(dependency.locatable.anchor, dependency.locatable.references, dependency.locatable.parent, dependency.baseLocation)
 
     def navigate_dependency(self, dependency):
         """
@@ -1293,8 +1349,8 @@ class ProjectDependencyCollection:
             dep0 = conflict.firstDependency
             dep1 = conflict.secondDependency
 
-            dep0Params = dep0.location[-1].parameters
-            dep1Params = dep1.location[-1].parameters
+            dep0Params = dep0.baseLocation[-1].parameters
+            dep1Params = dep1.baseLocation[-1].parameters
 
             # Assume this is a conflict
             isConflict = True

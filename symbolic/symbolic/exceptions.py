@@ -588,3 +588,29 @@ class InvalidArrayDimensionsError(SourceError):
             str: The string representation.
         """
         return super().__str__() + 'Invalid array dimensions.'
+
+class NativeTypenameArrayError(Exception):
+    """
+    An exception class, that indicates that a native typename was specified as an array.
+    
+    Attributes:
+        typename (str): The native typename string.
+    """
+
+    def __init__(self, typename):
+        """
+        Initialize the object.
+
+        Args:
+            typename (str): The native typename string.
+        """
+        self.typename = typename
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return "Native typename {0} must not be an array.".format(self.typename)

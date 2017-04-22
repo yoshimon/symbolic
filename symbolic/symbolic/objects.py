@@ -114,7 +114,7 @@ class RelativeLocation:
             (self.kind == other.kind or self.kind == LocationKind.Unresolved or other.kind == LocationKind.Unresolved) and
             self.name == other.name and
             len(self.parameters) == len(other.parameters) and
-            all(p0.isRef == p1.isRef for p0, p1 in zip(self.parameters, other.parameters)) and
+            all(p0.isRef == p1.isRef and p0.typename.dims == p1.typename.dims for p0, p1 in zip(self.parameters, other.parameters)) and
             len(self.dims) == len(other.dims) and
             self.dims == other.dims and
             Algorithm.zip_all(self.templateParameters, other.templateParameters,
@@ -164,6 +164,24 @@ class Location:
             path ([objects.RelativeLocation]): A list of relative location specifiers.
         """
         self.path = path
+
+    def base(self):
+        """
+        Return the base location without array bounds.
+
+        Returns:
+            objects.Typename: The base typename.
+        """
+        return Location([RelativeLocation(rl.kind, rl.name, templateParameters=rl.templateParameters, parameters=rl.parameters) for rl in self.path])
+
+    def dims(self):
+        """
+        Return the array dimensions of the last relative location.
+
+        Returns:
+            list: The array dimensions.
+        """
+        return self[-1].dims
 
     def __str__(self):
         """
@@ -420,7 +438,7 @@ class Namespace(Named):
     A namespace within a library.
     
     Attributes:
-        objects ([objects.Named]): The Named object instances within the namespace.
+        locatables ([objects.Locatable]): The locatable object instances within the namespace.
     """
 
     @Decorators.validated
@@ -437,7 +455,7 @@ class Namespace(Named):
             semantic (lexer.Symto): The semantic annotation.
         """
         Named.__init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic)
-        self.objects = []
+        self.locatables = []
 
     def validate(self):
         """Validate the object."""
@@ -483,7 +501,7 @@ class Namespace(Named):
         namespace = Namespace(parser.references, parent, token, userAnnotations, sysAnnotations, semantic)
         
         # Register it with the parent
-        parent.objects.append(namespace)
+        parent.locatables.append(namespace)
 
         # Set it as the active namespace
         parser.namespaceStack.append(namespace)
@@ -1319,13 +1337,13 @@ class Function(TemplateObject, Namespace):
                 func.body = parser.fetch_block('{', '}')
                 parser.match(';')
             else:
-                parent.objects.append(func)
+                parent.locatables.append(func)
                 if parser.match('{'):
-                    func.objects = parser.gather_objects([Namespace, Struct, Alias, Template, Instruction, Function], args=['}'])
+                    func.locatables = parser.gather_objects([Namespace, Struct, Alias, Template, Instruction, Function], args=['}'])
                     parser.expect('}')
                     parser.match(';')
                 elif not parser.match(';'):
-                    parent.objects.pop()
+                    parent.locatables.pop()
                     return None
         finally:
             parser.namespaceStack.pop()
@@ -1557,9 +1575,9 @@ class Struct(TemplateObject, Namespace):
         Returns:
             objects.Typename: The typename.
         """
-        for obj in self.objects:
-            if isinstance(obj, MemberList):
-                memberList = obj
+        for locatable in self.locatables:
+            if isinstance(locatable, MemberList):
+                memberList = locatable
                 for member in memberList.members:
                     if member.token == memberName:
                         return memberList.typename
@@ -1594,13 +1612,13 @@ class Struct(TemplateObject, Namespace):
                 struct.body = parser.fetch_block('{', '}')
                 parser.match(';')
             else:
-                parent.objects.append(struct)
+                parent.locatables.append(struct)
                 if parser.match('{'):
-                    struct.objects = parser.gather_objects([Namespace, Struct, Alias, Template, MemberList, Function], args=['}'])
+                    struct.locatables = parser.gather_objects([Namespace, Struct, Alias, Template, MemberList, Function], args=['}'])
                     parser.expect('}')
                     parser.match(';')
                 elif not parser.match(';'):
-                    parent.objects.pop()
+                    parent.locatables.pop()
                     return None
         finally:
             parser.namespaceStack.pop()
@@ -1699,7 +1717,7 @@ class Alias(TemplateObject):
         parent = parser.namespace()
         alias = Alias(parser.references, parent, token, userAnnotations, sysAnnotations, semantic, body, targetTypename)
         if not isTemplate:
-            parent.objects.append(alias)
+            parent.locatables.append(alias)
 
         return alias
 
@@ -1974,15 +1992,6 @@ class Typename(Locatable):
         """
         return self == Typename.default_return_typename_token()
 
-    def base(self):
-        """
-        Return the base typename without array bounds.
-
-        Returns:
-            objects.Typename: The base typename.
-        """
-        return Typename(self.references, self.parent, self.scope, templateParameters=self.templateParameters)
-
     def __eq__(self, other):
         """
         Return whether two typename objects are equal.
@@ -2015,13 +2024,13 @@ class Typename(Locatable):
                 s += ', '.join(str(parameter) for parameter in templateParameters)
                 s += '>'
 
+            # Array dims
+            if self.dims:
+                s += '['
+                s += ', '.join(str(arg) if arg is not None else ':' for arg in self.dims)
+                s += ']'
+
             strings.append(s)
-        
-        # Array dims
-        if self.dims:
-            s += '['
-            s += ', '.join(str(arg) if arg is not None else ':' for arg in self.dims)
-            s += ']'
 
         return '.'.join(strings)
 
@@ -2349,6 +2358,6 @@ class Template(Named):
         # Register the template with the current namespace
         parent = parser.namespace()
         template = Template(parser.references, parent, userAnnotations, sysAnnotations, semantic, parameters, obj)
-        parent.objects.append(template)
+        parent.locatables.append(template)
 
         return template
