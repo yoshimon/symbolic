@@ -49,18 +49,6 @@ class SourceError(Exception):
         anchorStr = str(self.anchor)
         return "{0}: ".format(anchorStr) if anchorStr else ""
 
-class DevError(Exception):
-    """An exception class, that indicates a developer error (bug)."""
-
-    def __str__(self):
-        """
-        Return a string representation of the object.
-
-        Returns:
-            str: The string representation.
-        """
-        return "Developer error."
-
 class UnexpectedTokenError(SourceError):
     """
     An exception class, that indicates a mismatch between an expected token and the current token in the token stream.
@@ -642,3 +630,27 @@ class NativeTypenameArrayError(Exception):
             str: The string representation.
         """
         return "Native typename {0} must not be an array.".format(self.typename)
+
+class PredicateExpectedError(SourceError):
+    """An exception class, that indicates that a predicate was expected but not provided."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + "Predicate expected."
+
+class ReturnTypeMismatchError(SourceError):
+    """An exception class, that indicates that the return type does not match the expression type."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + "Return type mismatch."

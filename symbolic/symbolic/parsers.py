@@ -295,7 +295,7 @@ class BaseParser:
             endDelims ([str]): A list of end delimiters.
         """
         if not endDelims:
-            raise DevError()
+            assert(False)
 
         bracketStack = []
         result = []
@@ -373,7 +373,7 @@ class BaseParser:
             lexer.Symto: The previous token or None, if no such token exists.
         """
         if not self.can_back():
-            raise DevError()
+            assert(False)
 
         self.back()
         return self.consume()

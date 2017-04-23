@@ -339,7 +339,7 @@ class Named(Locatable):
 
     def validate(self):
         """Validate the object."""
-        raise DevError()
+        assert(False)
 
     def default_location(self, kind, *, templateParameters=None, parameters=None):
         """
@@ -738,7 +738,7 @@ class Instruction(Named):
                 instructions = Instruction.parse_instruction_body(parser)
                 return Instruction(parser.references, parent, token, userAnnotations, sysAnnotations, semantic, kind, instructions=instructions)
             else:
-                raise DevError()
+                assert(False)
         else:
             # Early-out if the current token is one of the end delimiters
             if str(parser.token) in args:
@@ -1081,7 +1081,7 @@ class Expression(Named):
             elif atom.kind == ExpressionAtomKind.Delimiter:
                 argCount += 1 if argCount > 0 else 2
             else:
-                raise DevError()
+                assert(False)
 
         # Empty expression
         if not argStack:

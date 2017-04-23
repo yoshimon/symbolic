@@ -20,6 +20,7 @@ class Dependency:
     A dependency within a project.
 
     Attributes:
+        libName (str): The library that created the dependency.
         locatable (objects.Locatable): The object behind the dependency.
         location (objects.Location): The location of the object in the library.
         references ([objects.Reference]): The references that are seen by this dependency.
@@ -504,6 +505,7 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
+        # 
         pass
 
     def _verify_ast_array(self, container, atom, children, localVars, newLocalVars, isOptional, lhs):
@@ -1236,18 +1238,21 @@ class ProjectDependencyCollection:
             if not state != ScopeState.Loop:
                 raise NotInsideLoopError(instruction.anchor)
         elif instruction.kind == InstructionKind.Return:
-            exprTypeLocation = self._verify_expression_ast(container, localVars, instruction.expression.ast)
+            exprTypeNR = self._verify_expression_ast(container, localVars, instruction.expression.ast)
             
             # Make sure the expression type matches the function return type.
             func = instruction.parent
-            assert(isinstance(func, Function))
-            #exprTypeLocation == func.returnTypename
-            pass
+            funcRetNR = self._ast_navigate_dependency(func.returnTypename)
+            if funcRetNR != exprTypeNR:
+                raise ReturnTypeMismatchError(instruction.token.anchor)
         elif instruction.kind == InstructionKind.If:
             exprType = self._verify_expression_ast(container, localVars, instruction.expression.ast)
 
             # Make sure the return type evaluates to bool.
-            
+            nativeBoolType = self.native_bool_typename(container.references)
+            nativeBoolNR = self._ast_navigate_dependency(nativeBoolType)
+            if exprType != nativeBoolNR:
+                raise PredicateExpectedError(instruction.token.anchor)
         elif instruction.kind == InstructionKind.Elif:
             pass
 
