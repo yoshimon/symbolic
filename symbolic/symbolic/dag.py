@@ -542,7 +542,7 @@ class ProjectDependencyCollection:
                 if cat is not None:
                     dim = int(str(cat))
                     if dim < Language.minArrayDim:
-                        raise InvalidArrayDimensionsError(cat)
+                        raise InvalidArrayDimensionsError(cat.anchor)
                 else:
                     dim = None
 

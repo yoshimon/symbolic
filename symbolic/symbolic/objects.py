@@ -942,6 +942,10 @@ class Expression(Named):
                 wasLastTerminal = False
 
                 if str(t) == ',':
+                    # We better have some output already.
+                    if len(out) == 0:
+                        raise InvalidExpressionError(t.anchor)
+
                     # Tuples > 1 are not allowed
                     if states[-1] == State.Tuple:
                         raise InvalidExpressionError(t.anchor)
@@ -954,8 +958,7 @@ class Expression(Named):
                     if states[-1] != State.Array:
                         if out[-1].kind in [ExpressionAtomKind.Delimiter, ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.TemplateBegin]:
                             raise InvalidExpressionError(t.anchor)
-                    else:
-                        # Add placeholder unbounded array dimensions.
+                    elif out[-1].kind == ExpressionAtomKind.ArrayBegin:
                         out.append(ExpressionAtom(None, ExpressionAtomKind.Number))
 
                     # Add comma as delimiter
@@ -982,9 +985,14 @@ class Expression(Named):
                     states.pop()
 
                     if stack:
-                        # Pop function, template
-                        if stack[-1].kind in [ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.ArrayEnd, ExpressionAtomKind.TemplateEnd]:
-                            out.append(stack[-1])
+                        # Pop function, array, template
+                        stackTop = stack[-1]
+                        if stackTop.kind in [ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.ArrayEnd, ExpressionAtomKind.TemplateEnd]:
+                            if stackTop.kind == ExpressionAtomKind.ArrayEnd and out[-1].kind in [ExpressionAtomKind.ArrayBegin, ExpressionAtomKind.Delimiter]:
+                                # Array dimension = infinity
+                                out.append(ExpressionAtom(None, ExpressionAtomKind.Number))
+
+                            out.append(stackTop)
                             stack.pop()
                 elif t.kind is Operator:
                     # Assume this is a unary op
@@ -2027,7 +2035,7 @@ class Typename(Locatable):
             # Array dims
             if self.dims:
                 s += '['
-                s += ', '.join(str(arg) if arg is not None else ':' for arg in self.dims)
+                s += ', '.join(str(arg) if arg is not None else "" for arg in self.dims)
                 s += ']'
 
             strings.append(s)
