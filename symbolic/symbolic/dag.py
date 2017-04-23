@@ -510,6 +510,7 @@ class ProjectDependencyCollection:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         # Extract child information.
+        isScalar = len(children) > 0
         for child in children:
             childNR = self._verify_expression_ast_recursive(container, localVars, child, newLocalVars)
             childTypename = Typename.from_location(container.references, childNR.explicitLocation)
@@ -520,6 +521,9 @@ class ProjectDependencyCollection:
 
             if childNR != intNR:
                 raise InvalidArrayIndexTypeError(atom.token.anchor)
+
+            if str(child.atom.token) != "1":
+                isScalar = False
 
         # Return the type of the underlying object.
         # Try it as a member first.
@@ -532,6 +536,10 @@ class ProjectDependencyCollection:
         # Try it as a typename.
         baseTypeNR = self._try_verify_ast_typename(container.references, atom.token, children, lhs)
         if baseTypeNR is not None:
+            # int[1,1,1...] == int
+            if isScalar:
+                return baseTypeNR
+
             # Deduce array dimensions and append to typename (array declaration).
             dims = []
             for child in children:
@@ -1035,8 +1043,8 @@ class ProjectDependencyCollection:
                     otherDependencyRL = otherDependency.baseLocation[-1]
 
                     # If the location kinds are different then it is ambigous
-                    if rl.kind != otherDependencyRL.kind:
-                        raise DuplicateNameError(locatable.anchor, otherDependency.locatable.anchor)
+                    #if rl.kind != otherDependencyRL.kind:
+                    #    raise DuplicateNameError(locatable.anchor, otherDependency.locatable.anchor)
 
                     # If the template and signature matches then it might be a conflict
                     if rl.might_be_equal_to(otherDependencyRL):
