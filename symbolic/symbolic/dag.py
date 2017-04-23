@@ -231,6 +231,18 @@ class AstNavigationResult:
         
         return arrayNR
 
+    def as_base(self):
+        """
+        Return the navigation result as a base type without array dimensions.
+
+        This function returns a navigation result with the same dependency, but the explicit location
+        will have the array dimensions unset.
+
+        Returns:
+            dag.AstNavigationResult: The same result as a base type.
+        """
+        return self.as_array([])
+
     def __eq__(self, other):
         """
         Return whether two navigation results point to the same location.
@@ -416,9 +428,9 @@ class ProjectDependencyCollection:
             return varNR
 
         # Try to resolve it as a type (last chance!)
-        typeNR = self._try_verify_ast_typename(container.references, atom.token, children, lhs)
-        if typeNR is not None:
-            return typeNR
+        # typeNR = self._try_verify_ast_typename(container.references, atom.token, children, lhs)
+        # if typeNR is not None:
+        #    return typeNR
 
         if not isOptional:
             raise VariableNotFoundError(atom.token)
@@ -526,6 +538,20 @@ class ProjectDependencyCollection:
                 isScalar = False
 
         # Return the type of the underlying object.
+
+        # Try it as a variable first.
+        varNR = self._verify_ast_var(container, atom, children, localVars, newLocalVars, True, lhs)
+        if varNR:
+            # Make sure the indexing matches the type dimensions.
+            varTypeDims = varNR.explicitLocation[-1].dims
+            expectedDims = max(1, len(varTypeDims))
+            if len(children) != expectedDims:
+                raise InvalidArrayIndexDimensionsError(atom.token.anchor, expectedDims)
+
+            # Remove array bounds.
+            baseTypeNR = varNR.as_base()
+            return baseTypeNR
+
         # Try it as a member first.
         memberNR = self._try_verify_ast_member(atom, lhs)
         if memberNR:

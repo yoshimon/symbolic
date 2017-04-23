@@ -575,7 +575,7 @@ class MemberNotFoundError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + 'Could not find member.'
+        return super().__str__() + "Could not find member."
 
 class InvalidArrayDimensionsError(SourceError):
     """An exception class, that indicates that an invalid array bounds was provided."""
@@ -587,7 +587,35 @@ class InvalidArrayDimensionsError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + 'Invalid array dimensions.'
+        return super().__str__() + "Invalid array dimensions."
+
+class InvalidArrayIndexDimensionsError(SourceError):
+    """
+    An exception class, that indicates that an invalid array index was provided.
+    
+    Attributes:
+        expectedDims (list): The expected array dimensions.
+    """
+
+    def __init__(self, anchor, expectedDims):
+        """
+        Initialize the object.
+
+        Args:
+            anchor (lexer.Anchor): The anchor.
+            expectedDims (list): The expected array dimensions.
+        """
+        super().__init__(anchor)
+        self.expectedDims = expectedDims
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + "Invalid array index dimensions. Expected {0}-tuple.".format(str(self.expectedDims))
 
 class NativeTypenameArrayError(Exception):
     """
