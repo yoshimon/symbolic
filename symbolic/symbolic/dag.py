@@ -28,15 +28,14 @@ class Dependency:
         isDeprecated (bool): True, if the object is deprecated. Otherwise False.
     """
 
-    def __init__(self, libName, locatable):
+    def __init__(self, locatable):
         """
         Initialize the object.
 
         Args:
-            libName (str): The library that created the dependency.
             locatable (objects.Locatable): The object behind the dependency.
         """
-        self.libName = libName
+        self.libName = locatable.anchor.libName
         self.locatable = locatable
 
         # Cache some members from the locatable.
@@ -342,8 +341,7 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult or None: The navigation result or None.
         """
-        searchLibName = self.libName if libName is None else libName
-        dependency = Dependency(searchLibName, locatable)
+        dependency = Dependency(locatable)
         navResult = self.try_navigate_dependency(dependency)
         if navResult is None:
             return None
@@ -911,8 +909,8 @@ class ProjectDependencyCollection:
                                     parameterMismatch = True
                                     break
 
-                                paramDepA = Dependency(self.libName, paramTypenameA)
-                                paramDepB = Dependency(self.libName, paramTypenameB)
+                                paramDepA = Dependency(paramTypenameA)
+                                paramDepB = Dependency(paramTypenameB)
 
                                 # Both typenames must resolve to the same location.
                                 paramANR = self.navigate_dependency(paramDepA)
@@ -982,7 +980,7 @@ class ProjectDependencyCollection:
                                 self.insert_unit(rootNamespace)
                         
                             # Use template links to jump to the right location, which is anonymous.
-                            templateDep = Dependency(self.libName, self.templateLinks[dependencyLocationStr])
+                            templateDep = Dependency(self.templateLinks[dependencyLocationStr])
                             templateNavResult = self.navigate_dependency(templateDep)
                             templateAliasNavResult = self.navigate_alias_base(templateNavResult)
                             resolvedDependencyLocation = templateAliasNavResult.resolvedDependencyLocation
@@ -1052,7 +1050,7 @@ class ProjectDependencyCollection:
             locatable (objects.Locatable): The object to insert.
         """
         # Create and cache the dependency
-        dependency = Dependency(self.libName, locatable)
+        dependency = Dependency(locatable)
         rl = dependency.baseLocation[-1]
 
         if rl.kind == LocationKind.Unresolved:
@@ -1332,7 +1330,7 @@ class ProjectDependencyCollection:
             return None
 
         # Navigate to the target type.
-        targetTypenameDependency = Dependency(self.libName, dependency.locatable.targetTypename)
+        targetTypenameDependency = Dependency(dependency.locatable.targetTypename)
         return self.navigate_dependency(targetTypenameDependency)
 
     def navigate_alias_base(self, navResult):
@@ -1398,8 +1396,8 @@ class ProjectDependencyCollection:
             # lookup the resolved locations for the types.
             for p0, p1 in zip(dep0Params, dep1Params):
                 # Create a dependency for the parameters
-                p0Dep = Dependency(self.libName, p0)
-                p1Dep = Dependency(self.libName, p1)
+                p0Dep = Dependency(p0)
+                p1Dep = Dependency(p1)
 
                 # Try to find the actual dependency location.
                 p0Resolved = self.navigate_dependency(p0Dep)
