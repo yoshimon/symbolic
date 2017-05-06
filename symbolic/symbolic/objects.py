@@ -2043,7 +2043,7 @@ class Typename(Locatable):
         return '.'.join(strings)
 
     @staticmethod
-    def parse_template_parameters(parser, allowPartialMask=False):
+    def try_parse_template_parameters(parser, allowPartialMask=False):
         """
         Parse the template parameters of the typename.
 
@@ -2055,14 +2055,21 @@ class Typename(Locatable):
         """
         templateParameters = []
         parameterMask = [Token.Name, Token.Literal.String] if allowPartialMask else [Token.Literal.String]
-        if parser.match('<'):
+        
+        parser.push_state()
+        if parser.match("<"):
             while True:
                 token = parser.match_any_kind(parameterMask)
                 if token is None:
                     break
+                
                 templateParameters.append(TemplateParameter(parser.references, None, token, [], [], None, token))
-                parser.match(',')
-            parser.expect('>')
+                parser.match(",")
+            
+            if not parser.match(">"):
+                parser.pop_state()
+                return []
+
         return templateParameters
 
     @staticmethod
@@ -2125,12 +2132,12 @@ class Typename(Locatable):
             return None
 
         scope = [token]
-        templateParams = [Typename.parse_template_parameters(parser, allowPartialMask)]
+        templateParams = [Typename.try_parse_template_parameters(parser, allowPartialMask)]
         while True:
             token = parser.token
             if parser.match('.'):
                 scope += [parser.expect_kind(Token.Name)]
-                templateParams += [Typename.parse_template_parameters(parser, allowPartialMask)]
+                templateParams += [Typename.try_parse_template_parameters(parser, allowPartialMask)]
             else:
                 break
 

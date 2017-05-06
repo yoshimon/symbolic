@@ -755,8 +755,14 @@ class ProjectDependencyCollection:
             # It has to be a new local variable.
             varToken = left.atom.token
             varName = str(varToken)
-            if varName in newLocalVars or varName in localVars:
+            if varName in newLocalVars:
                 raise VariableAlreadyExistsError(varToken)
+
+            if varName in localVars:
+                # The types have to match.
+                existingVarTypeNR = localVars[varName]
+                if existingVarTypeNR != rightNR:
+                    raise VariableTypeMismatchError(varToken.anchor)
 
             newLocalVars[varName] = rightNR
             return rightNR
@@ -1272,7 +1278,7 @@ class ProjectDependencyCollection:
                 raise PredicateExpectedError(instruction.token.anchor)
 
             # Recurse.
-            childScopeState = ScopeState.Loop if instruction.kind == Instruction.While else ScopeState.Default
+            childScopeState = ScopeState.Loop if instruction.kind == InstructionKind.While else ScopeState.Default
             for locatable in instruction.instructions:
                 if isinstance(locatable, Instruction):
                     self._verify_instruction(container, localVars, locatable, childScopeState, None)
@@ -1286,13 +1292,13 @@ class ProjectDependencyCollection:
                     self._verify_instruction(container, localVars, locatable, scopeState, None)
         elif instruction.kind == InstructionKind.For:
             for forInit in instruction.forInits:
-                pass
+                self._verify_expression_ast(container, localVars, forInit.ast)
 
             for forPred in instruction.forPredicates:
-                pass
+                self._verify_expression_ast(container, localVars, forPred.ast)
 
             for forStep in instruction.forSteps:
-                pass
+                self._verify_expression_ast(container, localVars, forStep.ast)
 
             # Recurse on loop.
             for locatable in instruction.instructions:

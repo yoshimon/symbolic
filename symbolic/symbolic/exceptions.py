@@ -690,3 +690,15 @@ class InvalidElifError(SourceError):
             str: The string representation.
         """
         return super().__str__() + "Conditional branch has to precede another conditional branch."
+
+class VariableTypeMismatchError(SourceError):
+    """An exception class, that indicates that a variable was already initialized with a different type."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + "The variable has already been initialized with a different type."
