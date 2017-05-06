@@ -654,3 +654,39 @@ class ReturnTypeMismatchError(SourceError):
             str: The string representation.
         """
         return super().__str__() + "Return type mismatch."
+
+class NotInsideLoopError(SourceError):
+    """An exception class, that indicates that an instruction was expected to be executed in a loop."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + "Not inside a loop."
+
+class InvalidElseError(SourceError):
+    """An exception class, that indicates that an else-branch was used incorrectly."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + "Default branches have to follow conditional branches."
+
+class InvalidElifError(SourceError):
+    """An exception class, that indicates that an elif-branch was used incorrectly."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + "Conditional branch has to precede another conditional branch."

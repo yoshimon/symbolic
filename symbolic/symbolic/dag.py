@@ -1,6 +1,7 @@
 ﻿"""Contains classes to resolve dependencies in symbolic."""
 
 # Built-in
+from enum import Enum
 from itertools import chain
 from collections import deque, defaultdict
 import functools
@@ -14,6 +15,18 @@ from symbolic.language import *
 from symbolic.objects import *
 from symbolic.parsers import *
 from symbolic.preprocessors import ExternalPreprocessor
+
+class ScopeState(Enum):
+    """
+    Enumeration of all ExpressionAtom kinds.
+
+    Attributes:
+        Default (int): The default scope state.
+        Scope (int): The current scope is a loop.
+    """
+
+    Default = 0
+    Loop = 2
 
 class Dependency:
     """
@@ -425,11 +438,6 @@ class ProjectDependencyCollection:
         varNR = localVars.get(str(atom.token), None)
         if varNR is not None:
             return varNR
-
-        # Try to resolve it as a type (last chance!)
-        # typeNR = self._try_verify_ast_typename(container.references, atom.token, children, lhs)
-        # if typeNR is not None:
-        #    return typeNR
 
         if not isOptional:
             raise VariableNotFoundError(atom.token)
@@ -1214,11 +1222,15 @@ class ProjectDependencyCollection:
             pNR = self._ast_navigate_dependency(p.typename)
             localVars[str(p.token)] = pNR
 
+        scopeState = ScopeState.Default
+        prevInstruction = None
+
         for locatable in func.locatables:
             if isinstance(locatable, Instruction):
-                self._verify_instruction(func, localVars, locatable)
+                self._verify_instruction(func, localVars, locatable, scopeState, prevInstruction)
+                prevInstruction = locatable
 
-    def _verify_instruction(self, container, localVars, instruction):
+    def _verify_instruction(self, container, localVars, instruction, scopeState, prevInstruction):
         """
         Verify an instruction.
 
@@ -1226,6 +1238,8 @@ class ProjectDependencyCollection:
             container (objects.Locatable): The locatable container (parent) object.
             localVars (dict): The local variables.
             instruction (objects.Instruction): The instruction to verify.
+            scopeState (dag.ScopeState): The current scope state.
+            prevInstruction (objects.Instruction): The previous instruction in the same scope.
         """
         # Verify the AST.
         if instruction.kind == InstructionKind.Expression:
@@ -1233,7 +1247,7 @@ class ProjectDependencyCollection:
             self._verify_expression_ast(container, localVars, instruction.expression.ast)
         elif instruction.kind in [InstructionKind.Break, InstructionKind.Continue]:
             # Make sure we are inside a loop.
-            if not state != ScopeState.Loop:
+            if scopeState != ScopeState.Loop:
                 raise NotInsideLoopError(instruction.anchor)
         elif instruction.kind == InstructionKind.Return:
             exprTypeNR = self._verify_expression_ast(container, localVars, instruction.expression.ast)
@@ -1243,7 +1257,12 @@ class ProjectDependencyCollection:
             funcRetNR = self._ast_navigate_dependency(func.returnTypename)
             if funcRetNR != exprTypeNR:
                 raise ReturnTypeMismatchError(instruction.token.anchor)
-        elif instruction.kind == InstructionKind.If:
+        elif instruction.kind in [InstructionKind.If, InstructionKind.While, InstructionKind.Elif]:
+            # Verify instruction.
+            if instruction.kind == InstructionKind.Elif:
+                if prevInstruction is None or prevInstruction.kind not in [InstructionKind.If, InstructionKind.Elif]:
+                    raise InvalidElifError(instruction.token.anchor)
+
             exprType = self._verify_expression_ast(container, localVars, instruction.expression.ast)
 
             # Make sure the return type evaluates to bool.
@@ -1251,8 +1270,34 @@ class ProjectDependencyCollection:
             nativeBoolNR = self._ast_navigate_dependency(nativeBoolType)
             if exprType != nativeBoolNR:
                 raise PredicateExpectedError(instruction.token.anchor)
-        elif instruction.kind == InstructionKind.Elif:
-            pass
+
+            # Recurse.
+            childScopeState = ScopeState.Loop if instruction.kind == Instruction.While else ScopeState.Default
+            for locatable in instruction.instructions:
+                if isinstance(locatable, Instruction):
+                    self._verify_instruction(container, localVars, locatable, childScopeState, None)
+        elif instruction.kind == InstructionKind.Else:
+            # We need an if or elif above.
+            if prevInstruction is None or prevInstruction.kind not in [InstructionKind.If, InstructionKind.Elif]:
+                raise InvalidElseError(instruction.token.anchor)
+
+            for locatable in instruction.instructions:
+                if isinstance(locatable, Instruction):
+                    self._verify_instruction(container, localVars, locatable, scopeState, None)
+        elif instruction.kind == InstructionKind.For:
+            for forInit in instruction.forInits:
+                pass
+
+            for forPred in instruction.forPredicates:
+                pass
+
+            for forStep in instruction.forSteps:
+                pass
+
+            # Recurse on loop.
+            for locatable in instruction.instructions:
+                if isinstance(locatable, Instruction):
+                    self._verify_instruction(container, localVars, locatable, ScopeState.Loop, None)
 
     def _verify_expression_ast(self, container, localVars, ast):
         """
