@@ -760,6 +760,7 @@ class ProjectDependencyCollection:
 
             if varName in localVars:
                 # The types have to match.
+                # As agreed upon by the committee (reviewed by NightCreature). 
                 existingVarTypeNR = localVars[varName]
                 if existingVarTypeNR != rightNR:
                     raise VariableTypeMismatchError(varToken.anchor)
