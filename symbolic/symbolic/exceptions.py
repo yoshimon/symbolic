@@ -97,20 +97,17 @@ class UnsupportedSystemAnnotationError(SourceError):
     An exception class, that indicates an unsupported system annotation.
     
     Attributes:
-       what (lexer.Symto): The expected token.
        sysAnnotation ([objects.Annotation]): The system annotation.
     """
 
-    def __init__(self, what, sysAnnotation):
+    def __init__(self, sysAnnotation):
         """
         Initialize the object.
 
         Args:
-            what (lexer.Symto): The expected token.
             sysAnnotation ([objects.Annotation]): The system annotation.
         """
         super().__init__(sysAnnotation.token.anchor)
-        self.what = what
         self.sysAnnotation = sysAnnotation
 
     def __str__(self):
@@ -120,7 +117,7 @@ class UnsupportedSystemAnnotationError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + '{0}s do not support the "{1}" system annotation.'.format(self.what, str(self.sysAnnotation.token))
+        return super().__str__() + '"{0}" system annotation is not allowed in this context.'.format(str(self.sysAnnotation.token))
 
 class UnknownSystemAnnotationError(SourceError):
     """
@@ -148,7 +145,7 @@ class UnknownSystemAnnotationError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + "{0} is not a known system annotation.".format(str(self.sysAnnotation))
+        return super().__str__() + '"{0}" is not a known system annotation.'.format(str(self.sysAnnotation))
 
 class MissingScopeError(SourceError):
     """An exception class, that indicates a missing scope."""

@@ -361,7 +361,7 @@ class Named(Locatable):
     def validate_no_system_annotations(self):
         """Ensure that there are no system annotation associated to this object."""
         if self.sysAnnotations:
-            raise UnsupportedSystemAnnotationError(self.__class__.__name__, self.sysAnnotations[0])
+            raise UnsupportedSystemAnnotationError(self.sysAnnotations[0])
 
     def validate_system_annotations(self, *compatibleNames):
         """
@@ -370,9 +370,19 @@ class Named(Locatable):
         Args:
             compatibleNames ([str]): A list, containing the compatible annotation names.
         """
-        for annotation in self.sysAnnotations:
+        self.validate_external_system_annotations(self.sysAnnotations, compatibleNames)
+
+    def validate_external_system_annotations(self, where, compatibleNames):
+        """
+        Validate all external system annotations.
+
+        Args:
+            where (list): The annotation collection.
+            compatibleNames ([str]): A list, containing the compatible annotation names.
+        """
+        for annotation in where:
             if str(annotation.token) not in compatibleNames:
-                raise UnsupportedSystemAnnotationError(self.__class__.__name__, annotation)
+                raise UnsupportedSystemAnnotationError(annotation)
 
     def __str__(self):
         """
@@ -1433,7 +1443,7 @@ class Member(Named):
 
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations('private', 'deprecate')
+        self.validate_system_annotations('private', 'deprecate', 'implicit')
 
     def location(self):
         """
@@ -1497,7 +1507,7 @@ class MemberList(Named):
 
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations('private', 'deprecate')
+        self.validate_system_annotations('private', 'deprecate', 'implicit')
 
     def location(self):
         """
@@ -1557,9 +1567,14 @@ class Struct(TemplateObject, Namespace):
             sysAnnotations ([objects.Annotation]): The system annotations.
             semantic (lexer.Symto): The semantic annotation.
             body ([lexer.Symto]): The template body.
+            parentTypename (None of objects.Typename): The parent typename.
+            parentUserAnnotations (None or [objects.Annotation]): The user annotations for the parent typename.
+            parentSysAnnotations (None or [objects.Annotation]): The system annotations for the parent typename.
+            parentSemantic (None or lexer.Symto): The semantic annotation for the parent typename.
         """
         Namespace.__init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic)
         TemplateObject.__init__(self, references, parent, token, userAnnotations, sysAnnotations, semantic, body)
+        self.locatables = []
 
     def validate(self):
         """Validate the object."""
@@ -1621,8 +1636,9 @@ class Struct(TemplateObject, Namespace):
                 parser.match(';')
             else:
                 parent.locatables.append(struct)
+
                 if parser.match('{'):
-                    struct.locatables = parser.gather_objects([Namespace, Struct, Alias, Template, MemberList, Function], args=['}'])
+                    struct.locatables += parser.gather_objects([Namespace, Struct, Alias, Template, MemberList, Function], args=['}'])
                     parser.expect('}')
                     parser.match(';')
                 elif not parser.match(';'):

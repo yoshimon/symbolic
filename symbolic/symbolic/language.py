@@ -17,5 +17,5 @@ class Language:
     systemTypenames = { 'void', 'int', 'float', 'string' }
     invalidNames = systemTypenames.union(keywords)
     tokenConcatenation = r"><" # As agreed upon by the committee (reviewed by eppo). 
-    sysAnnotations = { 'static', 'private', 'noconstructor', 'deprecate' }
+    sysAnnotations = { 'static', 'private', 'noconstructor', 'deprecate', 'implicit' }
     minArrayDim = 1

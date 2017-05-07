@@ -1278,19 +1278,14 @@ class ProjectDependencyCollection:
             if exprType != nativeBoolNR:
                 raise PredicateExpectedError(instruction.token.anchor)
 
-            # Recurse.
             childScopeState = ScopeState.Loop if instruction.kind == InstructionKind.While else ScopeState.Default
-            for locatable in instruction.instructions:
-                if isinstance(locatable, Instruction):
-                    self._verify_instruction(container, localVars, locatable, childScopeState, None)
+            self._verify_child_instructions(container, localVars, instruction, childScopeState)
         elif instruction.kind == InstructionKind.Else:
             # We need an if or elif above.
             if prevInstruction is None or prevInstruction.kind not in [InstructionKind.If, InstructionKind.Elif]:
                 raise InvalidElseError(instruction.token.anchor)
 
-            for locatable in instruction.instructions:
-                if isinstance(locatable, Instruction):
-                    self._verify_instruction(container, localVars, locatable, scopeState, None)
+            self._verify_child_instructions(container, localVars, instruction, scopeState)
         elif instruction.kind == InstructionKind.For:
             for forInit in instruction.forInits:
                 self._verify_expression_ast(container, localVars, forInit.ast)
@@ -1301,10 +1296,23 @@ class ProjectDependencyCollection:
             for forStep in instruction.forSteps:
                 self._verify_expression_ast(container, localVars, forStep.ast)
 
-            # Recurse on loop.
-            for locatable in instruction.instructions:
-                if isinstance(locatable, Instruction):
-                    self._verify_instruction(container, localVars, locatable, ScopeState.Loop, None)
+            self._verify_child_instructions(container, localVars, instruction, ScopeState.Loop)
+
+    def _verify_child_instructions(self, container, localVars, instruction, scopeState):
+        """
+        Verify all child instructions of an instruction.
+
+        Args:
+            container (objects.Locatable): The locatable container (parent) object.
+            localVars (dict): The local variables.
+            instruction (objects.Instruction): The instruction to verify.
+            scopeState (dag.ScopeState): The current scope state.
+            prevInstruction (objects.Instruction): The previous instruction in the same scope.
+        """
+        prevInstruction = None
+        for locatable in instruction.instructions:
+            self._verify_instruction(container, localVars, locatable, ScopeState.Loop, prevInstruction)
+            prevInstruction = locatable
 
     def _verify_expression_ast(self, container, localVars, ast):
         """
