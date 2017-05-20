@@ -293,6 +293,8 @@ class BaseParser:
 
         Args:
             endDelims ([str]): A list of end delimiters.
+        Returns:
+            list: The tokens up to the matched delimiter or the empty list.
         """
         if not endDelims:
             assert(False)
