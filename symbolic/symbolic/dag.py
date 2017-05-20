@@ -1311,7 +1311,7 @@ class ProjectDependencyCollection:
         """
         prevInstruction = None
         for locatable in instruction.instructions:
-            self._verify_instruction(container, localVars, locatable, ScopeState.Loop, prevInstruction)
+            self._verify_instruction(container, localVars, locatable, scopeState, prevInstruction)
             prevInstruction = locatable
 
     def _verify_expression_ast(self, container, localVars, ast):
