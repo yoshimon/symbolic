@@ -735,8 +735,6 @@ class ProjectDependencyCollection:
 
         left, right = children[0], children[1]
 
-        # If this is the = operator then the LHS does not have to have a deducable type.
-        # A missing LHS type would indicate that we have a new variable declaration in that case.
         isNewVarOp = atom.token == ":="
         isStructOp = atom.token == "."
             
