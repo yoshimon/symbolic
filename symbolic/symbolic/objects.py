@@ -1296,32 +1296,39 @@ class Function(TemplateObject, Namespace):
 
         kind = FunctionKind.Regular
         name = Symto.from_token(parser.token, parser.token.kind, '')
+        parent = parser.namespace()
         extensionTypename = None
         parameters = []
         parameterTemplateTokens = None
         returnTypename = None
         returnTypenameTemplateTokens = None
         if isTemplate:
-            returnTypenameTemplateTokens = parser.until_any([".", "(", ":", "{"])
+            returnTypenameTemplateTokens = parser.until_any(["operator", ".", "(", ":", "{"])
 
-            # Extract the last token as the return typename.
-            if returnTypenameTemplateTokens:
-                name = returnTypenameTemplateTokens[-1]
+            # Step back if we parsed into an extension.
+            stepBack = parser.token == "." # We parsed the beginning of the extension already.
+            if not stepBack:
+                # See if the name is actually an eppocatenation operand.
+                if len(returnTypenameTemplateTokens) > 1:
+                    stepBack = returnTypenameTemplateTokens[-2] != Language.tokenConcatenation
+            
+            if stepBack:
+                # Deduce the name name below.
                 returnTypenameTemplateTokens.pop()
+                parser.back()
 
             hasExplicitReturnType = bool(returnTypenameTemplateTokens)
         else:
             returnTypename = Typename.try_parse(parser, allowPartialMask=True)
             hasExplicitReturnType = returnTypename is not None
 
-            # If the next token is not an ID then returnTypename
-            # is actually the function name / scope and the return type is implicit.
-            parent = parser.namespace()
-            if parser.token.kind != Token.Name:
-                if hasExplicitReturnType:
-                    name = returnTypename.scope[-1]
-                returnTypenameToken = Symto.from_token(parser.token, Token.Name, Typename.default_return_typename(parser.references, parent))
-                returnTypename = Typename(parser.references, parent, [returnTypenameToken])
+        # If the next token is not an ID then returnTypename
+        # is actually the function name / scope and the return type is implicit.
+        if parser.token.kind != Token.Name:
+            if hasExplicitReturnType:
+                name = returnTypenameTemplateTokens[-1] if isTemplate else returnTypename.scope[-1]
+            returnTypenameToken = Symto.from_token(parser.token, Token.Name, Typename.default_return_typename(parser.references, parent))
+            returnTypename = Typename(parser.references, parent, [returnTypenameToken])
         
         if hasExplicitReturnType:
             # Extensions can be explicitly scoped
