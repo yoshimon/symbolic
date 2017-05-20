@@ -1307,11 +1307,6 @@ class Function(TemplateObject, Namespace):
 
             # Step back if we parsed into an extension.
             stepBack = parser.token == "." # We parsed the beginning of the extension already.
-            if not stepBack:
-                # See if the name is actually an eppocatenation operand.
-                if len(returnTypenameTemplateTokens) > 1:
-                    stepBack = returnTypenameTemplateTokens[-2] != Language.tokenConcatenation
-            
             if stepBack:
                 # Deduce the name name below.
                 returnTypenameTemplateTokens.pop()
@@ -1327,8 +1322,12 @@ class Function(TemplateObject, Namespace):
         if parser.token.kind != Token.Name:
             if hasExplicitReturnType:
                 name = returnTypenameTemplateTokens[-1] if isTemplate else returnTypename.scope[-1]
-            returnTypenameToken = Symto.from_token(parser.token, Token.Name, Typename.default_return_typename(parser.references, parent))
-            returnTypename = Typename(parser.references, parent, [returnTypenameToken])
+                if name.kind != Token.Name:
+                    return None
+
+            if not isTemplate:
+                returnTypenameToken = Symto.from_token(parser.token, Token.Name, Typename.default_return_typename(parser.references, parent))
+                returnTypename = Typename(parser.references, parent, [returnTypenameToken])
         
         if hasExplicitReturnType:
             # Extensions can be explicitly scoped
