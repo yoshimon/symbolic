@@ -831,6 +831,7 @@ class ExpressionAST:
         atom (objects.ExpressionAtom): The expression atom.
         parent (objects.ExpressionAST): The parent expression AST.
         children ([objects.ExpressionAST]): The child expression ASTs.
+        isRef (bool): True, if the value below this subtree is meant to be interpreted as a reference. Otherwise False.
     """
 
     def __init__(self, atom, parent, children=None):
@@ -845,6 +846,7 @@ class ExpressionAST:
         self.atom = atom
         self.parent = parent
         self.children = [] if children is None else children
+        self.isRef = False
 
 class Expression(Named):
     """
@@ -929,6 +931,8 @@ class Expression(Named):
                 kind = ExpressionAtomKind.Number if t.isNumber else ExpressionAtomKind.Var
                 # K=1 lookahead
                 if t1 is not None:
+                    isVar = True
+
                     # Function, Template
                     if t.kind == Token.Name:
                         if t1s == '(':
@@ -1094,7 +1098,14 @@ class Expression(Named):
                 argCount += 1 if argCount == 0 else 0
                 child = argStack[-1]
                 argStack = argStack[:-1]
-                root.children = [child]
+
+                if not atom.token == "ref":
+                    root.children = [child]
+                else:
+                    root = child
+                    root.parent = parent
+                    root.isRef = True
+
                 argStack.append(root)
                 parent = root.parent
             elif atom.kind == ExpressionAtomKind.BinaryOp:
@@ -1111,8 +1122,8 @@ class Expression(Named):
                 else:
                     # Fake template <>None() or <>None[] binary operator None
                     root = lhs
-                    lhs.parent = parent
-                    lhs.children.append(rhs)
+                    root.parent = parent
+                    root.children.append(rhs)
 
                 argStack.append(root)
                 parent = root.parent
@@ -1229,7 +1240,7 @@ class Parameter(Named):
         Returns:
             str: The string representation.
         """
-        return str(self.typename)
+        return ("ref " if self.isRef else "") + str(self.typename)
 
     @staticmethod
     def parse(parser, args):
@@ -1406,6 +1417,9 @@ class Function(TemplateObject, Namespace):
             parser.expect(')')
 
         semantic = Annotation.parse_semantic(parser)
+
+        if str(name) in Language.keywords:
+            return None
 
         # Register the function with the current namespace
         parent = parser.namespace()

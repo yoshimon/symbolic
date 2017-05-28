@@ -543,17 +543,17 @@ class UnaryOperatorOverloadNotFoundError(SourceError):
 class FunctionOverloadNotFoundError(SourceError):
     """An exception class, that indicates that a function overload was not found."""
 
-    def __init__(self, token, typenames):
+    def __init__(self, token, parameters):
         """
         Initialize the object.
 
         Args:
             token (lexer.Symto): The unary operator token.
-            typenames ([objects.Typename]): The typenames of the function parameters.
+            parameters ([objects.Parameters]): The parameters of the function.
         """
         super().__init__(token.anchor)
         self.token = token
-        self.typenames = typenames
+        self.parameters = parameters
 
     def __str__(self):
         """
@@ -562,7 +562,7 @@ class FunctionOverloadNotFoundError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + 'Could not find any matching function overloads for "{0}({1})".'.format(str(self.token), Algorithm.join_comma(self.typenames))
+        return super().__str__() + 'Could not find any matching function overloads for "{0}({1})".'.format(str(self.token), Algorithm.join_comma(self.parameters))
 
 class InvalidArrayIndexTypeError(SourceError):
     """An exception class, that indicates that an array index is not a valid type."""

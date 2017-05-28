@@ -514,7 +514,7 @@ class ProjectDependencyCollection:
         # Extract child information.
         childNRs = [self._verify_expression_ast_recursive(container, localVars, child, newLocalVars) for child in children]
         childTypenames = [Typename.from_location(container.references, childNR.explicitLocation) for childNR in childNRs]
-        childParameters = [Parameter(container, child.atom.token, [], None, childTypenames[i], False) for i, child in enumerate(children)]
+        childParameters = [Parameter(container, child.atom.token, [], None, childTypenames[i], child.isRef) for i, child in enumerate(children)]
 
         possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Regular, childParameters)
 
@@ -523,7 +523,7 @@ class ProjectDependencyCollection:
             funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename)
             return funcRetTypenameNR
 
-        raise FunctionOverloadNotFoundError(atom.token, childTypenames)
+        raise FunctionOverloadNotFoundError(atom.token, childParameters)
 
     def _verify_ast_array(self, container, atom, children, localVars, newLocalVars, isOptional, lhs):
         """

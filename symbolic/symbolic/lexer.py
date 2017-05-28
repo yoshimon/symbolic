@@ -138,8 +138,8 @@ class Symto:
             line (int): The line in which the token was lexed.
             column (int): The column in which the token was lexed.
         """
-        self.kind = kind
         self.text = str(text)
+        self.kind = Token.Operator if self.text == "ref" else kind
         self.anchor = Anchor(libName, fileName, line, column)
         self.isTerminal = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex, Token.Name, Token.Literal.String]
         self.isNumber = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex]
@@ -440,6 +440,7 @@ class Ops:
 
     unary = {
             # Name: Precedence, Left-associative
+            'ref': [1, False],
             '+': [2, False],
             '-': [2, False],
             '!': [2, False],
