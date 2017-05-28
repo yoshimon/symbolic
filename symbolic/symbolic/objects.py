@@ -903,14 +903,21 @@ class Expression(Named):
             Template = 3
             Tuple = 4
 
+        skip = 0
         out, stack, states = [], [], [State.Default]
         isNextOpenParenFunction = False
         wasLastTerminal = False
         # K=2 lookahead
         for i, t in enumerate(tokens):
+            if skip > 0:
+                skip -= 1
+                continue
+
             prev = tokens[i-1] if i > 0 else None
             t1 = tokens[i+1] if i < len(tokens) - 1 else None
             t2 = tokens[i+2] if i < len(tokens) - 2 else None
+            t1s = str(t1)
+            t2s = str(t2)
 
             if t.isTerminal:
                 if wasLastTerminal:
@@ -924,7 +931,6 @@ class Expression(Named):
                 if t1 is not None:
                     # Function, Template
                     if t.kind == Token.Name:
-                        t1s = str(t1)
                         if t1s == '(':
                             kind = ExpressionAtomKind.FunctionBegin
                             states.append(State.Function)
@@ -936,7 +942,7 @@ class Expression(Named):
                             stack.append(ExpressionAtom(t, ExpressionAtomKind.ArrayEnd))
                         elif t1s == '<':
                             # K=2 lookahead
-                            if (not t2 is None) and (t2.kind == Token.Literal.String or str(t2) == ">"):
+                            if (not t2 is None) and (t2.kind == Token.Literal.String or t2s == ">"):
                                 kind = ExpressionAtomKind.TemplateBegin
                                 states.append(State.Template)
                                 stack.append(ExpressionAtom(t, ExpressionAtomKind.TemplateEnd))
@@ -982,11 +988,13 @@ class Expression(Named):
                     stack.append(ExpressionAtom(t, -1))
                 elif (t.isCloseBracket and str(t) != '>') or (str(t) == '>' and states[-1] == State.Template): # Special case for template >
                     # Keep track of how many parameters were added
-                    if Algorithm.pop_while(stack, lambda atom: not atom.token == t.matchingOpenBracket, lambda atom: out.append(atom)):
+                    if Algorithm.pop_while(stack, lambda atom: atom.token is not None and not atom.token == t.matchingOpenBracket, lambda atom: out.append(atom)):
                         raise MissingBracketsError(t.anchor)
 
                     # Pop open bracket and state
-                    stack.pop()
+                    if stack[-1].token is not None:
+                        stack.pop()
+
                     states.pop()
 
                     if stack:
@@ -999,6 +1007,23 @@ class Expression(Named):
 
                             out.append(stackTop)
                             stack.pop()
+
+                            # Combine template <>() or <>[] with dummy None op.
+                            if stackTop.token is None:
+                                out.append(ExpressionAtom(None, ExpressionAtomKind.BinaryOp))
+
+                            # If this is a template function call switch to that state.
+                            if t1s == "(":
+                                out.append(ExpressionAtom(None, ExpressionAtomKind.FunctionBegin))
+                                states.append(State.Function)
+                                stack.append(ExpressionAtom(None, ExpressionAtomKind.FunctionEnd))
+                                isNextOpenParenFunction = True
+                                skip = 1
+                            elif t1s == "[":
+                                out.append(ExpressionAtom(None, ExpressionAtomKind.ArrayBegin))
+                                states.append(State.Array)
+                                stack.append(ExpressionAtom(None, ExpressionAtomKind.ArrayEnd))
+                                skip = 1
                 elif t.kind is Operator:
                     # Assume this is a unary op
                     kind = ExpressionAtomKind.UnaryOp if (t.isUnaryOp and prev is None) or (prev is not None and str(prev) not in [")", "]"] and not prev.isTerminal) else ExpressionAtomKind.BinaryOp
@@ -1080,7 +1105,15 @@ class Expression(Named):
                 lhs = argStack[-2]
                 rhs = argStack[-1]
                 argStack = argStack[:-2]
-                root.children = [lhs, rhs]
+
+                if atom.token is not None:
+                    root.children = [lhs, rhs]
+                else:
+                    # Fake template <>None() or <>None[] binary operator None
+                    root = lhs
+                    lhs.parent = parent
+                    lhs.children.append(rhs)
+
                 argStack.append(root)
                 parent = root.parent
             elif atom.kind == ExpressionAtomKind.Delimiter:

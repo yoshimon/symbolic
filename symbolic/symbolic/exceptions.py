@@ -1,5 +1,7 @@
 ﻿"""Contains all custom exceptions classes used in the project."""
 
+from symbolic.algorithm import Algorithm
+
 class LibraryDependencyError(Exception):
     """An exception class, that indicates that there is a circular dependency cycle between libraries."""
 
@@ -537,6 +539,30 @@ class UnaryOperatorOverloadNotFoundError(SourceError):
             str: The string representation.
         """
         return super().__str__() + 'Could not find any matching unary operator overloads for "{0}({1})".'.format(str(self.token), str(self.typename))
+
+class FunctionOverloadNotFoundError(SourceError):
+    """An exception class, that indicates that a function overload was not found."""
+
+    def __init__(self, token, typenames):
+        """
+        Initialize the object.
+
+        Args:
+            token (lexer.Symto): The unary operator token.
+            typenames ([objects.Typename]): The typenames of the function parameters.
+        """
+        super().__init__(token.anchor)
+        self.token = token
+        self.typenames = typenames
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + 'Could not find any matching function overloads for "{0}({1})".'.format(str(self.token), Algorithm.join_comma(self.typenames))
 
 class InvalidArrayIndexTypeError(SourceError):
     """An exception class, that indicates that an array index is not a valid type."""
