@@ -535,18 +535,13 @@ class UnitParser(BaseParser):
         return self.gather_objects([Namespace, Struct, Alias, Template, Function])
 
     def parse_all_references(self):
-        """
-        Parse all library references.
-        
-        Returns:
-            [objects.Reference]: The reference list.
-        """
+        """Parse all library references."""
         # using statements
-        references = []
+        self.references = []
 
         while True:
             self.push_state()
-            userAnnotations, sysAnnotations = Annotation.parse_annotations(self)
+            annotations = Annotation.parse_annotations(self)
             if not self.match('import'):
                 self.pop_state()
                 break
@@ -564,19 +559,17 @@ class UnitParser(BaseParser):
             refStrList = [str(t) for t in refTokens]
             refString = '.'.join(refStrList)
             token = Symto.from_token(refTokens[0], Token.Token, refString)
-            ref = Reference(token, userAnnotations, sysAnnotations, semantic)
-            references.append(ref)
-
-        return references
+            ref = Reference(token, annotations, semantic)
+            self.references.append(ref)
 
     def namespace(self):
         """
         Return the current namespace on top of the namespace stack.
 
         Returns:
-            objects.Namespace: The namespace on top of the namespace stack.
+            objects.Namespace or None: The namespace on top of the namespace stack or None, if no such element exists.
         """
-        return self.namespaceStack[-1]
+        return self.namespaceStack[-1] if self.namespaceStack else None
 
     def parse_root_references_only(self):
         """
@@ -590,10 +583,10 @@ class UnitParser(BaseParser):
         self.reset(self.libName, self.fileName, self.tokens)
 
         # References first
-        self.references = self.parse_all_references()
+        self.parse_all_references()
 
         # Initialize the root namespace.
-        self.namespaceStack = [Namespace(self.references, None, Symto(Token.Text, self.libName, self.fileName, '', 1, 1), [], [], None)] # Global namespace
+        self.namespaceStack = [Namespace(self.references, None, Symto(Token.Text, self.libName, self.fileName, '', 1, 1), [], None)] # Global namespace
 
     def parse(self):
         """

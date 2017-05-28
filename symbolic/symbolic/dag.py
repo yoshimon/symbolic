@@ -57,8 +57,8 @@ class Dependency:
         self.references = locatable.references
         
         # Two system annotations are valid for all dependencies: private, deprecate
-        self.isPrivate = Annotation.has('private', locatable.sysAnnotations) if locatable is isinstance(locatable, Named) else False
-        self.isDeprecated = Annotation.has('deprecated', locatable.sysAnnotations) if locatable is isinstance(locatable, Named) else False
+        self.isPrivate = Annotation.has('private', locatable.annotations) if locatable is isinstance(locatable, Named) else False
+        self.isDeprecated = Annotation.has('deprecated', locatable.annotations) if locatable is isinstance(locatable, Named) else False
 
     def __eq__(self, other):
         """
@@ -685,7 +685,7 @@ class ProjectDependencyCollection:
         isChildLValue = self._is_lvalue(child)
 
         # Lookup the operator.
-        childParameter = Parameter(container, child.atom.token, [], [], None, childTypename, isChildLValue)
+        childParameter = Parameter(container, child.atom.token, [], None, childTypename, isChildLValue)
         possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [childParameter])
 
         if possibleMatchNR is None:
@@ -712,7 +712,7 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
-        locatable = Function(container.references, container, nameToken, [], [], None, None, kind, None, None, parameters)
+        locatable = Function(container.references, container, nameToken, [], None, None, kind, None, None, parameters)
         navResult = self._ast_try_navigate_dependency(locatable)
         return navResult
 
@@ -774,8 +774,8 @@ class ProjectDependencyCollection:
             isRightLValue = self._is_lvalue(right)
 
             # Turn them into parameters.
-            pLeft = Parameter(container, left.atom.token, [], [], None, leftTypename, isLeftLValue)
-            pRight = Parameter(container, right.atom.token, [], [], None, rightTypename, isRightLValue)
+            pLeft = Parameter(container, left.atom.token, [], None, leftTypename, isLeftLValue)
+            pRight = Parameter(container, right.atom.token, [], None, rightTypename, isRightLValue)
                     
             # Try to find a match for the signature.
             possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])

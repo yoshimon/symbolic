@@ -9,7 +9,7 @@ class Language:
         systemTypenames ({str}): All built-in typenames in symbolic.
         invalidNames ({str}): A set of invalid object names.
         tokenConcatenation (str): The token concatenator. Used within templates.
-        sysAnnotations ({str}): All system annotation names.
+        annotations ({str}): All annotation names.
         minArrayDim (int): The minimum array dimensions.
     """
 
@@ -17,5 +17,5 @@ class Language:
     systemTypenames = { 'void', 'int', 'float', 'string' }
     invalidNames = systemTypenames.union(keywords)
     tokenConcatenation = r"><" # As agreed upon by the committee (reviewed by eppo). 
-    sysAnnotations = { 'static', 'private', 'noconstructor', 'deprecate', 'implicit' }
+    annotations = { 'static', 'private', 'noconstructor', 'deprecate', 'implicit' }
     minArrayDim = 1

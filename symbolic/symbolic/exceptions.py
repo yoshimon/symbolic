@@ -92,23 +92,23 @@ class UnexpectedEOFError(SourceError):
         """
         return super().__str__() + "Unexpected EOF."
 
-class UnsupportedSystemAnnotationError(SourceError):
+class UnsupportedAnnotationError(SourceError):
     """
-    An exception class, that indicates an unsupported system annotation.
+    An exception class, that indicates an unsupported annotation.
     
     Attributes:
-       sysAnnotation ([objects.Annotation]): The system annotation.
+       annotation ([objects.Annotation]): The annotation.
     """
 
-    def __init__(self, sysAnnotation):
+    def __init__(self, annotation):
         """
         Initialize the object.
 
         Args:
-            sysAnnotation ([objects.Annotation]): The system annotation.
+            annotation ([objects.Annotation]): The annotation.
         """
-        super().__init__(sysAnnotation.token.anchor)
-        self.sysAnnotation = sysAnnotation
+        super().__init__(annotation.token.anchor)
+        self.annotation = annotation
 
     def __str__(self):
         """
@@ -117,26 +117,26 @@ class UnsupportedSystemAnnotationError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + '"{0}" system annotation is not allowed in this context.'.format(str(self.sysAnnotation.token))
+        return super().__str__() + '"{0}" annotation is not allowed in this context.'.format(str(self.annotation))
 
-class UnknownSystemAnnotationError(SourceError):
+class UnknownAnnotationError(SourceError):
     """
-    An exception class, that indicates an unknown system annotation.
+    An exception class, that indicates an unknown annotation.
     
     Attributes:
-        sysAnnotation (objects.Annotation): The system annotation.
+        annotation (objects.Annotation): The annotation.
     """
 
-    def __init__(self, anchor, sysAnnotation):
+    def __init__(self, annotation):
         """
         Initialize the object.
 
         Args:
             anchor (lexer.Anchor): The anchor to associate with this error.
-            sysAnnotation (objects.Annotation): The system annotation.
+            annotation (objects.Annotation): The annotation.
         """
-        super().__init__(anchor)
-        self.sysAnnotation = sysAnnotation
+        super().__init__(annotation.token.anchor)
+        self.annotation = annotation
     
     def __str__(self):
         """
@@ -145,7 +145,7 @@ class UnknownSystemAnnotationError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + '"{0}" is not a known system annotation.'.format(str(self.sysAnnotation))
+        return super().__str__() + '"{0}" is not a known annotation.'.format(str(self.annotation))
 
 class MissingScopeError(SourceError):
     """An exception class, that indicates a missing scope."""
