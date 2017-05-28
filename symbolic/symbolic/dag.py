@@ -712,7 +712,7 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
-        locatable = Function(container.references, container, nameToken, [], None, None, kind, None, None, parameters)
+        locatable = Function(container.references, container, nameToken, [], None, None, kind, None, None, parameters, None, None)
         navResult = self._ast_try_navigate_dependency(locatable)
         return navResult
 
