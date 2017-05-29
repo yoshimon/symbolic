@@ -695,7 +695,7 @@ class ProjectDependencyCollection:
         childTypename = Typename.from_location(container.references, childNR.explicitLocation)
 
         # Lookup the operator.
-        childParameter = Parameter(container, child.atom.token, [], None, childTypename, child.isLValue)
+        childParameter = Parameter(container, child.atom.token, [], None, childTypename, child.is_lvalue())
         possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [childParameter])
 
         if possibleMatchNR is None:
@@ -781,8 +781,8 @@ class ProjectDependencyCollection:
             rightTypename = Typename.from_location(container.references, rightNR.explicitLocation)
 
             # Turn them into parameters.
-            pLeft = Parameter(container, left.atom.token, [], None, leftTypename, left.isLValue)
-            pRight = Parameter(container, right.atom.token, [], None, rightTypename, right.isLValue)
+            pLeft = Parameter(container, left.atom.token, [], None, leftTypename, left.is_lvalue())
+            pRight = Parameter(container, right.atom.token, [], None, rightTypename, right.is_lvalue())
                     
             # Try to find a match for the signature.
             possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])

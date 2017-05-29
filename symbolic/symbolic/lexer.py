@@ -440,7 +440,7 @@ class Ops:
 
     unary = {
             # Name: Precedence, Left-associative
-            'ref': [1, False],
+            'ref': [2, False],
             '+': [2, False],
             '-': [2, False],
             '!': [2, False],

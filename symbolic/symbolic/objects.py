@@ -848,12 +848,19 @@ class ExpressionAST:
         self.children = [] if children is None else children
         self.isRef = False
         
-        kind = atom.kind
-        if children and str(atom.token) == ".":
+    def is_lvalue(self):
+        """
+        Return whether the atom is an L-value.
+
+        Returns:
+            bool: True, if the atom is an L-value. Otherwise False.
+        """
+        kind = self.atom.kind
+        if self.children and str(self.atom.token) == ".":
             # x.x
-            kind = children[0].atom.kind
+            kind = self.children[0].atom.kind
         
-        self.isLValue = kind == ExpressionAtomKind.Var
+        return kind == ExpressionAtomKind.Var
 
 class Expression(Named):
     """
@@ -1042,7 +1049,7 @@ class Expression(Named):
                 
                     # Binary operator
                     if kind == ExpressionAtomKind.BinaryOp:
-                        Algorithm.pop_while(stack, lambda o2: (o2.token.isOp) and ((o1.isBinaryLeftAssociative and o1.binaryPrecedence > o2.token.binaryPrecedence) or (o1.isBinaryRightAssociative and o1.binaryPrecedence >= o2.token.binaryPrecedence)), lambda o2: out.append(o2))
+                        Algorithm.pop_while(stack, lambda o2: (o2.token.isBinaryOp) and ((o1.isBinaryLeftAssociative and o1.binaryPrecedence > o2.token.binaryPrecedence) or (o1.isBinaryRightAssociative and o1.binaryPrecedence >= o2.token.binaryPrecedence)), lambda o2: out.append(o2))
                 
                     stack.append(ExpressionAtom(o1, kind))
                 else:
@@ -1111,7 +1118,7 @@ class Expression(Named):
                 else:
                     if parent is None or \
                        parent.atom.kind != ExpressionAtomKind.FunctionBegin or \
-                       not child.isLValue:
+                       not child.is_lvalue():
                         raise InvalidExpressionError(atom.token.anchor)
 
                     root = child
@@ -1919,7 +1926,7 @@ class Annotation:
             objects.Annotation: The semantic annotation or None, if no semantic was found.
         """
         # Stop if we encounter an argument delimiter or a template end.
-        return Annotation.try_parse_ex(parser, ":", [",", ">"], False)
+        return Annotation.try_parse_ex(parser, ":", [",", ";", ">", "{", ")"], False)
 
     @staticmethod
     def parse_annotations(parser):
