@@ -397,8 +397,15 @@ class ProjectDependencyCollection:
         if lhs is None:
             return None
 
+        locatable = lhs.dependency.locatable
+        if isinstance(locatable, Template):
+            self.try_navigate(atom.token.anchor, locatable.references, locatable.parent, None)
+            # TODO: Instantiate the template.
+
+            locatable = locatable.obj
+
         memberName = str(atom.token)
-        memberTypename = lhs.dependency.locatable.member_typename(atom.token.anchor, memberName)
+        memberTypename = locatable.member_typename(atom.token.anchor, memberName)
         structLib = str(lhs.explicitLocation[0])
         memberNR = self._ast_try_navigate_dependency(memberTypename, libName=structLib)
         return memberNR

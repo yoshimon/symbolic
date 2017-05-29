@@ -1861,16 +1861,14 @@ class Annotation:
         self.token = self.expression.tokens[0]
 
     @staticmethod
-    def collection_to_str(collection, open, close=None):
+    def collection_to_str(collection):
         """
-        Convert an annotation list to a string list.
+        Convert an annotation list to a string.
         
         Args:
             collection ([objects.Annotation]): The annotation list.
-            open (str): The opening string.
-            close (str): The closing string.
         Returns:
-            [str]: The string list.
+            str: The string.
         """
         return "\n".join("[" + str(annotation) + "]" for annotation in collection)
 
@@ -2355,6 +2353,9 @@ class Template(Named):
             formatter.PrettyString: The pretty-formatted string.
         """
         result = PrettyString()
+
+        # Emit the references.
+        result += "\n".join("import {0};".format(str(ref)) for ref in self.references)
 
         # Emit the annotations
         result += Annotation.collection_to_str(self.annotations)
