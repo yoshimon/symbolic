@@ -250,8 +250,8 @@ class SymbolicLexer(RegexLexer):
             (r'(\d+\.\d*|\.\d+|\d+[fF])[fF]?', Number.Float),
             (r'0x[0-9a-fA-F]+', Number.Hex),
             (r'\d+', Number.Integer),
-            (r'(:=|<<|<<=|>>|>>=|~=|\|=|&=|^=|\+=|\*=|%=|-=|==|!=|<=|>=|&&|\|\|)', Operator),
-            (r'[@.~!%^&*+-=|?:<>/]', Operator),
+            (r'(:=|\+\+|--|<<|<<=|>>|>>=|~=|\|=|&=|^=|\+=|\*=|%=|-=|==|!=|<=|>=|&&|\|\|)', Operator),
+            (r'[@.~!%^&*\+-=|?:<>/]', Operator),
             (r"'[^\']*'", String),
             (r'"[^\"]*"', String),
             (r'[,;()\[\]{}\\]', Punctuation),
@@ -448,6 +448,7 @@ class Ops:
             '*': [2, False],
             '&': [2, False],
             '++': [2, False],
+            '--': [2, False],
             }
 
     binary = {
