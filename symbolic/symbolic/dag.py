@@ -693,10 +693,9 @@ class ProjectDependencyCollection:
         child = children[0]
         childNR = self._verify_expression_ast_recursive(container, localVars, child, newLocalVars)
         childTypename = Typename.from_location(container.references, childNR.explicitLocation)
-        isChildLValue = self._is_lvalue(child)
 
         # Lookup the operator.
-        childParameter = Parameter(container, child.atom.token, [], None, childTypename, isChildLValue)
+        childParameter = Parameter(container, child.atom.token, [], None, childTypename, child.isLValue)
         possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [childParameter])
 
         if possibleMatchNR is None:
@@ -781,12 +780,9 @@ class ProjectDependencyCollection:
             leftTypename = Typename.from_location(container.references, leftNR.explicitLocation)
             rightTypename = Typename.from_location(container.references, rightNR.explicitLocation)
 
-            isLeftLValue = self._is_lvalue(left)
-            isRightLValue = self._is_lvalue(right)
-
             # Turn them into parameters.
-            pLeft = Parameter(container, left.atom.token, [], None, leftTypename, isLeftLValue)
-            pRight = Parameter(container, right.atom.token, [], None, rightTypename, isRightLValue)
+            pLeft = Parameter(container, left.atom.token, [], None, leftTypename, left.isLValue)
+            pRight = Parameter(container, right.atom.token, [], None, rightTypename, right.isLValue)
                     
             # Try to find a match for the signature.
             possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
@@ -1363,20 +1359,6 @@ class ProjectDependencyCollection:
 
         # Invoke the verification handler.
         return self._astVerifiers[atom.kind](container, atom, children, localVars, newLocalVars, isOptional, lhs)
-
-    @staticmethod
-    def _is_lvalue(ast):
-        """
-        Returns whether an AST contains an l-value only.
-        
-        Args:
-            ast (objects.ExpressionAST): The AST to inspect.
-        Returns:
-            bool: True, if the AST contains an l-value. Otherwise False.
-        """
-        # Look at LHS of . or the atom itself if it is not a member.
-        varAtomKind = ast.children[1].atom.kind if str(ast.atom.token) in "." else ast.atom.kind
-        return varAtomKind == ExpressionAtomKind.Var
 
     def navigate_alias_target(self, navResult):
         """

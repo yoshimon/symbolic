@@ -847,6 +847,13 @@ class ExpressionAST:
         self.parent = parent
         self.children = [] if children is None else children
         self.isRef = False
+        
+        kind = atom.kind
+        if children and str(atom.token) == ".":
+            # x.x
+            kind = children[0].atom.kind
+        
+        self.isLValue = kind == ExpressionAtomKind.Var
 
 class Expression(Named):
     """
@@ -1102,6 +1109,11 @@ class Expression(Named):
                 if not atom.token == "ref":
                     root.children = [child]
                 else:
+                    if parent is None or \
+                       parent.atom.kind != ExpressionAtomKind.FunctionBegin or \
+                       not child.isLValue:
+                        raise InvalidExpressionError(atom.token.anchor)
+
                     root = child
                     root.parent = parent
                     root.isRef = True
