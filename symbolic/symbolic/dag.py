@@ -36,6 +36,7 @@ class Dependency:
         libName (str): The library that created the dependency.
         locatable (objects.Locatable): The object behind the dependency.
         location (objects.Location): The location of the object in the library.
+        baseLocation (objects.Location): The location of the object in the library without array bounds.
         references ([objects.Reference]): The references that are seen by this dependency.
         isPrivate (bool): True, if the object is private. Otherwise False.
         isDeprecated (bool): True, if the object is deprecated. Otherwise False.
@@ -397,15 +398,8 @@ class ProjectDependencyCollection:
         if lhs is None:
             return None
 
-        locatable = lhs.dependency.locatable
-        if isinstance(locatable, Template):
-            self.try_navigate(atom.token.anchor, locatable.references, locatable.parent, None)
-            # TODO: Instantiate the template.
-
-            locatable = locatable.obj
-
         memberName = str(atom.token)
-        memberTypename = locatable.member_typename(atom.token.anchor, memberName)
+        memberTypename = lhs.dependency.locatable.member_typename(atom.token.anchor, memberName)
         structLib = str(lhs.explicitLocation[0])
         memberNR = self._ast_try_navigate_dependency(memberTypename, libName=structLib)
         return memberNR
@@ -963,59 +957,12 @@ class ProjectDependencyCollection:
                                 libName = aliasNavResult.libName
                                 resolvedDependencyLocation = aliasNavResult.resolvedDependencyLocation
                         elif isinstance(dependencyLocatable, Template):
-                            # Lazily instantiate templates, if we encounter one.
-                            # Make sure we did not instantiate the template already.
-                            templateInstanceArgs =  ", ".join(str(p) for p in rl.templateParameters)
-                            importLibs = ", ".join(str(ref) for ref in references)
-                            importLibs = " using {0}".format(importLibs) if importLibs else importLibs
-                            dependencyLocationStr = "{0} with <{1}>{2}".format(str(dependency.baseLocation), templateInstanceArgs, importLibs)
-
-                            if dependencyLocationStr not in self.templateLinks:
-                                # Generate the translation unit for the template.
-                                templateSrc = dependencyLocatable.generate_translation_unit()
-
-                                # Run the pre-processor on the source.
-                                # TODO: run pre-processor based on the location
-                                ppTemplateSrc = templateSrc # self.preprocessor.run(templateSrc, LIBNAME, PPT)
-
-                                # Lex the unit so we can parse it.
-                                lexer = SymbolicLexer(libName=self.libName, fileName="$Templates/{0}".format(str(dependencyLocatable.token)))
-
-                                # Plugin the template substitutions for the lexer.
-                                templateSubs = { str(dependencyRL.templateParameters[i].token): str(parameter.token)[1:-1] for i, parameter in enumerate(rl.templateParameters) }
-
-                                # Generate a parsable token stream now.
-                                srcFileTokens = lexer.tokenize(ppTemplateSrc, subs=templateSubs)
-                                srcFileTokens = lexer.concatenate_tokens(srcFileTokens)
-
-                                # Analyze the token stream.
-                                parser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
-                                rootNamespace = parser.parse()
-
-                                # Lookup the template object
-                                templateObj = rootNamespace.locatables[0]
-                                templateObj.parent = dependencyLocatable.parent
-                                templateObj.grandParent = dependencyLocatable.grandParent
-                                templateObj.grandParentWithoutRoot = dependencyLocatable.grandParentWithoutRoot
-
-                                # Bind the location to a template.
-                                self.templateLinks[dependencyLocationStr] = templateObj
-
-                                # Insert it into the collection so we can look it up.
-                                # Update the references to match the call site.
-                                rootNamespace.references = references
-                                self.insert_unit(rootNamespace)
-                        
-                            # Use template links to jump to the right location, which is anonymous.
-                            templateDep = Dependency(self.templateLinks[dependencyLocationStr])
-                            templateNavResult = self.navigate_dependency(templateDep)
-                            templateAliasNavResult = self.navigate_alias_base(templateNavResult)
-                            resolvedDependencyLocation = templateAliasNavResult.resolvedDependencyLocation
+                            resolvedDependencyLocation = self.instantiate_template(dependencyLocatable, dependencyRL.templateParameters, rl.templateParameters, references)
 
                         # Step down this namespace
                         allSubLocationsFound = True
                         lookup = resolvedDependencyLocation
-                        matchedDependency = dependency
+                        matchedDependency = lookup.dependencies[0]
                         break
 
                 if allSubLocationsFound:
@@ -1036,6 +983,93 @@ class ProjectDependencyCollection:
         self._libLocationNavResults[str(navQuery)] = result
 
         return result
+
+    def template_instance_str(self, templateParameters, references, baseLocation):
+        """
+        Return a string that describes a template instance.
+
+        Args:
+            cls: Unused.
+            templateParameters ([objects.TemplateParameter]): The template parameters.
+            references ([objects.Reference]): The library references.
+            baseLocation (objects.Location): The base location of the template.
+        Returns:
+            str: A dependency location string for the template. This uniquely identifies the template-parameter combination.
+        """
+        templateInstanceArgs =  ", ".join(str(p) for p in templateParameters)
+        importLibs = ", ".join(str(ref) for ref in references)
+        importLibs = " using {0}".format(importLibs) if importLibs else importLibs
+        dependencyLocationStr = "{0} with <{1}>{2}".format(str(baseLocation), templateInstanceArgs, importLibs)
+        return dependencyLocationStr
+
+    def navigate_to_template_object(self, dependencyLocationStr):
+        """
+        Navigate to an instantiated template using its instance string.
+
+        Args:
+            dependencyLocationStr (str): The template instantiation string.
+        Returns:
+            dag.ResolvedDependencyLocation: The resolved dependency location.
+        """
+        # Use template links to jump to the right location, which is anonymous.
+        templateDep = Dependency(self.templateLinks[dependencyLocationStr])
+        templateNavResult = self.navigate_dependency(templateDep)
+        templateAliasNavResult = self.navigate_alias_base(templateNavResult)
+        resolvedDependencyLocation = templateAliasNavResult.resolvedDependencyLocation
+        return resolvedDependencyLocation
+
+    def instantiate_template(self, template, templateParameterNames, templateParameterValues, references):
+        """
+        Instantiate a template with given parameters.
+
+        Args:
+            template (objects.Template): The template to instantiate.
+            templateParameterNames ([objects.TemplateParameter]): The template parameter names, e.g. T0.
+            templateParameterValues ([objects.TemplateParameter]): The template parameter values, e.g. "int".
+            references ([objects.Reference]): The references for the template.
+        Returns:
+            dag.ResolvedDependencyLocation: The resolved dependency location for the instantiated object instance.
+        """
+        dependencyLocationStr = self.template_instance_str(templateParameterValues, references, template.location().base())
+
+        if dependencyLocationStr not in self.templateLinks:
+            # Generate the translation unit for the template.
+            templateSrc = template.generate_translation_unit()
+
+            # Run the pre-processor on the source.
+            # TODO: run pre-processor based on the location
+            ppTemplateSrc = templateSrc # self.preprocessor.run(templateSrc, LIBNAME, PPT)
+
+            # Lex the unit so we can parse it.
+            lexer = SymbolicLexer(libName=self.libName, fileName="$Templates/{0}".format(str(template.token)))
+
+            # Plugin the template substitutions for the lexer.
+            templateSubs = { str(templateParameterNames[i]): str(templateParameterValue)[1:-1] for i, templateParameterValue in enumerate(templateParameterValues) }
+
+            # Generate a parsable token stream now.
+            srcFileTokens = lexer.tokenize(ppTemplateSrc, subs=templateSubs)
+            srcFileTokens = lexer.concatenate_tokens(srcFileTokens)
+
+            # Analyze the token stream.
+            parser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
+            rootNamespace = parser.parse()
+
+            # Lookup the template object
+            templateObj = rootNamespace.locatables[0]
+            templateObj.parent = template.parent
+            templateObj.grandParent = template.grandParent
+            templateObj.grandParentWithoutRoot = template.grandParentWithoutRoot
+
+            # Bind the location to a template.
+            self.templateLinks[dependencyLocationStr] = templateObj
+
+            # Insert it into the collection so we can look it up.
+            # Update the references to match the call site.
+            rootNamespace.references = references
+            self.insert_unit(rootNamespace)
+        
+        resolvedDependencyLocation = self.navigate_to_template_object(dependencyLocationStr)
+        return resolvedDependencyLocation
 
     def navigate(self, errorAnchor, references, parent, location):
         """
