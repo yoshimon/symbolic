@@ -723,7 +723,7 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
-        locatable = Function(container.references, container, nameToken, [], None, None, kind, None, None, parameters, None, None)
+        locatable = FunctionReference(container.references, container, nameToken, kind, parameters)
         navResult = self._ast_try_navigate_dependency(locatable)
         return navResult
 
@@ -847,7 +847,6 @@ class ProjectDependencyCollection:
 
         # Strip the library name
         locationWithoutLibName = location[offset:]
-        relativeLocationPath = [locationWithoutLibName[-1]] if locationWithoutLibName else []
 
         # Generate a sequence of additional locations to search at.
         # This will search the parent location, and all of its parents first.
@@ -856,22 +855,24 @@ class ProjectDependencyCollection:
         while (currentParent is not None) and (currentParent.parent is not None):
             # Prepend the location of the parent to the search path.
             parentPath = currentParent.location().path
-            otherLocationWithoutLibName = Location(parentPath + relativeLocationPath)
+            otherLocationWithoutLibName = Location(parentPath + locationWithoutLibName)
             locationsWithoutLibName.append(otherLocationWithoutLibName)
             currentParent = currentParent.parent
 
-        if location:
-            if parent is not None and parent.parent is None:
-                locationsWithoutLibName.append(location)
-            else:
-                locationsWithoutLibName.append(Location([location[-1]]))
+        locationsWithoutLibName.append(locationWithoutLibName)
 
         # Find the library and the object in the library
         lookup = None
         resolvedLibName = None
         locationFound = False
         matchedDependency = None
+        discardParentLocations = False
         for libName in libNameGen:
+            if not discardParentLocations:
+                discardParentLocations = True
+            else:
+                locationsWithoutLibName = [locationWithoutLibName]
+
             # Assume this library contains the dependency
             resolvedLibName = libName
             baseLookup = self.resolvedObjects[libName]
@@ -908,7 +909,7 @@ class ProjectDependencyCollection:
                         dependencyRL = dependency.baseLocation[i]
                         dependencyLocatable = dependency.locatable
 
-                        if isinstance(dependencyLocatable, Function):
+                        if isinstance(dependencyLocatable, (Function, FunctionReference)):
                             # Validate requested and found signature.
                             requestedParams = rl.parameters
                             foundParams = dependencyRL.parameters
@@ -920,18 +921,11 @@ class ProjectDependencyCollection:
                             for paramIndex, paramA in enumerate(requestedParams):
                                 paramB = foundParams[paramIndex]
 
-                                # Reference qualifiers have to match.
-                                if paramA.isRef != paramB.isRef:
-                                    parameterMismatch = True
-                                    break
+                                assert(paramA.isRef == paramB.isRef)
+                                assert(paramA.typename.dims == paramB.typename.dims)
 
                                 paramTypenameA = paramA.typename
                                 paramTypenameB = paramB.typename
-
-                                # Array dimensions have to match.
-                                if paramTypenameA.dims != paramTypenameB.dims:
-                                    parameterMismatch = True
-                                    break
 
                                 paramDepA = Dependency(paramTypenameA)
                                 paramDepB = Dependency(paramTypenameB)
@@ -962,6 +956,8 @@ class ProjectDependencyCollection:
                                 libName = aliasNavResult.libName
                                 resolvedDependencyLocation = aliasNavResult.resolvedDependencyLocation
                                 matchedDependency = resolvedDependencyLocation.dependencies[0]
+                            else:
+                                matchedDependency = dependency
                         elif isinstance(dependencyLocatable, Template):
                             resolvedDependencyLocation = self.instantiate_template(dependencyLocatable, dependencyRL.templateParameters, rl.templateParameters, references)
                             matchedDependency = resolvedDependencyLocation.dependencies[0]

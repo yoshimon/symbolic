@@ -114,7 +114,7 @@ class RelativeLocation:
             (self.kind == other.kind or self.kind == LocationKind.Unresolved or other.kind == LocationKind.Unresolved) and
             self.name == other.name and
             len(self.parameters) == len(other.parameters) and
-            all(p0.isRef == p1.isRef and p0.typename.dims == p1.typename.dims for p0, p1 in zip(self.parameters, other.parameters)) and
+            all(p0.isRef == p1.isRef for p0, p1 in zip(self.parameters, other.parameters)) and
             len(self.dims) == len(other.dims) and
             self.dims == other.dims and
             Algorithm.zip_all(self.templateParameters, other.templateParameters,
@@ -1289,6 +1289,44 @@ class Parameter(Named):
         semantic = Annotation.parse_semantic(parser)
 
         return Parameter(parser.namespace(), token, annotations, semantic, typename, isRef)
+
+class FunctionReference(Named):
+    """
+    A function reference.
+
+    Attributes:
+        kind (objects.FunctionKind): The function kind.
+        returnTypename (objects.Typename): The return typename.
+        parameters ([objects.Parameter]): The parameters.
+    """
+
+    def __init__(self, references, parent, token, kind, parameters):
+        """
+        Initialize the object.
+
+        Args:
+            references ([objects.Reference]): The references visible to this locatable.
+            parent (objects.Locatable): The parent object.
+            token (lexer.Symto): A token which holds the name.
+            kind (objects.FunctionKind): The function kind.
+            parameters ([objects.Parameter]): The parameters.
+        """
+        self.kind = kind
+        self.parameters = parameters
+        Named.__init__(self, references, parent, token, [], None)
+
+    def location(self):
+        """
+        Return the location within the library.
+
+        Returns:
+            objects.Location: A location within the library.
+        """
+        defaultLocation = self.default_location(LocationKind.Function, parameters=self.parameters)
+
+        # The location of this is only depending on the reference name.
+        # We don't know what the resolved parent is.
+        return Location([defaultLocation[-1]])
 
 class Function(TemplateObject, Namespace):
     """
