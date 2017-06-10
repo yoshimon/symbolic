@@ -387,7 +387,7 @@ class UnknownLibraryReferenceError(SourceError):
 
         Args:
             anchor (lexer.Anchor): The source code anchor.
-            reference (str): The library reference.
+            reference (objects.Reference): The library reference.
         """
         super().__init__(anchor)
         self.reference = reference
@@ -406,7 +406,7 @@ class DuplicateParameterSignatureError(SourceError):
     An exception class, that indicates an ambiguous parameter signature.
     
     Attributes:
-        otherAnchor (lexer.Anchor): The other anchor that causes the error.
+        otherAnchor (lexer.Anchor): The other source code anchor.
     """
 
     def __init__(self, anchor, otherAnchor):
@@ -434,7 +434,7 @@ class VariableAlreadyExistsError(SourceError):
     An exception class, that indicates that a variable with a given name already exists.
     
     Attributes:
-        otherAnchor (lexer.Anchor): The other anchor that causes the error.
+        token (lexer.Symto): The variable token.
     """
 
     def __init__(self, token):
@@ -457,7 +457,12 @@ class VariableAlreadyExistsError(SourceError):
         return super().__str__() + 'A variable named "{0}" already exists.'.format(str(self.token))
 
 class VariableNotFoundError(SourceError):
-    """An exception class, that indicates that a variable with a given name was not found."""
+    """
+    An exception class, that indicates that a variable with a given name was not found.
+    
+    Attributes:
+        token (lexer.Symto): The variable token.
+    """
 
     def __init__(self, token):
         """
@@ -491,7 +496,14 @@ class LValueRequiredError(SourceError):
         return super().__str__() + 'L-value required.'.format(str(self.anchor))
 
 class BinaryOperatorOverloadNotFoundError(SourceError):
-    """An exception class, that indicates that a binary operator overload was not found."""
+    """
+    An exception class, that indicates that a binary operator overload was not found.
+    
+    Attributes:
+        token (lexer.Symto): The binary operator token.
+        lhs (objects.Typename): The left-hand side typename.
+        rhs (objects.Typename): The right-hand side typename.
+    """
 
     def __init__(self, token, lhs, rhs):
         """
@@ -517,7 +529,13 @@ class BinaryOperatorOverloadNotFoundError(SourceError):
         return super().__str__() + 'Could not find any matching binary operator overloads for "{0}({1}, {2})".'.format(str(self.token), str(self.lhs), str(self.rhs))
 
 class UnaryOperatorOverloadNotFoundError(SourceError):
-    """An exception class, that indicates that a unary operator overload was not found."""
+    """
+    An exception class, that indicates that a unary operator overload was not found.
+    
+    Attributes:
+        token (lexer.Symto): The unary operator token.
+        typename (objects.Typename): The parameter typename.
+    """
 
     def __init__(self, token, typename):
         """
@@ -541,14 +559,20 @@ class UnaryOperatorOverloadNotFoundError(SourceError):
         return super().__str__() + 'Could not find any matching unary operator overloads for "{0}({1})".'.format(str(self.token), str(self.typename))
 
 class FunctionOverloadNotFoundError(SourceError):
-    """An exception class, that indicates that a function overload was not found."""
+    """
+    An exception class, that indicates that a function overload was not found.
+    
+    Attributes:
+        token (lexer.Symto): The function token.
+        parameters ([objects.Parameters]): The parameters of the function.
+    """
 
     def __init__(self, token, parameters):
         """
         Initialize the object.
 
         Args:
-            token (lexer.Symto): The unary operator token.
+            token (lexer.Symto): The function token.
             parameters ([objects.Parameters]): The parameters of the function.
         """
         super().__init__(token.anchor)
@@ -577,7 +601,23 @@ class InvalidArrayIndexTypeError(SourceError):
         return super().__str__() + 'Invalid array index type. Array indices must be integers.'
 
 class MemberNotFoundError(SourceError):
-    """An exception class, that indicates that a struct member was not found."""
+    """
+    An exception class, that indicates that a struct member was not found.
+    
+    Attributes:
+        memberName (str): The name of the member associated with this error.
+    """
+
+    def __init__(self, anchor, memberName):
+        """
+        Initialize the object.
+
+        Args:
+            anchor (lexer.Anchor): The error anchor.
+            memberName (str): The member name.
+        """
+        super().__init__(anchor)
+        self.memberName = memberName
 
     def __str__(self):
         """
@@ -586,7 +626,7 @@ class MemberNotFoundError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + "Could not find member."
+        return super().__str__() + "Could not find member '{0}'.".format(self.memberName)
 
 class InvalidArrayDimensionsError(SourceError):
     """An exception class, that indicates that an invalid array bounds was provided."""

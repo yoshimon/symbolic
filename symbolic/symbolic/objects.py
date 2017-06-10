@@ -1681,7 +1681,7 @@ class Struct(TemplateObject, Namespace):
                     if member.token == memberName:
                         return memberList.typename
 
-        raise MemberNotFoundError(errorAnchor)
+        raise MemberNotFoundError(errorAnchor, memberName)
 
     @staticmethod
     def parse_template(parser, isTemplate):

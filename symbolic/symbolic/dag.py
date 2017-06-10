@@ -119,8 +119,8 @@ class ResolvedDependencyLocation:
             dependencies ([dag.Dependency]): The dependencies at this location.
             subLocations ({str, dag.ResolvedDependencyLocation}): The sub-locations.
         """
-        self.dependencies = dependencies if dependencies else []
-        self.subLocations = subLocations if subLocations else {}
+        self.dependencies = dependencies if dependencies is not None else []
+        self.subLocations = subLocations if subLocations is not None else {}
 
 class NavigationQuery:
     """
@@ -861,7 +861,10 @@ class ProjectDependencyCollection:
             currentParent = currentParent.parent
 
         if location:
-            locationsWithoutLibName.append(Location([location[-1]]))
+            if parent is not None and parent.parent is None:
+                locationsWithoutLibName.append(location)
+            else:
+                locationsWithoutLibName.append(Location([location[-1]]))
 
         # Find the library and the object in the library
         lookup = None
@@ -946,6 +949,8 @@ class ProjectDependencyCollection:
 
                             if parameterMismatch:
                                 continue
+
+                            matchedDependency = dependency
                         elif isinstance(dependencyLocatable, Alias):
                             # If it is an alias then we have to lookup the aliased type instead
                             # since aliases don't have any sublocations.
@@ -956,13 +961,16 @@ class ProjectDependencyCollection:
                                 aliasNavResult = self.navigate_alias_base(aliasNavResult)
                                 libName = aliasNavResult.libName
                                 resolvedDependencyLocation = aliasNavResult.resolvedDependencyLocation
+                                matchedDependency = resolvedDependencyLocation.dependencies[0]
                         elif isinstance(dependencyLocatable, Template):
                             resolvedDependencyLocation = self.instantiate_template(dependencyLocatable, dependencyRL.templateParameters, rl.templateParameters, references)
+                            matchedDependency = resolvedDependencyLocation.dependencies[0]
+                        else:
+                            matchedDependency = dependency
 
                         # Step down this namespace
                         allSubLocationsFound = True
                         lookup = resolvedDependencyLocation
-                        matchedDependency = lookup.dependencies[0]
                         break
 
                 if allSubLocationsFound:
@@ -1145,7 +1153,7 @@ class ProjectDependencyCollection:
                 # Register dependency at this location
                 existingDependencies.append(dependency)
             else:
-                lookup[rl.name] = ResolvedDependencyLocation([dependency], {})
+                lookup[rl.name] = ResolvedDependencyLocation([dependency])
 
     def insert_unit(self, rootNamespace):
         """
@@ -1154,20 +1162,16 @@ class ProjectDependencyCollection:
         Args:
             rootNamespace (objects.Namespace): The global namespace.
         """
-        # Create a dependency for every object
-        references = rootNamespace.references
-        locatables = deque(rootNamespace.locatables)
+        locatables = deque()
+        locatables.append(rootNamespace)
         while locatables:
             locatable = locatables.popleft()
+            
+            # NOTE: instructions are resolved later.
+            # Functions will buffer up instructions below.
+            if not isinstance(locatable, Instruction):
+                self.insert(locatable)
 
-            # Register it
-            self.insert(locatable)
-
-            # Recursive objects (Namespaces, Functions)
-            children = getattr(locatable, "locatables", None)
-            locatables += children if children is not None else []
-
-            # Connect immediate unresolved dependencies
             if isinstance(locatable, Function):
                 # The unknown return type
                 self.insert(locatable.returnTypename)
@@ -1184,6 +1188,9 @@ class ProjectDependencyCollection:
             elif isinstance(locatable, MemberList):
                 # Unknown member types.
                 self.insert(locatable.typename)
+
+            if isinstance(locatable, Namespace):
+                locatables += locatable.locatables
 
     def begin_library(self, libName):
         """
