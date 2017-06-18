@@ -471,7 +471,7 @@ class BaseParser:
                 bracketLevel = len(bracketStack)
                 if self.match_push_open_bracket(bracketStack, startDelim):
                     t = Symto.with_bracket_level(bracketStack[-1], bracketLevel)
-                    tokens.append(bracketStack[-1])
+                    tokens.append(t)
                 else:
                     t = Symto.with_bracket_level(self.token, bracketLevel)
                     if any(self.match_pop_close_bracket(bracketStack, endDelim) for endDelim in endDelims):
