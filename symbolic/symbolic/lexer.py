@@ -164,6 +164,16 @@ class Symto:
         self.bracketLevel = -1 # Filled in by special instructions to indicate the bracket nesting level.
         
         # Op (for convenience)
+        self.isBinaryOp = False
+        self.isBinaryLeftAssociative = False
+        self.isBinaryRightAssociative = False
+        self.binaryPrecedence = 0
+        
+        self.isUnaryOp = False
+        self.isUnaryLeftAssociative = False
+        self.isUnaryRightAssociative = False
+        self.unaryPrecedence = 0
+
         self.isOp = kind == Token.Operator
         if self.isOp:
             self.isBinaryOp = text in Ops.binary
@@ -183,10 +193,14 @@ class Symto:
         self.isOpenBracket = text in SymbolicLexer.openBrackets
         if self.isOpenBracket:
             self.matchingCloseBracket = SymbolicLexer.closeBrackets[SymbolicLexer.openBrackets.index(text)]
+        else:
+            self.matchingCloseBracket = ""
 
         self.isCloseBracket = text in SymbolicLexer.closeBrackets
         if self.isCloseBracket:
             self.matchingOpenBracket = SymbolicLexer.openBrackets[SymbolicLexer.closeBrackets.index(text)]
+        else:
+            self.matchingOpenBracket = ""
 
     def update(self, other, kind, text):
         """
@@ -509,6 +523,9 @@ class Ops:
             '&&': [11, True],
             
             '||': [12, True],
+
+            '?': [13, False],
+            ':': [13, False],
             
             ':=': [14, False],
             '=': [14, False],

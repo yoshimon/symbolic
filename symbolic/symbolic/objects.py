@@ -973,6 +973,36 @@ class Expression(Named):
         return result
 
     @staticmethod
+    def parenthesize_ternary_operators(tokens):
+        """
+        Parenthesize the expression between ternary operators.
+
+        Args:
+            tokens ([lexer.Symto]): The token list.
+        Returns:
+            ([lexer.Symto]): The new token list.
+        """
+        result = []
+
+        openCount = 0
+        for t in tokens:
+            if t == "?":
+                result.append(t)
+                result.append(Symto.after_token(result[-1], Token.Punctuation, "("))
+                openCount += 1
+            elif t == ":":
+                result.append(Symto.after_token(result[-1], Token.Punctuation, ")"))
+                result.append(t)
+                openCount -= 1
+            else:
+                result.append(t)
+
+        if openCount != 0:
+            raise InvalidExpressionError(tokens[0].anchor)
+
+        return result
+
+    @staticmethod
     def to_postfix(tokens):
         """
         Convert a token list to a postfix expression.
@@ -989,7 +1019,11 @@ class Expression(Named):
             Template = 3
             Tuple = 4
 
+        # Stringify template arguments.
         tokens = Expression.stringify_template_arguments(tokens)
+
+        # Parenthesize ternary operator as binary operators.
+        tokens = Expression.parenthesize_ternary_operators(tokens)
 
         skip = 0
         out, stack, states = [], [], [State.Default]
