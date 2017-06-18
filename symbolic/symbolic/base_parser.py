@@ -485,6 +485,8 @@ class BaseParser:
             if failed:
                 self.pop_state()
                 return []
+
+            self.remove_state()
         else:
             self.pop_state()
 
