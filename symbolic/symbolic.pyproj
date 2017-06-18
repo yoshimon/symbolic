@@ -30,6 +30,9 @@
     <Compile Include="preprocessors\jinja.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="symbolic\base_parser.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="symbolic\dag.py">
       <SubType>Code</SubType>
     </Compile>

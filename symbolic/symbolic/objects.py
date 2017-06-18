@@ -19,6 +19,7 @@ from symbolic.lexer import SymbolicLexer, Symto
 from symbolic.formatter import PrettyString
 from symbolic.algorithm import Algorithm
 from symbolic.language import Language
+from symbolic.base_parser import BaseParser
 
 class Decorators:
     """A collection of custom decorators."""
@@ -903,6 +904,75 @@ class Expression(Named):
         return Location([RelativeLocation(LocationKind.Unresolved, str(self.token))])
 
     @staticmethod
+    def stringify_template_argument_block(parser, result, previousToken):
+        """
+        Stringify the template arguments for a given template argument block.
+
+        Args:
+            parser (lexer.BaseParser): The parser to use.
+            result (list): A list of tokens to append to.
+        Returns:
+            bool: True, if the parsing succeeded. Otherwise False.
+        """
+        # Fetch all tokens in <...> if such a block follows now.
+        templateArgs = parser.fetch_block("<", [">", ">>"])
+        if not templateArgs:
+            return True
+
+        # Last template argument may not be empty <a,b,>
+        if templateArgs[-1] == ",":
+            return False
+
+        # Opening bracket.
+        result.append(Symto.after_token(previousToken, Token.Operator, "<"))
+
+        # Parse the template argument list.
+        # Concatenate all tokens to a space-separated string,
+        # commas indicate a new template argument.
+        currentArg = ""
+        for arg in templateArgs:
+            if arg.bracketLevel == 0 and arg == ",":
+                result.append(Symto.after_token(result[-1], Token.String, '"' + currentArg + '"'))
+                currentArg = ""
+            else:
+                currentArg += " " + arg.without_quotes() if currentArg else arg.without_quotes()
+
+        if currentArg:
+            result.append(Symto.after_token(result[-1], Token.String, '"' + currentArg + '"'))
+
+        if parser.previous() == ">>":
+            result.append(Symto.after_token(result[-1], Token.String, '">"'))
+
+        # Closing bracket.
+        result.append(Symto.after_token(result[-1], Token.Operator, ">"))
+
+        return True
+
+    @staticmethod
+    def stringify_template_arguments(tokens):
+        """
+        Simplify the template arguments to strings in a given token list.
+
+        Args:
+            tokens (list): The token sequence.
+        Returns:
+            list: The new tokens after simplification.
+        """
+        result = []
+
+        # Identify template tokens <
+        parser = BaseParser(None, None, tokens)
+        while not parser.is_eof():
+            # Name<...> is what we are looking for.
+            t = parser.consume()
+            result.append(t)
+            if t.kind == Token.Name and not parser.is_eof():
+                if not Expression.stringify_template_argument_block(parser, result, result[-1]):
+                    raise InvalidExpressionError(tokens[0].anchor)
+
+        return result
+
+    @staticmethod
     def to_postfix(tokens):
         """
         Convert a token list to a postfix expression.
@@ -919,6 +989,8 @@ class Expression(Named):
             Template = 3
             Tuple = 4
 
+        tokens = Expression.stringify_template_arguments(tokens)
+
         skip = 0
         out, stack, states = [], [], [State.Default]
         isNextOpenParenFunction = False
@@ -932,8 +1004,6 @@ class Expression(Named):
             prev = tokens[i-1] if i > 0 else None
             t1 = tokens[i+1] if i < len(tokens) - 1 else None
             t2 = tokens[i+2] if i < len(tokens) - 2 else None
-            t1s = str(t1)
-            t2s = str(t2)
 
             if t.isTerminal:
                 if wasLastTerminal:
@@ -949,18 +1019,18 @@ class Expression(Named):
 
                     # Function, Template
                     if t.kind == Token.Name:
-                        if t1s == '(':
+                        if t1 == '(':
                             kind = ExpressionAtomKind.FunctionBegin
                             states.append(State.Function)
                             stack.append(ExpressionAtom(t, ExpressionAtomKind.FunctionEnd))
                             isNextOpenParenFunction = True
-                        elif t1s == '[':
+                        elif t1 == '[':
                             kind = ExpressionAtomKind.ArrayBegin
                             states.append(State.Array)
                             stack.append(ExpressionAtom(t, ExpressionAtomKind.ArrayEnd))
-                        elif t1s == '<':
+                        elif t1 == '<':
                             # K=2 lookahead
-                            if (not t2 is None) and (t2.kind == Token.Literal.String or t2s == ">"):
+                            if (not t2 is None) and (t2.kind == Token.Literal.String or t2 == ">"):
                                 kind = ExpressionAtomKind.TemplateBegin
                                 states.append(State.Template)
                                 stack.append(ExpressionAtom(t, ExpressionAtomKind.TemplateEnd))
@@ -970,7 +1040,7 @@ class Expression(Named):
                 # We can fetch a literal in the next cycle again
                 wasLastTerminal = False
 
-                if str(t) == ',':
+                if t == ',':
                     # We better have some output already.
                     if len(out) == 0:
                         raise InvalidExpressionError(t.anchor)
@@ -992,19 +1062,19 @@ class Expression(Named):
 
                     # Add comma as delimiter
                     out.append(ExpressionAtom(t, ExpressionAtomKind.Delimiter))
-                elif (t.isOpenBracket and str(t) != '<') or (str(t) == '<' and states[-1] == State.Template):
-                    if str(t) == '(':
+                elif (t.isOpenBracket and t != '<') or (t == '<' and states[-1] == State.Template):
+                    if t == '(':
                         # Is this a potential tuple?
                         if not isNextOpenParenFunction:
                             states.append(State.Tuple)
                         else:
                             isNextOpenParenFunction = False
-                    elif str(t) == '[':
+                    elif t == '[':
                         if states[-1] != State.Array:
                             raise MissingArrayTypeError(t.anchor)
 
                     stack.append(ExpressionAtom(t, -1))
-                elif (t.isCloseBracket and str(t) != '>') or (str(t) == '>' and states[-1] == State.Template): # Special case for template >
+                elif (t.isCloseBracket and t != '>') or (t == '>' and states[-1] == State.Template): # Special case for template >
                     # Keep track of how many parameters were added
                     if Algorithm.pop_while(stack, lambda atom: atom.token is not None and not atom.token == t.matchingOpenBracket, lambda atom: out.append(atom)):
                         raise MissingBracketsError(t.anchor)
@@ -1031,13 +1101,13 @@ class Expression(Named):
                                 out.append(ExpressionAtom(None, ExpressionAtomKind.BinaryOp))
 
                             # If this is a template function call switch to that state.
-                            if t1s == "(":
+                            if t1 == "(":
                                 out.append(ExpressionAtom(None, ExpressionAtomKind.FunctionBegin))
                                 states.append(State.Function)
                                 stack.append(ExpressionAtom(None, ExpressionAtomKind.FunctionEnd))
                                 isNextOpenParenFunction = True
                                 skip = 1
-                            elif t1s == "[":
+                            elif t1 == "[":
                                 out.append(ExpressionAtom(None, ExpressionAtomKind.ArrayBegin))
                                 states.append(State.Array)
                                 stack.append(ExpressionAtom(None, ExpressionAtomKind.ArrayEnd))
@@ -1417,7 +1487,7 @@ class Function(TemplateObject, Namespace):
 
             hasExplicitReturnType = bool(returnTypenameTemplateTokens)
         else:
-            returnTypename = Typename.try_parse(parser, allowPartialMask=True)
+            returnTypename = Typename.try_parse(parser)
             hasExplicitReturnType = returnTypename is not None
 
         # If the next token is not an ID then returnTypename
@@ -1434,7 +1504,7 @@ class Function(TemplateObject, Namespace):
         
         if hasExplicitReturnType:
             # Extensions can be explicitly scoped
-            extensionTypename = Typename.try_parse(parser, allowPartialMask=True)
+            extensionTypename = Typename.try_parse(parser)
 
             # None: implicit return value
             # 1: Regular function or operator
@@ -1468,7 +1538,7 @@ class Function(TemplateObject, Namespace):
 
         if isTemplate:
             # Fetch whatever is in the upcoming parameter list, if there is one.
-            parameterTemplateTokens = parser.fetch_block("(", ")")
+            parameterTemplateTokens = parser.fetch_block("(", [")"])
         elif parser.match('('):
             parameters = parser.gather_objects([Parameter], ',')
             parser.expect(')')
@@ -1484,7 +1554,7 @@ class Function(TemplateObject, Namespace):
         parser.namespaceStack.append(func)
         try:
             if isTemplate:
-                func.body = parser.fetch_block('{', '}')
+                func.body = parser.fetch_block('{', ['}'])
                 parser.match(';')
             else:
                 parent.locatables.append(func)
@@ -1746,7 +1816,7 @@ class Struct(TemplateObject, Namespace):
         parser.namespaceStack.append(struct)
         try:
             if isTemplate:
-                struct.body = parser.fetch_block('{', '}')
+                struct.body = parser.fetch_block('{', ['}'])
                 parser.match(';')
             else:
                 parent.locatables.append(struct)
@@ -1843,7 +1913,7 @@ class Alias(TemplateObject):
         targetTypename = None
         body = None
         if isTemplate:
-            body = parser.fetch_block('{', '}')
+            body = parser.fetch_block('{', ['}'])
         else:
             parser.expect('{')
             targetTypename = Typename.parse(parser)
@@ -2126,34 +2196,29 @@ class Typename(Locatable):
         return '.'.join(strings)
 
     @staticmethod
-    def try_parse_template_parameters(parser, allowPartialMask=False):
+    def try_parse_template_parameters(parser, name):
         """
         Parse the template parameters of the typename.
 
         Args:
             parser (parsers.UnitParser): The parser to use.
-            allowPartialMask (bool): Specifies whether partial masks are allowed, containing strings and identifiers.
+            name (lexer.Symto): The typename token.
         Returns:
             [objects.TemplateParameter]: The template parameter list.
         """
-        templateParameters = []
-        parameterMask = [Token.Name, Token.Literal.String] if allowPartialMask else [Token.Literal.String]
-        
-        parser.push_state()
-        if parser.match("<"):
-            while True:
-                token = parser.match_any_kind(parameterMask)
-                if token is None:
-                    break
-                
-                templateParameters.append(TemplateParameter(parser.references, None, token, [], None, token))
-                parser.match(",")
-            
-            if not parser.match(">"):
-                parser.pop_state()
-                return []
+        result = []
 
-        return templateParameters
+        parser.push_state()
+        if Expression.stringify_template_argument_block(parser, result, name):
+            # Get rid of opening and closing brackets.
+            result = result[1:-1]
+
+            # Convert to template parameters.
+            result = [TemplateParameter(parser.references, None, t, [], None, t) for t in result]
+        else:
+            parser.pop_state()
+
+        return result
 
     @staticmethod
     def try_parse_array_dimensions(parser):
@@ -2199,13 +2264,12 @@ class Typename(Locatable):
         return dims
 
     @staticmethod
-    def try_parse(parser, allowPartialMask=False):
+    def try_parse(parser):
         """
         Parse a typename.
 
         Args:
             parser (parsers.UnitParser): The parser to use.
-            allowPartialMask (bool): Specifies whether partial masks are allowed, containing strings and identifiers.
         Returns:
             [objects.Typename]: The Typename or None, if no Typename was parsed.
         """
@@ -2215,12 +2279,12 @@ class Typename(Locatable):
             return None
 
         scope = [token]
-        templateParams = [Typename.try_parse_template_parameters(parser, allowPartialMask)]
+        templateParams = [Typename.try_parse_template_parameters(parser, token)]
         while True:
             token = parser.token
             if parser.match('.'):
                 scope += [parser.expect_kind(Token.Name)]
-                templateParams += [Typename.try_parse_template_parameters(parser, allowPartialMask)]
+                templateParams += [Typename.try_parse_template_parameters(parser, token)]
             else:
                 break
 

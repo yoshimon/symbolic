@@ -69,6 +69,7 @@ class Symto:
         matchingCloseBracket (str): The matching closing bracket, if the token is an opening bracket.
         isCloseBracket (bool): Indicates whether the token is a closing bracket.
         matchingOpenBracket (str): The matching opening bracket, if the token is a closing bracket.
+        bracketLevel (int): If this token is fetched from a block-parser, this will indicate the bracket level. Otherwise -1.
     """
 
     @staticmethod
@@ -113,6 +114,21 @@ class Symto:
         return Symto(kind, other.anchor.libName, other.anchor.fileName, text, other.anchor.line, other.anchor.column)
 
     @staticmethod
+    def with_bracket_level(other, bracketLevel):
+        """
+        Create a token from an existing token with a new bracket level.
+
+        Args:
+            other (lexer.Symto): The other token.
+            bracketLevel (int): The bracket level.
+        Returns:
+            Symto: The token.
+        """
+        t = Symto(other.kind, other.anchor.libName, other.anchor.fileName, other.text, other.anchor.line, other.anchor.column)
+        t.bracketLevel = bracketLevel
+        return t
+
+    @staticmethod
     def after_token(other, kind, text):
         """
         Create a token from an existing token.
@@ -145,6 +161,7 @@ class Symto:
         self.isNumber = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex]
         self.isInteger = self.kind in [Token.Number.Integer, Token.Number.Hex]
         self.isFloat = self.kind == Token.Number.Float
+        self.bracketLevel = -1 # Filled in by special instructions to indicate the bracket nesting level.
         
         # Op (for convenience)
         self.isOp = kind == Token.Operator
@@ -182,6 +199,16 @@ class Symto:
         """
         self.__init__(kind, other.anchor.libName, other.anchor.fileName, text, other.anchor.line, other.anchor.column)
 
+    def without_quotes(self):
+        """
+        Return the token string without quotes.
+
+        Returns:
+            str: The token string without quotes.
+        """
+        s = str(self)
+        return s[1:-1] if self.kind == Token.Literal.String else s
+    
     def __str__(self):
         """
         Return a string representation of the object.
