@@ -1151,6 +1151,16 @@ class ProjectDependencyCollection:
             else:
                 lookup[rl.name] = ResolvedDependencyLocation([dependency])
 
+            # If it's a type generate the default constructors.
+            if isinstance(locatable, Struct):
+                self._generate_type_constructor(locatable, locatable)
+            elif isinstance(locatable, Alias):
+                dep = Dependency(locatable)
+                nr = self.navigate_dependency(dep)
+                structNR = self.navigate_alias_base(nr)
+                struct = structNR.resolvedDependencyLocation.dependencies[0].locatable
+                self._generate_type_constructor(locatable, struct)
+
     def insert_unit(self, rootNamespace):
         """
         Insert an unresolved translation unit into the collection.
@@ -1169,15 +1179,7 @@ class ProjectDependencyCollection:
                 self.insert(locatable)
 
             if isinstance(locatable, Function):
-                # The unknown return type
-                self.insert(locatable.returnTypename)
-
-                # The unknown parameter types
-                for parameter in locatable.parameters:
-                    self.insert(parameter.typename)
-
-                # Remember this function for instruction verification later.
-                self.functions.append(locatable)
+                self._insert_function_dependencies(locatable)
             elif isinstance(locatable, Alias):
                 # The unknown typename
                 self.insert(locatable.targetTypename)
@@ -1187,6 +1189,23 @@ class ProjectDependencyCollection:
 
             if isinstance(locatable, Namespace):
                 locatables += locatable.locatables
+
+    def _insert_function_dependencies(self, func):
+        """
+        Insert a function and its dependencies.
+
+        Args:
+            func (objects.Function): The function to insert.
+        """
+        # The unknown return type
+        self.insert(func.returnTypename)
+
+        # The unknown parameter types
+        for parameter in func.parameters:
+            self.insert(parameter.typename)
+
+        # Remember this function for instruction verification later.
+        self.functions.append(func)
 
     def begin_library(self, libName):
         """
@@ -1225,6 +1244,35 @@ class ProjectDependencyCollection:
         # Close this library
         self.libName = None
         self.functions = []
+
+    def _generate_type_constructor(self, locatable, struct):
+        """
+        Generate a type constructor for a given type.
+
+        Args:
+            locatable (lexer.Symto): The locatable to generate the constructor for.
+            struct (objects.Struct): The type to generate a constructor for.
+        """
+        if Annotation.has("noconstructor", locatable.annotations):
+            return
+
+        # The return type is the struct.
+        returnTypename = Typename.from_location(locatable.references, locatable.location())
+        
+        # The parameters are deduced from the member lists.
+        parameters = []
+        for memberList in struct.locatables:
+            if isinstance(memberList, MemberList):
+                if not Annotation.has("uninitialized", memberList.annotations):
+                    parameters += [Parameter(None, member.token, [], None, memberList.typename, False) for member in memberList.members]
+
+        constructor = Function(locatable.references, locatable.parent, locatable.token, [], None, None, FunctionKind.Regular, returnTypename, parameters, None, None)
+        
+        # Insert the function itself.
+        self.insert(constructor)
+
+        # Insert the functions dependencies (return type and parameters).
+        self._insert_function_dependencies(constructor)
 
     def _resolve(self):
         """Resolve all dependencies."""

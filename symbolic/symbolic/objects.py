@@ -497,7 +497,9 @@ class Namespace(Named):
             return None
 
         # Name token
-        token = parser.match_name_optional()
+        token = parser.match_name()
+        if token is None:
+            return None
         
         # Semantic
         semantic = Annotation.parse_semantic(parser)
@@ -547,6 +549,15 @@ class TemplateObject(Named):
         """
         super().__init__(references, parent, token, annotations, semantic)
         self.body = body
+
+    def template_instance_name(self):
+        """
+        Returns the name for the template instance of this object.
+
+        Returns:
+            str: The name for the template instance of this object.
+        """
+        return "___{0}_template_{1}".format(str(self.token), str(id(self)))
 
 class InstructionKind(Enum):
     """
@@ -1299,12 +1310,10 @@ class FunctionKind(Enum):
     
     Regular (int): The Function is a regular function.
     Operator (int): The Function is an operator.
-    Extension (int): The Function is an extension.
     """
 
     Regular = 0
     Operator = 1
-    Extension = 2
 
 class Parameter(Named):
     """
@@ -1439,12 +1448,11 @@ class Function(TemplateObject, Namespace):
     Attributes:
         kind (objects.FunctionKind): The function kind.
         returnTypename (objects.Typename): The return typename.
-        extensionTypename (objects.Typename): The extension typename.
         parameters ([objects.Parameter]): The parameters.
     """
 
     @Decorators.validated
-    def __init__(self, references, parent, token, annotations, semantic, body, kind, returnTypename, extensionTypename, parameters, returnTypenameTemplateTokens, parameterTemplateTokens):
+    def __init__(self, references, parent, token, annotations, semantic, body, kind, returnTypename, parameters, returnTypenameTemplateTokens, parameterTemplateTokens):
         """
         Initialize the object.
 
@@ -1457,7 +1465,6 @@ class Function(TemplateObject, Namespace):
             body ([lexer.Symto]): The template body.
             kind (objects.FunctionKind): The function kind.
             returnTypename (objects.Typename): The return typename.
-            extensionTypename (objects.Typename): The extension typename.
             parameters ([objects.Parameter]): The parameters.
             returnTypenameTemplateTokens ([lexer.Symto]): The return typename tokens in a template.
             parameterTemplateTokens ([lexer.Symto]): The parameter tokens in a template.
@@ -1465,7 +1472,6 @@ class Function(TemplateObject, Namespace):
         # Has to be bound first for validation
         self.kind = kind
         self.returnTypename = returnTypename
-        self.extensionTypename = extensionTypename
         self.parameters = parameters
         self.returnTypenameTemplateTokens = returnTypenameTemplateTokens
         self.parameterTemplateTokens = parameterTemplateTokens
@@ -1474,10 +1480,7 @@ class Function(TemplateObject, Namespace):
 
     def validate(self):
         """Validate the object."""
-        if self.kind == FunctionKind.Extension:
-            self.validate_system_annotations('static', 'private', 'deprecate')
-        else:
-            self.validate_system_annotations('private', 'deprecate')
+        self.validate_system_annotations('private', 'deprecate')
 
     def location(self):
         """
@@ -1502,74 +1505,50 @@ class Function(TemplateObject, Namespace):
         annotations = Annotation.parse_annotations(parser)
 
         kind = FunctionKind.Regular
-        name = Symto.from_token(parser.token, parser.token.kind, '')
         parent = parser.namespace()
-        extensionTypename = None
         parameters = []
         parameterTemplateTokens = None
         returnTypename = None
         returnTypenameTemplateTokens = None
+
+        # 1. Return type
         if isTemplate:
-            returnTypenameTemplateTokens = parser.until_any(["operator", ".", "(", ":", "{"])
+            # Fetch all tokens until we run into one of these tokens.
+            returnTypenameTemplateTokens = parser.until_any(["(", ":", "{", "operator"])
 
-            # Step back if we parsed into an extension.
-            stepBack = parser.token == "." # We parsed the beginning of the extension already.
-            if stepBack:
-                # Deduce the name name below.
+            # We require a return type.
+            if returnTypenameTemplateTokens:
+                return None
+
+            # Go back one step, we parsed the function name.
+            if parser.previous() != "operator":
                 returnTypenameTemplateTokens.pop()
+                if returnTypenameTemplateTokens:
+                    return None
+                
                 parser.back()
-
-            hasExplicitReturnType = bool(returnTypenameTemplateTokens)
         else:
             returnTypename = Typename.try_parse(parser)
-            hasExplicitReturnType = returnTypename is not None
+            if returnTypename is None:
+                return None
 
-        # If the next token is not an ID then returnTypename
-        # is actually the function name / scope and the return type is implicit.
-        if parser.token.kind != Token.Name:
-            if hasExplicitReturnType:
-                name = returnTypenameTemplateTokens[-1] if isTemplate else returnTypename.scope[-1]
-                if name.kind != Token.Name:
-                    return None
+        # 2. Name
+        # Operators require 1 extra token
+        if parser.match("operator"):
+            kind = FunctionKind.Operator
+            name = parser.expect_kind(Token.Operator)
+        else:
+            # Try fetching the name.
+            # The function might be anonymous so this can fail.
+            name = parser.match_kind(Token.Name)
+            if name is None:
+                return None
 
-            if not isTemplate:
-                returnTypenameToken = Symto.from_token(parser.token, Token.Name, Typename.default_return_typename(parser.references, parent))
-                returnTypename = Typename(parser.references, parent, [returnTypenameToken])
-        
-        if hasExplicitReturnType:
-            # Extensions can be explicitly scoped
-            extensionTypename = Typename.try_parse(parser)
+        # Verify we have a valid function name.
+        if str(name) in Language.keywords:
+            return None
 
-            # None: implicit return value
-            # 1: Regular function or operator
-            # 2 or more: extension
-            if extensionTypename is not None:
-                if len(extensionTypename.scope) >= 2:
-                    # There should be no array specifications in the typename
-                    if any(dim for dim in extensionTypename.dims):
-                        return None
-
-                    # The last token should not have template args
-                    if extensionTypename.templateParameters[-1]:
-                        return None
-
-                    # Looks like an extension
-                    kind = FunctionKind.Extension
-                    name = extensionTypename.scope[-1]
-                    extensionTypename = Typename(parser.references, parent, extensionTypename.scope[:-1], templateParameters=extensionTypename.templateParameters[:-1], dims=extensionTypename.dims[:-1]) if extensionTypename else None
-                else:
-                    if len(extensionTypename.scope) == 1:
-                        # Regular function or operator
-                        name = extensionTypename.scope[0]
-
-                    # Zero out the extension guess
-                    extensionTypename = None
-
-                    # Operators require 1 extra token
-                    if str(name) == 'operator':
-                        kind = FunctionKind.Operator
-                        name = parser.expect_kind(Token.Operator)
-
+        # 3. Parameters
         if isTemplate:
             # Fetch whatever is in the upcoming parameter list, if there is one.
             parameterTemplateTokens = parser.fetch_block("(", [")"])
@@ -1579,12 +1558,9 @@ class Function(TemplateObject, Namespace):
 
         semantic = Annotation.parse_semantic(parser)
 
-        if str(name) in Language.keywords:
-            return None
-
         # Register the function with the current namespace
         parent = parser.namespace()
-        func = Function(parser.references, parent, name, annotations, semantic, None, kind, returnTypename, extensionTypename, parameters, returnTypenameTemplateTokens, parameterTemplateTokens)
+        func = Function(parser.references, parent, name, annotations, semantic, None, kind, returnTypename, parameters, returnTypenameTemplateTokens, parameterTemplateTokens)
         parser.namespaceStack.append(func)
         try:
             if isTemplate:
@@ -1625,8 +1601,10 @@ class Function(TemplateObject, Namespace):
             prettyString (formatter.PrettyString): The string to append the Function to.
         """
         # Emit return type.
-        if self.returnTypenameTemplateTokens:
-            prettyString += PrettyString.from_tokens(self.returnTypenameTemplateTokens, self.returnTypenameTemplateTokens[0].anchor.line)
+        prettyString += PrettyString.from_tokens(self.returnTypenameTemplateTokens, self.returnTypenameTemplateTokens[0].anchor.line)
+
+        # Emit name.
+        prettyString += self.template_instance_name()
 
         # Emit parameter list.
         if self.parameterTemplateTokens:
@@ -1690,7 +1668,9 @@ class Member(Named):
         if typename is None:
             return None
 
-        name = parser.match_name_optional()
+        name = parser.match_name()
+        if name is None:
+            return None
 
         semantic = Annotation.parse_semantic(parser)
         parser.match(';')
@@ -1759,6 +1739,14 @@ class MemberList(Named):
             if name is None:
                 break
             names.append(name)
+
+        if parser.match("="):
+            # Parse until we hit a statement end of a semantic.
+            expression = Expression.parse(parser, [";", ":"])
+
+            # Throw an error if no expression was parsed or if it is the empty expression
+            if (expression is None) or (not expression.postfixAtoms):
+                raise MissingExpressionError(parser.token.anchor)
 
         semantic = Annotation.parse_semantic(parser)
         if not parser.match(';'):
@@ -1841,7 +1829,10 @@ class Struct(TemplateObject, Namespace):
         if not parser.match('struct'):
             return None
 
-        token = parser.match_name_optional()
+        token = parser.match_name()
+        if token is None:
+            return None
+
         semantic = Annotation.parse_semantic(parser)
 
         # Register the struct with the current namespace
@@ -1887,7 +1878,7 @@ class Struct(TemplateObject, Namespace):
         Args:
             prettyString (formatter.PrettyString): The string to append the Function to.
         """
-        prettyString += 'struct '
+        prettyString += 'struct ' + self.template_instance_name()
 
 class Alias(TemplateObject):
     """
@@ -1942,7 +1933,10 @@ class Alias(TemplateObject):
         if not parser.match('using'):
             return None
 
-        token = parser.match_name_optional()
+        token = parser.match_name()
+        if token is None:
+            return None
+
         semantic = Annotation.parse_semantic(parser)
         targetTypename = None
         body = None
@@ -1982,7 +1976,7 @@ class Alias(TemplateObject):
         Args:
             prettyString (formatter.PrettyString): The string to append the Function to.
         """
-        prettyString += 'using '
+        prettyString += 'using ' + self.template_instance_name()
 
 class Annotation:
     """
@@ -2098,7 +2092,7 @@ class Annotation:
         Returns:
             bool: True, if an annotation with the specified name exists in the collection. Otherwise False.
         """
-        return any(len(e.tokens) == 1 and e.token == name for e in collection)
+        return any(len(e.expression.tokens) == 1 and e.token == name for e in collection)
 
     def __str__(self):
         """
@@ -2163,29 +2157,6 @@ class Typename(Locatable):
         loc = Location([RelativeLocation(LocationKind.Unresolved, s, templateParameters=self.templateParameters[i]) for i, s in enumerate(self.scopeStrings)])
         loc[-1].dims = self.dims
         return loc
-
-    @staticmethod
-    def default_return_typename_token():
-        """
-        Return the default return typename token.
-
-        Returns:
-            objects.Typename: The default return typename token.
-        """
-        return Symto(Token.Name, "$System", "", "void", 1, 1)
-
-    @staticmethod
-    def default_return_typename(references, parent):
-        """
-        Return the default return typename.
-
-        Args:
-            references ([objects.Reference]): The references visible to this locatable.
-            parent (objects.Locatable): The parent object.
-        Returns:
-            objects.Typename: The default return typename.
-        """
-        return Typename(references, parent, [Typename.default_return_typename_token()])
 
     def __eq__(self, other):
         """

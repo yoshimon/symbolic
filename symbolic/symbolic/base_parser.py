@@ -214,12 +214,21 @@ class BaseParser:
         """
         return self.match_any_kind([tokenType])
 
-    def match_name_optional(self):
+    def match_name(self):
         """
-        Match a name token, optionally returning the empty string.
+        Match a name token.
 
         Returns:
-            lexer.Symto: The token or an empty string token, if no matching name token was found.
+            lexer.Symto: The token or None, if no matching token was found.
+        """
+        return self.match_kind(Token.Name)
+
+    def match_name_optional(self):
+        """
+        Match a name token, returning the empty string if no match is found.
+
+        Returns:
+            lexer.Symto: The token or the empty string, if no matching token was found.
         """
         return self.match_kind_optional(Token.Name, Token.Name, "")
 
