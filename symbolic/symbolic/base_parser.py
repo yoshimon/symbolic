@@ -468,16 +468,15 @@ class BaseParser:
         if self.match(startDelim):
             bracketStack = []
             while not self.is_eof() and (bracketStack or not self.match_any(endDelims)):
-                bracketLevel = len(bracketStack)
                 if self.match_push_open_bracket(bracketStack, startDelim):
-                    t = Symto.with_bracket_level(bracketStack[-1], bracketLevel)
+                    t = Symto.with_bracket_level(bracketStack[-1], len(bracketStack))
                     tokens.append(t)
                 else:
                     if any(self.match_pop_close_bracket(bracketStack, endDelim) for endDelim in endDelims):
-                        t = Symto.with_bracket_level(self.previous(), bracketLevel)
+                        t = Symto.with_bracket_level(self.previous(), len(bracketStack))
                         tokens.append(t)
                     else:
-                        t = Symto.with_bracket_level(self.consume(), bracketLevel)
+                        t = Symto.with_bracket_level(self.consume(), len(bracketStack))
                         tokens.append(t)
 
             # Missing brackets or not fetching the end delimiter will result in failure.
