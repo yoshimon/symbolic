@@ -473,15 +473,15 @@ class BaseParser:
                     t = Symto.with_bracket_level(bracketStack[-1], bracketLevel)
                     tokens.append(t)
                 else:
-                    t = Symto.with_bracket_level(self.token, bracketLevel)
                     if any(self.match_pop_close_bracket(bracketStack, endDelim) for endDelim in endDelims):
+                        t = Symto.with_bracket_level(self.previous(), bracketLevel)
                         tokens.append(t)
                     else:
                         t = Symto.with_bracket_level(self.consume(), bracketLevel)
                         tokens.append(t)
 
             # Missing brackets or not fetching the end delimiter will result in failure.
-            failed = bracketStack or (tokens and self.previous() not in endDelims)
+            failed = bracketStack or (tokens and str(self.previous()) not in endDelims)
             if failed:
                 self.pop_state()
                 return []
