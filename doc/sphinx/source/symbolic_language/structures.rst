@@ -6,7 +6,7 @@ Description
 ===========
 Functions represent data transforms which operate on structures. So, to pass in data to any function, the data has to be represented as a structure. Structures are namespaces and can therefore contain other namespace objects. They can also contain special namespace objects  called *member lists*. A member list consists of multiple *members* which share a common type. The following example illustrates the declaration of a four-dimensional vector type :code:`float4`, which has one member list of type :code:`float` and four members:
 
-.. code-block:: c
+.. code-block:: cpp
 
     struct float4
     {
@@ -15,6 +15,16 @@ Functions represent data transforms which operate on structures. So, to pass in 
   
 This data can now be passed in to a function `add` which adds two vectors together:
 
-.. code-block:: c
+.. code-block:: cpp
 
     float4 add(float4 a, float4 b);
+
+Constructors
+============
+To initialize a structure within a function body, a function can be declared which returns an instance of the requested type. By default, the symbolic compiler will generate a *default constructor* function, when a new type is declared, whose parameter list is deduced from the members of structure. The :code:`float4` type declaration above will generate the following default constructor:
+
+.. code-block:: cpp
+
+    float4 float4(float x, float y, float z, float w);
+    
+If no default constructor is required, the :code:`[noconstructor]` annotation can be used on the type. Likewise, if a member list should not be part of the default constructors parameter list, the member list can be annotated with the :code:`[uninitialized]` annotation.
