@@ -27,4 +27,4 @@ To initialize a structure within a function body, a function can be declared whi
 
     float4 float4(float x, float y, float z, float w);
     
-If no default constructor is required, the :code:`[noconstructor]` annotation can be used on the type. Likewise, if a member list should not be part of the default constructors parameter list, the member list can be annotated with the :code:`[uninitialized]` annotation.
+If no default constructor is required, the :code:`[noconstructor]` annotation can be used on the type. Likewise, if a member list should not be part of the default constructors parameter list, the member list can be annotated with the :code:`[uninitialized]` annotation. The :code:`[uninitialized]` annotation has no effect, if the :code:`[noconstructor]` annotation is specified.
