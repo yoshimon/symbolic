@@ -1495,7 +1495,7 @@ class ProjectDependencyCollection:
             if exprType != nativeBoolNR:
                 raise PredicateExpectedError(instruction.token.anchor)
 
-            childScopeState = ScopeState.Loop if instruction.kind == InstructionKind.While else ScopeState.Default
+            childScopeState = ScopeState.Loop if instruction.kind == InstructionKind.While else scopeState
             self._verify_child_instructions(container, localVars, instruction, childScopeState)
         elif instruction.kind == InstructionKind.Else:
             # We need an if or elif above.
