@@ -85,7 +85,7 @@ class RelativeLocation:
             dims ([int]): The array dimensions. This is only meaningful on leaf location.
         """
         self.kind = kind
-        self.name = name
+        self.name = str(name)
         self.templateParameters = templateParameters if templateParameters is not None else []
         self.parameters = parameters if parameters is not None else []
         self.dims = [] if dims is None else dims
@@ -148,6 +148,15 @@ class RelativeLocation:
             (self.parameters == other.parameters) and \
             (self.templateParameters == other.templateParameters) and \
             (self.dims == other.dims)
+
+    def location(self):
+        """
+        Converts the relative location to a location.
+
+        Returns:
+            objects.Location: The location object.
+        """
+        return Location([self])
 
 class Location:
     """
@@ -299,6 +308,17 @@ class Locatable:
         """
         # Force this to be implemented by all derived classes
         assert(False)
+
+    def has_reference(self, name):
+        """
+        Return whether a reference with a given name exists.
+
+        Args
+            name (str): The reference name.
+        Returns:
+            bool: True, if the reference exists. Otherwise False.
+        """
+        return any(str(ref) == name for ref in self.references)
 
 class Named(Locatable):
     """
@@ -1569,7 +1589,7 @@ class Function(TemplateObject, Namespace):
             else:
                 parent.locatables.append(func)
                 if parser.match('{'):
-                    func.locatables = parser.gather_objects([Namespace, Struct, Alias, Template, Instruction, Function], args=['}'])
+                    func.locatables = parser.gather_objects([Instruction], args=['}'])
                     parser.expect('}')
                     parser.match(';')
                 elif not parser.match(';'):
@@ -1757,7 +1777,10 @@ class MemberList(Named):
             name = Symto.from_token(parser.token, Token.Text, '') if name is None else name
             members.append(Member(parser.references, parser.namespace(), name, annotations, semantic, typename))
         
-        return MemberList(parser.references, parser.namespace(), name, annotations, semantic, members, typename)
+        memberList = MemberList(parser.references, parser.namespace(), name, annotations, semantic, members, typename)
+        parent = parser.namespace()
+        parent.locatables.append(memberList)
+        return memberList
 
 class Struct(TemplateObject, Namespace):
     """A structure."""
@@ -1804,11 +1827,13 @@ class Struct(TemplateObject, Namespace):
         Returns:
             objects.Typename: The typename.
         """
+        memberNameStr = str(memberName)
+
         for locatable in self.locatables:
             if isinstance(locatable, MemberList):
                 memberList = locatable
                 for member in memberList.members:
-                    if member.token == memberName:
+                    if member.token == memberNameStr:
                         return memberList.typename
 
         raise MemberNotFoundError(errorAnchor, memberName)
@@ -1847,7 +1872,7 @@ class Struct(TemplateObject, Namespace):
                 parent.locatables.append(struct)
 
                 if parser.match('{'):
-                    struct.locatables += parser.gather_objects([Namespace, Struct, Alias, Template, MemberList, Function], args=['}'])
+                    parser.gather_objects([MemberList], args=['}'])
                     parser.expect('}')
                     parser.match(';')
                 elif not parser.match(';'):

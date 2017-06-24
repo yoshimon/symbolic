@@ -284,6 +284,7 @@ class ProjectDependencyCollection:
         """Initialize the object."""
         self.unresolvedDependencies = list()
         self.libraries = {} # The libraries lookup table
+        self.libRoots = {} # The library root namespace lookup table
         self.resolvedObjects = defaultdict(ResolvedDependencyLocation) # Maps each library to a set of resolved objects
         self.links = {} # Maps unresolved dependencies to their resolved counterparts.
         self.locationConflicts = [] # Locations that point to the same endpoint (conflicts).
@@ -395,14 +396,36 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult or None: The location of the resulting type of this AST.
         """
-        if lhs is None:
+        struct = lhs.dependency.locatable
+        if not isinstance(struct, Struct):
             return None
 
-        memberName = str(atom.token)
-        memberTypename = lhs.dependency.locatable.member_typename(atom.token.anchor, memberName)
-        structLib = str(lhs.explicitLocation[0])
-        memberNR = self._ast_try_navigate_dependency(memberTypename, libName=structLib)
+        memberTypename = struct.member_typename(atom.token.anchor, atom.token)
+        libName = str(lhs.explicitLocation[0])
+        memberNR = self._ast_try_navigate_dependency(memberTypename, libName=libName)
         return memberNR
+
+    def _try_verify_ast_namespace_object(self, atom, lhs):
+        """
+        Verify a namespace object in an AST.
+
+        Args:
+            atom (objects.ExpressionAtom): The root atom.
+            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+        Returns:
+            dag.AstNavigationResult or None: The location of the resulting type of this AST.
+        """
+        namespace = lhs.dependency.locatable
+        if not isinstance(namespace, Namespace):
+            return None
+
+        for loc in namespace.locatables:
+            if loc.token == atom.token:
+                libName = str(lhs.explicitLocation[0])
+                objNR = self._ast_try_navigate_dependency(loc, libName=libName)
+                return objNR
+
+        return None
 
     def _verify_ast_var(self, container, atom, children, localVars, newLocalVars, isOptional, lhs):
         """
@@ -419,15 +442,19 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
-        # Try to lookup a membver.
-        memberNR = self._try_verify_ast_member(atom, lhs)
-        if memberNR:
-            return memberNR
-
-        # Handle struct members and extensions.
         if lhs is not None:
-            # Try extensions.
-            pass
+            # Try dependent lookup as struct member.
+            memberNR = self._try_verify_ast_member(atom, lhs)
+            if memberNR:
+                return memberNR
+
+            # Try dependent lookup as namespace object.
+            namespaceObjNR = self._try_verify_ast_namespace_object(atom, lhs)
+            if namespaceObjNR:
+                return namespaceObjNR
+
+            # TODO: Try extensions.
+            assert(False)
 
         # Handle boolean values: true, false.
         if atom.token in ["true", "false"]:
@@ -435,13 +462,37 @@ class ProjectDependencyCollection:
             navResult = self._ast_navigate_dependency(boolTypename)
             return navResult
 
-        # Lookup the resolved variable type.
+        # Try local variables next.
         varNR = localVars.get(str(atom.token), None)
         if varNR is not None:
             return varNR
 
+        # Try as object lookup, climbing up the hierarchy.
+        # Could be a namespace, struct or alias.
+        navResult = self._ast_try_navigate_any([LocationKind.Namespace, LocationKind.Type], atom.token, container.references)
+        if navResult is not None:
+            return navResult
+
         if not isOptional:
             raise VariableNotFoundError(atom.token)
+
+        return None
+
+    def _ast_try_navigate_any(self, locationKinds, token, references):
+        """
+        Try to navigate any of the specified location types.
+
+        Args:
+            locationKinds ([objects.LocationKind]): The location kinds to navigate.
+            token (lexer.Symto): The name to navigate.
+            references ([objects.Reference]): The references.
+        """
+        for locationKind in locationKinds:
+            location = RelativeLocation(locationKind, token).location()
+            typename = Typename.from_location(references, location)
+            navResult = self._ast_try_navigate_dependency(typename)
+            if navResult:
+                return navResult
 
         return None
 
@@ -460,14 +511,8 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
-        rhsLocation = Location([RelativeLocation(LocationKind.Type, str(token))])
-        rhsTypename = Typename.from_location(references, rhsLocation)
-        if lhs is not None:
-            fullTypename = rhsTypename
-        else:
-            fullTypename = rhsTypename
-        typeNR = self._ast_try_navigate_dependency(fullTypename)
-        return typeNR
+        # TODO: account for lhs
+        return self._ast_try_navigate_any([LocationKind.Type], token, references)
 
     def _verify_ast_number(self, container, atom, children, localVars, newLocalVars, isOptional, lhs):
         """
@@ -517,8 +562,8 @@ class ProjectDependencyCollection:
         childTypenames = [Typename.from_location(container.references, childNR.explicitLocation) for childNR in childNRs]
         childParameters = [Parameter(container, child.atom.token, [], None, childTypenames[i], child.isRef) for i, child in enumerate(children)]
 
-        possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Regular, childParameters)
-
+        parent = container if lhs is None else lhs.dependency.locatable
+        possibleMatchNR = self._try_find_function(parent, atom.token, FunctionKind.Regular, childParameters)
         if possibleMatchNR is not None:
             # Lookup the return type.
             funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename)
@@ -748,7 +793,43 @@ class ProjectDependencyCollection:
 
         isNewVarOp = atom.token == ":="
         isStructOp = atom.token == "."
-            
+
+        # Try to deduce the LHS.
+        if isStructOp and lhs is None:
+            inOrderTokens = []
+            node = atom
+            nodeChildren = children
+            nodeLhs = None
+            nodeRhs = None
+            while node.token == ".":
+                nodeLhs = nodeChildren[0]
+                nodeRhs = nodeChildren[1]
+
+                inOrderTokens.append(nodeLhs.atom.token)
+                node = nodeRhs.atom
+                nodeChildren = nodeRhs.children
+
+            # Match longest library name and figure out which namespace to navigate to in the library.
+            matchedLibName = None
+            for i in reversed(range(1, len(inOrderTokens)+1)):
+                potentialLib = inOrderTokens[:i]
+                potentialLibName = Algorithm.join_dot(potentialLib)
+                if potentialLibName == self.libName or container.has_reference(potentialLibName):
+                    # Match found.
+                    # Skip the library nodes.
+                    matchedLibName = potentialLibName
+                    break
+
+            if matchedLibName is not None:
+                # Update current position in tree.
+                left = nodeLhs
+                right = nodeRhs
+                children = nodeChildren
+
+                # Update LHS using library root.
+                libRoot = self.libRoots[matchedLibName]
+                lhs = self._ast_navigate_dependency(libRoot, libName=matchedLibName)
+
         leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isNewVarOp, lhs=lhs)
         leftResolved = leftNR if isStructOp else None
         rightNR = self._verify_expression_ast_recursive(container, localVars, right, newLocalVars, lhs=leftResolved)
@@ -786,17 +867,17 @@ class ProjectDependencyCollection:
             pRight = Parameter(container, right.atom.token, [], None, rightTypename, right.is_lvalue())
                     
             # Try to find a match for the signature.
-            possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
+            possibleMatchNR = self._try_find_function(container.parent, atom.token, FunctionKind.Operator, [pLeft, pRight])
             if possibleMatchNR is None:
                 # Try it again with non-ref versions.
                 pLeft.isRef = not pLeft.isRef
-                possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
+                possibleMatchNR = self._try_find_function(container.parent, atom.token, FunctionKind.Operator, [pLeft, pRight])
                 if possibleMatchNR is None:
                     pRight.isRef = not pRight.isRef
-                    possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
+                    possibleMatchNR = self._try_find_function(container.parent, atom.token, FunctionKind.Operator, [pLeft, pRight])
                     if possibleMatchNR is None:
                         pLeft.isRef = not pLeft.isRef
-                        possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [pLeft, pRight])
+                        possibleMatchNR = self._try_find_function(container.parent, atom.token, FunctionKind.Operator, [pLeft, pRight])
 
             if possibleMatchNR is not None:
                 # Lookup the return type.
@@ -1107,6 +1188,22 @@ class ProjectDependencyCollection:
         location = dependency.baseLocation
         return self.navigate(locatable.anchor, locatable.references, locatable.grandParentWithoutRoot, location[:-1])
 
+    def try_merge_namespace(self, locatable):
+        """
+        Try to merge a namespace with existing namespaces.
+
+        Args:
+            locatable (objects.Locatable): The namespace to merge.
+        Returns:
+            objects.Locatable: The locatable.
+        """
+        if not isinstance(locatable, Namespace):
+            return locatable
+
+        # TODO: namespace merging
+
+        return locatable
+
     def insert(self, locatable):
         """
         Insert an object into the dependency collection.
@@ -1114,6 +1211,9 @@ class ProjectDependencyCollection:
         Args:
             locatable (objects.Locatable): The object to insert.
         """
+        # Merge namespaces
+        locatable = self.try_merge_namespace(locatable)
+
         # Create and cache the dependency
         dependency = Dependency(locatable)
         rl = dependency.baseLocation[-1]
@@ -1168,6 +1268,10 @@ class ProjectDependencyCollection:
         Args:
             rootNamespace (objects.Namespace): The global namespace.
         """
+        # Initialize library root namespace.
+        if self.libName not in self.libRoots:
+            self.libRoots[self.libName] = rootNamespace
+
         locatables = deque()
         locatables.append(rootNamespace)
         while locatables:
