@@ -521,8 +521,8 @@ class Namespace(Named):
         if token is None:
             return None
         
-        # Semantic
-        semantic = Annotation.parse_semantic(parser)
+        # NOTE(gokhan.ozdogan): namespaces do not have semantics.
+        # This is to allow merging to work.
         
         parser.expect('{')
 
@@ -530,7 +530,7 @@ class Namespace(Named):
         parent = parser.namespace()
         
         # Create the namespace object
-        namespace = Namespace(parser.references, parent, token, annotations, semantic)
+        namespace = Namespace(parser.references, parent, token, annotations, None)
         
         # Register it with the parent
         parent.locatables.append(namespace)
@@ -546,6 +546,22 @@ class Namespace(Named):
         parser.namespaceStack.pop()
 
         return namespace
+
+    def merge(self, other):
+        """
+        Merge another namespace into this namespace.
+
+        Args:
+            other (objects.Namespace): The namespace to merge with.
+        """
+        # Copy annotations.
+        self.annotations += other.annotations
+
+        # Re-parent children.
+        for locatable in other.locatables:
+            locatable.parent = self
+        
+        self.validate()
 
 class TemplateObject(Named):
     """

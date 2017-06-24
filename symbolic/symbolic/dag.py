@@ -285,6 +285,7 @@ class ProjectDependencyCollection:
         self.unresolvedDependencies = list()
         self.libraries = {} # The libraries lookup table
         self.libRoots = {} # The library root namespace lookup table
+        self.libNamespaces = dict() # Maps namespace locations to namespaces
         self.resolvedObjects = defaultdict(ResolvedDependencyLocation) # Maps each library to a set of resolved objects
         self.links = {} # Maps unresolved dependencies to their resolved counterparts.
         self.locationConflicts = [] # Locations that point to the same endpoint (conflicts).
@@ -1195,14 +1196,21 @@ class ProjectDependencyCollection:
         Args:
             locatable (objects.Locatable): The namespace to merge.
         Returns:
-            objects.Locatable: The locatable.
+            objects.Locatable: The merged namespace or the identity transform, if the locatable is not a namespace.
         """
-        if not isinstance(locatable, Namespace):
-            return locatable
+        if type(locatable) is not Namespace:
+            return False
 
-        # TODO: namespace merging
+        namespaceLoc = str(locatable.location())
+        namespace = self.libNamespaces.get(namespaceLoc, None)
+        if namespace is None:
+            self.libNamespaces[namespaceLoc] = locatable
+            return False
+        
+        # Re-parent children.
+        namespace.merge(locatable)
 
-        return locatable
+        return True
 
     def insert(self, locatable):
         """
@@ -1212,7 +1220,8 @@ class ProjectDependencyCollection:
             locatable (objects.Locatable): The object to insert.
         """
         # Merge namespaces
-        locatable = self.try_merge_namespace(locatable)
+        if self.try_merge_namespace(locatable):
+            return
 
         # Create and cache the dependency
         dependency = Dependency(locatable)
@@ -1337,6 +1346,7 @@ class ProjectDependencyCollection:
             # Step down
             lookup = lookup[s]
 
+        self.libNamespaces = dict()
         self.libName = libName
         self.functions = []
         self._libLocationNavResults = {}
