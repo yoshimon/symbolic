@@ -174,6 +174,7 @@ class Location:
             path ([objects.RelativeLocation]): A list of relative location specifiers.
         """
         self.path = path
+        self.pathWithoutRef = list(filter(lambda rl: rl.kind != LocationKind.Reference, self.path))
 
     def base(self):
         """
@@ -370,10 +371,11 @@ class Named(Locatable):
             objects.Location: A location within the library.
         """
         rl = [RelativeLocation(kind, str(self.token), templateParameters=templateParameters, parameters=parameters)]
-        if self.parent and self.parent.parent:
+        if self.parent is not None and self.parent.parent is not None:
             return Location(self.parent.location().path + rl)
         else:
-            return Location(rl)
+            libPrefix = [RelativeLocation(LocationKind.Reference, self.anchor.libName)]
+            return Location(libPrefix + rl)
 
     def validate_no_system_annotations(self):
         """Ensure that there are no system annotation associated to this object."""
@@ -1447,9 +1449,10 @@ class FunctionReference(Named):
         kind (objects.FunctionKind): The function kind.
         returnTypename (objects.Typename): The return typename.
         parameters ([objects.Parameter]): The parameters.
+        hasExplicitRef (bool): Indicates, whether references should be stripped from the location.
     """
 
-    def __init__(self, references, parent, token, kind, parameters):
+    def __init__(self, references, parent, token, kind, parameters, hasExplicitRef):
         """
         Initialize the object.
 
@@ -1459,9 +1462,11 @@ class FunctionReference(Named):
             token (lexer.Symto): A token which holds the name.
             kind (objects.FunctionKind): The function kind.
             parameters ([objects.Parameter]): The parameters.
+            hasExplicitRef (bool): Indicates, whether references should be stripped from the location.
         """
         self.kind = kind
         self.parameters = parameters
+        self.hasExplicitRef = hasExplicitRef
         Named.__init__(self, references, parent, token, [], None)
 
     def location(self):
@@ -1471,11 +1476,8 @@ class FunctionReference(Named):
         Returns:
             objects.Location: A location within the library.
         """
-        defaultLocation = self.default_location(LocationKind.Function, parameters=self.parameters)
-
-        # The location of this is only depending on the reference name.
-        # We don't know what the resolved parent is.
-        return Location([defaultLocation[-1]])
+        loc = self.default_location(LocationKind.Function, parameters=self.parameters)
+        return loc if self.hasExplicitRef else loc[-1].location()
 
 class Function(TemplateObject, Namespace):
     """

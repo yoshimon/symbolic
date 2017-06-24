@@ -55,6 +55,7 @@ class Dependency:
         # Cache some members from the locatable.
         self.location = locatable.location()
         self.baseLocation = self.location.base()
+        self.baseLocationWithoutRef = Location(self.baseLocation.pathWithoutRef)
         self.references = locatable.references
         
         # Two system annotations are valid for all dependencies: private, deprecate
@@ -222,7 +223,11 @@ class AstNavigationResult:
             navResult (dag.NavigationResult): The navigation result to wrap.
         """
         self.dependency = navResult.dependency
-        self.explicitLocation = Location([RelativeLocation(LocationKind.Reference, navResult.libName)] + self.dependency.location.path)
+        explicitLoc = self.dependency.location.path
+        if explicitLoc[0].kind != LocationKind.Reference:
+            explicitLoc = [RelativeLocation(LocationKind.Reference, navResult.libName)] + explicitLoc
+
+        self.explicitLocation = Location(explicitLoc)
 
     def as_array(self, dims):
         """
@@ -347,13 +352,12 @@ class ProjectDependencyCollection:
             ExpressionAtomKind.BinaryOp: self._verify_ast_binary_op
         }
 
-    def _ast_try_navigate_dependency(self, locatable, *, libName=None):
+    def _ast_try_navigate_dependency(self, locatable):
         """
         Try to navigate to a locatable object.
 
         Args:
             locatable (objects.Locatable): The locatable object to search for.
-            libName (str): The library to navigate in.
         Returns:
             dag.AstNavigationResult or None: The navigation result or None.
         """
@@ -371,17 +375,16 @@ class ProjectDependencyCollection:
         
         return astNavResult
 
-    def _ast_navigate_dependency(self, locatable, *, libName=None):
+    def _ast_navigate_dependency(self, locatable):
         """
         Navigate to a locatable object.
 
         Args:
             locatable (objects.Locatable): The locatable object to search for.
-            libName (str): The library to navigate in.
         Returns:
             dag.AstNavigationResult: The navigation result.
         """
-        navResult = self._ast_try_navigate_dependency(locatable, libName=libName)
+        navResult = self._ast_try_navigate_dependency(locatable)
         if navResult is None:
             raise DependencyNotFoundError(locatable.anchor, locatable.location())
         
@@ -403,7 +406,8 @@ class ProjectDependencyCollection:
 
         memberTypename = struct.member_typename(atom.token.anchor, atom.token)
         libName = str(lhs.explicitLocation[0])
-        memberNR = self._ast_try_navigate_dependency(memberTypename, libName=libName)
+        memberTypename.anchor.libName = libName
+        memberNR = self._ast_try_navigate_dependency(memberTypename)
         return memberNR
 
     def _try_verify_ast_namespace_object(self, atom, lhs):
@@ -423,7 +427,8 @@ class ProjectDependencyCollection:
         for loc in namespace.locatables:
             if loc.token == atom.token:
                 libName = str(lhs.explicitLocation[0])
-                objNR = self._ast_try_navigate_dependency(loc, libName=libName)
+                loc.token.anchor.libName = libName
+                objNR = self._ast_try_navigate_dependency(loc)
                 return objNR
 
         return None
@@ -563,8 +568,9 @@ class ProjectDependencyCollection:
         childTypenames = [Typename.from_location(container.references, childNR.explicitLocation) for childNR in childNRs]
         childParameters = [Parameter(container, child.atom.token, [], None, childTypenames[i], child.isRef) for i, child in enumerate(children)]
 
-        parent = container if lhs is None else lhs.dependency.locatable
-        possibleMatchNR = self._try_find_function(parent, atom.token, FunctionKind.Regular, childParameters)
+        isExplicitRef = lhs is not None
+        parent = lhs.dependency.locatable if isExplicitRef else container
+        possibleMatchNR = self._try_find_function(parent, atom.token, FunctionKind.Regular, childParameters, isExplicitRef=isExplicitRef)
         if possibleMatchNR is not None:
             # Lookup the return type.
             funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename)
@@ -757,7 +763,7 @@ class ProjectDependencyCollection:
 
         raise UnaryOperatorOverloadNotFoundError(atom.token, childTypename)
 
-    def _try_find_function(self, container, nameToken, kind, parameters):
+    def _try_find_function(self, container, nameToken, kind, parameters, *, isExplicitRef=False):
         """
         Try to find a function matching a given signature.
 
@@ -769,7 +775,7 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
-        locatable = FunctionReference(container.references, container, nameToken, kind, parameters)
+        locatable = FunctionReference(container.references, container, nameToken, kind, parameters, isExplicitRef)
         navResult = self._ast_try_navigate_dependency(locatable)
         return navResult
 
@@ -829,7 +835,7 @@ class ProjectDependencyCollection:
 
                 # Update LHS using library root.
                 libRoot = self.libRoots[matchedLibName]
-                lhs = self._ast_navigate_dependency(libRoot, libName=matchedLibName)
+                lhs = self._ast_navigate_dependency(libRoot)
 
         leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isNewVarOp, lhs=lhs)
         leftResolved = leftNR if isStructOp else None
@@ -936,7 +942,7 @@ class ProjectDependencyCollection:
         currentParent = parent
         while (currentParent is not None) and (currentParent.parent is not None):
             # Prepend the location of the parent to the search path.
-            parentPath = currentParent.location().path
+            parentPath = currentParent.location().pathWithoutRef
             otherLocationWithoutLibName = Location(parentPath + locationWithoutLibName)
             locationsWithoutLibName.append(otherLocationWithoutLibName)
             currentParent = currentParent.parent
@@ -977,18 +983,18 @@ class ProjectDependencyCollection:
                     dependencies = resolvedDependencyLocation.dependencies
 
                     # Perform ADL to filter out potential matches.
-                    possibleMatches = filter(lambda dependency: i < len(dependency.baseLocation) and rl.might_be_equal_to(dependency.baseLocation[i]), dependencies)
+                    possibleMatches = filter(lambda dependency: i < len(dependency.baseLocationWithoutRef) and rl.might_be_equal_to(dependency.baseLocationWithoutRef[i]), dependencies)
                     if not possibleMatches:
                         continue
 
                     # Find the best match out of the possible matches by counting the number of
                     # partial matches. The highest match count wins.
                     countPartialMatches = lambda templateParameters: functools.reduce(lambda numMatches, p: numMatches + 1 if p.partialMatch is not None else 0, templateParameters, 0) 
-                    dependencyCmp = lambda a, b: countPartialMatches(b.baseLocation[i].templateParameters) - countPartialMatches(a.baseLocation[i].templateParameters)
+                    dependencyCmp = lambda a, b: countPartialMatches(b.baseLocationWithoutRef[i].templateParameters) - countPartialMatches(a.baseLocationWithoutRef[i].templateParameters)
                     bestMatches = sorted(possibleMatches, key=functools.cmp_to_key(dependencyCmp))
 
                     for dependency in bestMatches:
-                        dependencyRL = dependency.baseLocation[i]
+                        dependencyRL = dependency.baseLocationWithoutRef[i]
                         dependencyLocatable = dependency.locatable
 
                         if isinstance(dependencyLocatable, (Function, FunctionReference)):
@@ -1032,8 +1038,8 @@ class ProjectDependencyCollection:
                             # since aliases don't have any sublocations.
                             # But only do that if this is not the last relative location
                             # since we are actually looking for the Alias in that case.
-                            if i != len(location.path) - 1:
-                                aliasNavResult = NavigationResult(resolvedLibName, resolvedDependencyLocation)
+                            if i != len(location.pathWithoutRef) - 1:
+                                aliasNavResult = NavigationResult(resolvedLibName, resolvedDependencyLocation, resolvedDependencyLocation.dependencies[0])
                                 aliasNavResult = self.navigate_alias_base(aliasNavResult)
                                 libName = aliasNavResult.libName
                                 resolvedDependencyLocation = aliasNavResult.resolvedDependencyLocation
