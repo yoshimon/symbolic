@@ -2233,15 +2233,17 @@ class Typename(Locatable):
                 s += ', '.join(str(parameter) for parameter in templateParameters)
                 s += '>'
 
-            # Array dims
-            if self.dims:
-                s += '['
-                s += ', '.join(str(arg) if arg is not None else "" for arg in self.dims)
-                s += ']'
-
             strings.append(s)
 
-        return '.'.join(strings)
+        s = ".".join(strings)
+
+        # Array dims
+        if self.dims:
+            s += '['
+            s += ', '.join(str(arg) if arg is not None else "" for arg in self.dims)
+            s += ']'
+
+        return s
 
     @staticmethod
     def try_parse_template_parameters(parser, name):
