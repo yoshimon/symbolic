@@ -115,6 +115,8 @@ class RelativeLocation:
             (self.kind == other.kind or self.kind == LocationKind.Unresolved or other.kind == LocationKind.Unresolved) and
             self.name == other.name and
             len(self.parameters) == len(other.parameters) and
+            Algorithm.zip_all(self.parameters, other.parameters,
+                              lambda p0, p1: p0.typename.dims == p1.typename.dims) and
             all(p0.isRef == p1.isRef for p0, p1 in zip(self.parameters, other.parameters)) and
             len(self.dims) == len(other.dims) and
             self.dims == other.dims and

@@ -1255,10 +1255,6 @@ class ProjectDependencyCollection:
                 for otherDependency in existingDependencies:
                     otherDependencyRL = otherDependency.baseLocation[-1]
 
-                    # If the location kinds are different then it is ambigous
-                    #if rl.kind != otherDependencyRL.kind:
-                    #    raise DuplicateNameError(locatable.anchor, otherDependency.locatable.anchor)
-
                     # If the template and signature matches then it might be a conflict
                     if rl.might_be_equal_to(otherDependencyRL):
                         # Partial matches must match exactly.
