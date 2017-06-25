@@ -572,15 +572,31 @@ class ProjectDependencyCollection:
         # Extract child information.
         childNRs = [self._verify_expression_ast_recursive(container, localVars, child, newLocalVars) for child in children]
         childTypenames = [Typename.from_location(container.references, childNR.explicitLocation) for childNR in childNRs]
-        childParameters = [Parameter(container, child.atom.token, [], None, childTypenames[i], child.isRef) for i, child in enumerate(children)]
+        baseChildParameters = [Parameter(container, child.atom.token, [], None, childTypenames[i], child.isRef) for i, child in enumerate(children)]
 
+        allChildParameters = [baseChildParameters]
         isExplicitRef = lhs is not None
-        parent = lhs.dependency.locatable if isExplicitRef else container
-        possibleMatchNR = self._try_find_function(parent, atom.token, FunctionKind.Regular, childParameters, isExplicitRef=isExplicitRef)
-        if possibleMatchNR is not None:
-            # Lookup the return type.
-            funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename)
-            return funcRetTypenameNR
+        kinds = [FunctionKind.Regular]
+        if isExplicitRef:
+            parent = lhs.dependency.locatable
+            if isinstance(parent, Struct):
+                kinds.append(FunctionKind.Property)
+                propChildParameters = list(baseChildParameters)
+                thisTypename = Typename.from_location(parent.references, lhs.dependency.location)
+                thisToken = Symto.from_token(parent.token, Token.Name, "this")
+                thisParameter = Parameter(container, thisToken, [], None, thisTypename, True)
+                propChildParameters.insert(0, thisParameter)
+                allChildParameters.append(propChildParameters)
+        else:
+            parent = container
+
+        for i, kind in enumerate(kinds):
+            childParameters = allChildParameters[i]
+            possibleMatchNR = self._try_find_function(parent, atom.token, kind, childParameters, isExplicitRef=isExplicitRef)
+            if possibleMatchNR is not None:
+                # Lookup the return type.
+                funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename)
+                return funcRetTypenameNR
 
         raise FunctionOverloadNotFoundError(atom.token, childParameters)
 
