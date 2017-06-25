@@ -394,7 +394,7 @@ class ProjectDependencyCollection:
 
         return navResult
 
-    def _try_verify_ast_member(self, atom, lhs):
+    def _try_verify_ast_member_or_property(self, atom, lhs):
         """
         Verify a struct member in an AST.
 
@@ -411,10 +411,18 @@ class ProjectDependencyCollection:
         if not isinstance(struct, Struct):
             return None
 
+        thisParameter = Parameter.this_parameter(struct.references, struct.location())
+        propertyNR = self._try_find_function(struct, atom.token, FunctionKind.Property, [thisParameter])
+        if propertyNR is not None:
+            # Lookup the return type.
+            funcRetTypenameNR = self._ast_navigate_dependency(propertyNR.dependency.locatable.returnTypename)
+            return funcRetTypenameNR
+
         memberTypename = struct.member_typename(atom.token.anchor, atom.token)
         libName = str(lhs.explicitLocation[0])
         memberTypename.anchor.libName = libName
         memberNR = self._ast_try_navigate_dependency(memberTypename)
+
         return memberNR
 
     def _try_verify_ast_namespace_object(self, atom, lhs):
@@ -460,7 +468,7 @@ class ProjectDependencyCollection:
         """
         if lhs is not None:
             # Try dependent lookup as struct member.
-            memberNR = self._try_verify_ast_member(atom, lhs)
+            memberNR = self._try_verify_ast_member_or_property(atom, lhs)
             if memberNR:
                 return memberNR
 
@@ -586,9 +594,7 @@ class ProjectDependencyCollection:
             if isinstance(parent, Struct):
                 kinds.append(FunctionKind.Property)
                 propChildParameters = list(baseChildParameters)
-                thisTypename = Typename.from_location(parent.references, lhs.dependency.location)
-                thisToken = Symto.from_token(parent.token, Token.Name, "this")
-                thisParameter = Parameter(container, thisToken, [], None, thisTypename, True)
+                thisParameter = Parameter.this_parameter(parent.references, lhs.dependency.location)
                 propChildParameters.insert(0, thisParameter)
                 allChildParameters.append(propChildParameters)
         else:
@@ -652,7 +658,7 @@ class ProjectDependencyCollection:
                 return baseTypeNR
 
         # Try it as a member first.
-        memberNR = self._try_verify_ast_member(atom, lhs)
+        memberNR = self._try_verify_ast_member_or_property(atom, lhs)
         if memberNR:
             return memberNR
 

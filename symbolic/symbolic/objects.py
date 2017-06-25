@@ -1450,6 +1450,19 @@ class Parameter(Named):
 
         return Parameter(parser.namespace(), token, annotations, semantic, typename, isRef)
 
+    @staticmethod
+    def this_parameter(references, location):
+        """
+        Creates a this-parameter for a given type.
+
+        Args:
+            references ([objects.Reference]): The references.
+            location (objects.Location): The typename location.
+        """
+        thisTypename = Typename.from_location(references, location)
+        thisToken = Symto(Token.Name, "", "", "this", -1, -1)
+        return Parameter(None, thisToken, [], None, thisTypename, True)
+
 class FunctionReference(Named):
     """
     A function reference.
@@ -1909,14 +1922,21 @@ class Struct(TemplateObject, Namespace):
         finally:
             parser.namespaceStack.pop()
 
-        # Add implicit "this" ref.
-        thisTypename = Typename.from_location(struct.references, struct.location())
+        # Verify unique names.
+        memberNames = {}
+        for loc in struct.locatables:
+            s = str(loc.token)
+            if s in memberNames:
+                t = memberNames[s]
+                raise DuplicateNameError(loc.token.anchor, t.anchor)
 
+            memberNames[s] = (s, loc.token)
+
+        # Add implicit "this" ref.
         for loc in struct.locatables:
             if isinstance(loc, Function):
                 loc.kind = FunctionKind.Property
-                thisName = Symto.from_token(loc.token, Token.Name, "this")
-                thisParameter = Parameter(loc, thisName, [], None, thisTypename, True)
+                thisParameter = Parameter.this_parameter(struct.references, struct.location())
                 loc.parameters.insert(0, thisParameter)
 
         return struct
