@@ -1616,7 +1616,9 @@ class Function(TemplateObject, Namespace):
                         parent.locatables.pop()
                         return None
 
-                    func.locatables[0].kind = InstructionKind.Return
+                    instruction = func.locatables[0]
+                    if instruction.kind == InstructionKind.Expression:
+                        instruction.kind = InstructionKind.Return
                 elif not parser.match(';'):
                     parent.locatables.pop()
                     return None
