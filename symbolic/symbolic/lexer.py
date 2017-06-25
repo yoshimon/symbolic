@@ -291,6 +291,7 @@ class SymbolicLexer(RegexLexer):
             (r'(\d+\.\d*|\.\d+|\d+[fF])[fF]?', Number.Float),
             (r'0x[0-9a-fA-F]+', Number.Hex),
             (r'\d+', Number.Integer),
+            (r'=>', Punctuation),
             (r'(:=|\+\+|--|<<|<<=|>>|>>=|~=|\|=|&=|^=|\+=|\*=|%=|-=|==|!=|<=|>=|&&|\|\|)', Operator),
             (r'[@.~!%^&*\+-=|?:<>/]', Operator),
             (r"'[^\']*'", String),

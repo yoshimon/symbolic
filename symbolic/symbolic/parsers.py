@@ -33,7 +33,7 @@ class UnitParser(BaseParser):
 
         return None
 
-    def gather_objects(self, classes, matchAfterSuccess = None, args = None):
+    def gather_objects(self, classes, matchAfterSuccess=None, args=None, firstMatchOnly=False):
         """
         Gather a list of parsable objects.
 
@@ -54,6 +54,8 @@ class UnitParser(BaseParser):
             if matchAfterSuccess is not None:
                 if not self.match(matchAfterSuccess):
                     break
+            if firstMatchOnly:
+                break
         return result
 
     def gather_namespace_objects(self):

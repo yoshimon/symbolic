@@ -1610,6 +1610,13 @@ class Function(TemplateObject, Namespace):
                     func.locatables = parser.gather_objects([Instruction], args=['}'])
                     parser.expect('}')
                     parser.match(';')
+                elif parser.match("=>"):
+                    func.locatables = parser.gather_objects([Instruction], args=[';'], firstMatchOnly=True)
+                    if not func.locatables:
+                        parent.locatables.pop()
+                        return None
+
+                    func.locatables[0].kind = InstructionKind.Return
                 elif not parser.match(';'):
                     parent.locatables.pop()
                     return None
@@ -1922,6 +1929,51 @@ class Struct(TemplateObject, Namespace):
             prettyString (formatter.PrettyString): The string to append the Function to.
         """
         prettyString += 'struct ' + self.template_instance_name()
+
+class Property(TemplateObject):
+    """
+    A type property.
+    """
+
+    def __init__(self, references, parent, token, annotations, semantic, body):
+        """Initialize the object."""
+        TemplateObject.__init__(self, references, parent, token, annotations, semantic, body)
+
+    @staticmethod
+    def parse_template(parser, isTemplate):
+        """
+        Parse the template.
+
+        Args:
+            parser (parsers.UnitParser): The parser to use.
+            isTemplate (bool): Indicates whether the object should be parsed as a template.
+        Returns:
+            objects.Alias: The alias or None, if no alias was parsed.
+        """
+        annotations = Annotation.parse_annotations(parser)
+        if not parser.match('using'):
+            return None
+
+        token = parser.match_name()
+        if token is None:
+            return None
+
+        semantic = Annotation.parse_semantic(parser)
+        
+        return
+
+    @staticmethod
+    def parse(parser, args):
+        """
+        Parse a structure.
+
+        Args:
+            parser (parsers.UnitParser): The parser to use.
+            args: Unused.
+        Returns:
+            objects.Alias: The parameter or None, if no alias was parsed.
+        """
+        return Property.parse_template(parser, False)
 
 class Alias(TemplateObject):
     """
