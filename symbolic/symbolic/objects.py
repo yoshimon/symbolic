@@ -965,13 +965,17 @@ class Expression(Named):
         Returns:
             bool: True, if the parsing succeeded. Otherwise False.
         """
+        parser.push_state()
+
         # Fetch all tokens in <...> if such a block follows now.
         templateArgs = parser.fetch_block("<", [">", ">>"])
         if not templateArgs:
+            parser.remove_state()
             return True
 
         # Last template argument may not be empty <a,b,>
         if templateArgs[-1] == ",":
+            parser.pop_state()
             return False
 
         # Opening bracket.
@@ -997,6 +1001,7 @@ class Expression(Named):
         # Closing bracket.
         result.append(Symto.after_token(result[-1], Token.Operator, ">"))
 
+        parser.remove_state()
         return True
 
     @staticmethod
@@ -1350,10 +1355,12 @@ class FunctionKind(Enum):
     
     Regular (int): The Function is a regular function.
     Operator (int): The Function is an operator.
+    Property (int): The Function is a type property.
     """
 
     Regular = 0
     Operator = 1
+    Property = 2
 
 class Parameter(Named):
     """
@@ -1789,14 +1796,6 @@ class MemberList(Named):
                 break
             names.append(name)
 
-        if parser.match("="):
-            # Parse until we hit a statement end of a semantic.
-            expression = Expression.parse(parser, [";", ":"])
-
-            # Throw an error if no expression was parsed or if it is the empty expression
-            if (expression is None) or (not expression.postfixAtoms):
-                raise MissingExpressionError(parser.token.anchor)
-
         semantic = Annotation.parse_semantic(parser)
         if not parser.match(';'):
             return None
@@ -1901,7 +1900,7 @@ class Struct(TemplateObject, Namespace):
                 parent.locatables.append(struct)
 
                 if parser.match('{'):
-                    parser.gather_objects([MemberList], args=['}'])
+                    parser.gather_objects([MemberList, Function], args=['}'])
                     parser.expect('}')
                     parser.match(';')
                 elif not parser.match(';'):
@@ -1909,6 +1908,16 @@ class Struct(TemplateObject, Namespace):
                     return None
         finally:
             parser.namespaceStack.pop()
+
+        # Add implicit "this" ref.
+        thisTypename = Typename.from_location(struct.references, struct.location())
+
+        for loc in struct.locatables:
+            if isinstance(loc, Function):
+                loc.kind = FunctionKind.Property
+                thisName = Symto.from_token(loc.token, Token.Name, "this")
+                thisParameter = Parameter(loc, thisName, [], None, thisTypename, True)
+                loc.parameters.insert(0, thisParameter)
 
         return struct
 
@@ -2314,15 +2323,12 @@ class Typename(Locatable):
         """
         result = []
 
-        parser.push_state()
         if Expression.stringify_template_argument_block(parser, result, name):
             # Get rid of opening and closing brackets.
             result = result[1:-1]
 
             # Convert to template parameters.
             result = [TemplateParameter(parser.references, None, t, [], None, t) for t in result]
-        else:
-            parser.pop_state()
 
         return result
 

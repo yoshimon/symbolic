@@ -95,6 +95,7 @@ class UnitParser(BaseParser):
             token = Symto.from_token(refTokens[0], Token.Token, refString)
             ref = Reference(token, annotations, semantic)
             self.references.append(ref)
+            self.remove_state()
 
     def namespace(self):
         """
