@@ -400,6 +400,9 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult or None: The location of the resulting type of this AST.
         """
+        if lhs is None:
+            return None
+
         struct = lhs.dependency.locatable
         if not isinstance(struct, Struct):
             return None
@@ -420,6 +423,9 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult or None: The location of the resulting type of this AST.
         """
+        if lhs is None:
+            return None
+
         namespace = lhs.dependency.locatable
         if not isinstance(namespace, Namespace):
             return None
@@ -606,7 +612,7 @@ class ProjectDependencyCollection:
             if childNR != intNR:
                 raise InvalidArrayIndexTypeError(atom.token.anchor)
 
-            if str(child.atom.token) != "1":
+            if child.atom.token != "1":
                 isScalar = False
 
         # Return the type of the underlying object.
@@ -616,13 +622,14 @@ class ProjectDependencyCollection:
         if varNR:
             # Make sure the indexing matches the type dimensions.
             varTypeDims = varNR.explicitLocation[-1].dims
-            expectedDims = max(1, len(varTypeDims))
-            if len(children) != expectedDims:
-                raise InvalidArrayIndexDimensionsError(atom.token.anchor, expectedDims)
+            if len(varTypeDims) > 0: # False positive
+                expectedDims = max(1, len(varTypeDims))
+                if len(children) != expectedDims:
+                    raise InvalidArrayIndexDimensionsError(atom.token.anchor, expectedDims)
 
-            # Remove array bounds.
-            baseTypeNR = varNR.as_base()
-            return baseTypeNR
+                # Remove array bounds.
+                baseTypeNR = varNR.as_base()
+                return baseTypeNR
 
         # Try it as a member first.
         memberNR = self._try_verify_ast_member(atom, lhs)
