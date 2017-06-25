@@ -388,6 +388,10 @@ class ProjectDependencyCollection:
         if navResult is None:
             raise DependencyNotFoundError(locatable.anchor, locatable.location())
         
+        # Copy array dimensions.
+        if isinstance(locatable, Typename):
+            navResult = navResult.as_array(locatable.dims)
+
         return navResult
 
     def _try_verify_ast_member(self, atom, lhs):
