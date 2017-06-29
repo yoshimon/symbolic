@@ -608,16 +608,16 @@ class MemberNotFoundError(SourceError):
         memberName (str): The name of the member associated with this error.
     """
 
-    def __init__(self, anchor, memberName):
+    def __init__(self, memberToken):
         """
         Initialize the object.
 
         Args:
             anchor (lexer.Anchor): The error anchor.
-            memberName (str): The member name.
+            memberName (lexer.Symto): The member token.
         """
-        super().__init__(anchor)
-        self.memberName = memberName
+        super().__init__(memberToken.anchor)
+        self.memberName = str(memberToken)
 
     def __str__(self):
         """

@@ -1859,14 +1859,14 @@ class Struct(TemplateObject, Namespace):
         """
         return self.default_location(LocationKind.Type)
 
-    def member_typename(self, errorAnchor, memberName):
+    def try_find_member_typename(self, errorAnchor, memberName):
         """
         Return the typename for a member.
 
         Args:
             memberName (str): The member to search for.
         Returns:
-            objects.Typename: The typename.
+            objects.Typename or None: The typename or None, if no matching member was found.
         """
         memberNameStr = str(memberName)
 
@@ -1877,7 +1877,7 @@ class Struct(TemplateObject, Namespace):
                     if member.token == memberNameStr:
                         return memberList.typename
 
-        raise MemberNotFoundError(errorAnchor, memberName)
+        return None
 
     @staticmethod
     def parse_template(parser, isTemplate):

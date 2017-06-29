@@ -394,9 +394,9 @@ class ProjectDependencyCollection:
 
         return navResult
 
-    def _try_verify_ast_member_or_property(self, atom, lhs):
+    def _try_verify_ast_member_or_property(self, container, atom, lhs):
         """
-        Verify a struct member in an AST.
+        Verify a struct member or property in an AST.
 
         Args:
             atom (objects.ExpressionAtom): The root atom.
@@ -405,25 +405,58 @@ class ProjectDependencyCollection:
             dag.AstNavigationResult or None: The location of the resulting type of this AST.
         """
         if lhs is None:
-            return None
+            if not isinstance(container, Function) or container.kind != FunctionKind.Property:
+                return None
 
-        struct = lhs.dependency.locatable
-        if not isinstance(struct, Struct):
-            return None
+            # Container is implicit LHS.
+            struct = container.parent
+            assert(isinstance(struct, Struct))
+        else:
+            # Deduce struct from LHS if possible.
+            struct = lhs.dependency.locatable
+            if not isinstance(struct, Struct):
+                return None
 
+        result = self._try_verify_ast_property(struct, atom.token)
+        if result is None:
+            result = self._try_verify_ast_member(struct, atom.token)
+
+        return result
+
+    def _try_verify_ast_property(self, struct, propertyName):
+        """
+        Verify a property in an AST.
+
+        Args:
+            struct (objects.Struct): The structure.
+            propertyName (lexer.Symto): The property name token.
+        Returns:
+            dag.AstNavigationResult or None: The location of the resulting type of this AST.
+        """
         thisParameter = Parameter.this_parameter(struct.references, struct.location())
-        propertyNR = self._try_find_function(struct, atom.token, FunctionKind.Property, [thisParameter])
+        propertyNR = self._try_find_function(struct, propertyName, FunctionKind.Property, [thisParameter])
         if propertyNR is not None:
             # Lookup the return type.
             funcRetTypenameNR = self._ast_navigate_dependency(propertyNR.dependency.locatable.returnTypename)
             return funcRetTypenameNR
 
-        memberTypename = struct.member_typename(atom.token.anchor, atom.token)
-        libName = str(lhs.explicitLocation[0])
-        memberTypename.anchor.libName = libName
-        memberNR = self._ast_try_navigate_dependency(memberTypename)
+        return None
 
-        return memberNR
+    def _try_verify_ast_member(self, struct, memberName):
+        """
+        Verify a member in an AST.
+
+        Args:
+            struct (objects.Struct): The structure.
+            memberName (lexer.Symto): The member name.
+        Returns:
+            dag.AstNavigationResult or None: The location of the resulting type of this AST.
+        """
+        memberTypename = struct.try_find_member_typename(memberName.anchor, memberName)
+        if memberTypename is None:
+            raise MemberNotFoundError(memberName.anchor, memberName)
+
+        return self._ast_try_navigate_dependency(memberTypename)
 
     def _try_verify_ast_namespace_object(self, atom, lhs):
         """
@@ -466,30 +499,27 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
-        if lhs is not None:
-            # Try dependent lookup as struct member.
-            memberNR = self._try_verify_ast_member_or_property(atom, lhs)
-            if memberNR:
-                return memberNR
+        if lhs is None:
+            # Handle boolean values: true, false.
+            if atom.token in ["true", "false"]:
+                boolTypename = self.native_bool_typename(container.references)
+                navResult = self._ast_navigate_dependency(boolTypename)
+                return navResult
 
-            # Try dependent lookup as namespace object.
-            namespaceObjNR = self._try_verify_ast_namespace_object(atom, lhs)
-            if namespaceObjNR:
-                return namespaceObjNR
+            # Try local variables next.
+            varNR = localVars.get(str(atom.token), None)
+            if varNR is not None:
+                return varNR
 
-            # TODO: Try extensions.
-            assert(False)
+        # Try dependent lookup as struct member.
+        memberNR = self._try_verify_ast_member_or_property(container, atom, lhs)
+        if memberNR is not None:
+            return memberNR
 
-        # Handle boolean values: true, false.
-        if atom.token in ["true", "false"]:
-            boolTypename = self.native_bool_typename(container.references)
-            navResult = self._ast_navigate_dependency(boolTypename)
-            return navResult
-
-        # Try local variables next.
-        varNR = localVars.get(str(atom.token), None)
-        if varNR is not None:
-            return varNR
+        # Try dependent lookup as namespace object.
+        namespaceObjNR = self._try_verify_ast_namespace_object(atom, lhs)
+        if namespaceObjNR is not None:
+            return namespaceObjNR
 
         # Try as object lookup, climbing up the hierarchy.
         # Could be a namespace, struct or alias.
@@ -658,7 +688,7 @@ class ProjectDependencyCollection:
                 return baseTypeNR
 
         # Try it as a member first.
-        memberNR = self._try_verify_ast_member_or_property(atom, lhs)
+        memberNR = self._try_verify_ast_member_or_property(container, atom, lhs)
         if memberNR:
             return memberNR
 
