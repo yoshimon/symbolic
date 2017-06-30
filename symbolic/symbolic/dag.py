@@ -454,7 +454,7 @@ class ProjectDependencyCollection:
         """
         memberTypename = struct.try_find_member_typename(memberName.anchor, memberName)
         if memberTypename is None:
-            raise MemberNotFoundError(memberName.anchor, memberName)
+            raise MemberNotFoundError(memberName)
 
         return self._ast_try_navigate_dependency(memberTypename)
 
