@@ -1923,12 +1923,15 @@ class Struct(TemplateObject, Namespace):
         # Verify unique names.
         memberNames = {}
         for loc in struct.locatables:
-            s = str(loc.token)
-            if s in memberNames:
-                t = memberNames[s]
-                raise DuplicateNameError(loc.token.anchor, t.anchor)
+            if isinstance(loc, MemberList):
+                for member in loc.members:
+                    memberToken = member.token
+                    s = str(memberToken)
+                    if s in memberNames:
+                        t = memberNames[s]
+                        raise DuplicateNameError(memberToken.anchor, t.anchor)
 
-            memberNames[s] = (s, loc.token)
+                    memberNames[s] = memberToken
 
         # Add implicit "this" ref.
         for loc in struct.locatables:
