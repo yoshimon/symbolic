@@ -118,7 +118,7 @@ class LibraryDependencyGraph:
         print("-" * 80)
         for libDirPath in self.projConfig.libraryDirectoryPaths:
             # Load the library configuration
-            libConfig = LibraryConfiguration(libDirPath + ".manifest")
+            libConfig = LibraryConfiguration(libDirPath + "manifest.json")
 
             self.graph.add_node(libConfig.libName, libConfig=libConfig)
             
