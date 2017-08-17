@@ -1538,7 +1538,7 @@ class Function(TemplateObject, Namespace):
 
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations('private', 'deprecate')
+        self.validate_system_annotations('private', 'deprecate', 'static')
 
     def location(self):
         """
