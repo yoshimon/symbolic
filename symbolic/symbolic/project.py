@@ -52,6 +52,8 @@ class ProjectConfiguration:
 
             # Load all system type mappings
             self.systemTypes = jsonProject.get("system_types", {})
+            
+            self.libraryConfiguration = jsonProject.get("library_configuration", "manifest.json")
 
 class LibraryConfiguration:
     """
@@ -118,7 +120,7 @@ class LibraryDependencyGraph:
         print("-" * 80)
         for libDirPath in self.projConfig.libraryDirectoryPaths:
             # Load the library configuration
-            libConfig = LibraryConfiguration(libDirPath + "manifest.json")
+            libConfig = LibraryConfiguration(libDirPath + self.projConfig.libraryConfiguration)
 
             self.graph.add_node(libConfig.libName, libConfig=libConfig)
             
@@ -222,7 +224,7 @@ class Project:
                 unitParser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
                 rootNamespace = unitParser.parse()
 
-                # Make sure that all references are valid (specified in the .manifest)
+                # Make sure that all references are valid (specified in the manifest)
                 for ref in rootNamespace.references:
                     refLibName = str(ref)
                     if refLibName != libName and refLibName not in libConfig.references:

@@ -749,6 +749,17 @@ class ProjectDependencyCollection:
         """
         return self.native_typename(references, "int")
 
+    def native_void_typename(self, references):
+        """
+        Return the native void typename.
+
+        Args:
+            references (list): The references to associate with the typename.
+        Returns:
+            Typename: The typename.
+        """
+        return self.native_typename(references, "void")
+
     def native_float_typename(self, references):
         """
         Return the native float typename.
@@ -1533,7 +1544,11 @@ class ProjectDependencyCollection:
             if scopeState != ScopeState.Loop:
                 raise NotInsideLoopError(instruction.anchor)
         elif instruction.kind == InstructionKind.Return:
-            exprTypeNR = self._verify_expression_ast(container, localVars, instruction.expression.ast)
+            if instruction.expression is None:
+                exprType = self.native_void_typename(container.references)
+                exprTypeNR = self._ast_navigate_dependency(exprType)
+            else:
+                exprTypeNR = self._verify_expression_ast(container, localVars, instruction.expression.ast)
             
             # Make sure the expression type matches the function return type.
             func = instruction.parent

@@ -811,12 +811,10 @@ class Instruction(Named):
             expression = None
             if kind in [InstructionKind.Expression, InstructionKind.Return]:
                 expression = parser.try_parse_any([Expression], [';', '{']) # Disambiguation with nested functions
-                if expression is None:
-                    return None
-
-                # Forward annotations (requires re-validation)
-                expression.annotations = annotations
-                expression.validate()
+                if expression is not None:
+                    # Forward annotations (requires re-validation)
+                    expression.annotations = annotations
+                    expression.validate()
 
             if parser.match('{'): # Disambiguation with nested functions
                 return None
