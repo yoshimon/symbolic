@@ -2,6 +2,28 @@
 
 from symbolic.algorithm import Algorithm
 
+class UnmappedNativeTypename(Exception):
+    """An exception class, that indicates that a system typename was not mapped but referenced."""
+
+    def __init__(self, name):
+        """
+        Initialize the object.
+
+        Args:
+            name (str): The typename.
+        """
+        super().__init__()
+        self.name = name
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + "The native typename '{0}' was not mapped in the project configuration and is therefore not allowed.".format(self.name)
+
 class LibraryDependencyError(Exception):
     """An exception class, that indicates that there is a circular dependency cycle between libraries."""
 
@@ -12,6 +34,7 @@ class LibraryDependencyError(Exception):
         Args:
             dependencyChain (str): The dependency chain that caused the error.
         """
+        super().__init__()
         self.dependencyChain = dependencyChain
 
     def __str__(self):

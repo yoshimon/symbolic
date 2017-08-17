@@ -736,7 +736,11 @@ class ProjectDependencyCollection:
         Returns:
             Typename: The typename.
         """
-        return Typename.from_location(references, self.nativeTypenameLocations[name])
+        loc = self.nativeTypenameLocations[name]
+        if loc is None:
+            raise UnmappedNativeTypename(name)
+
+        return Typename.from_location(references, loc)
 
     def native_int_typename(self, references):
         """
