@@ -545,7 +545,7 @@ class ProjectDependencyCollection:
             location = RelativeLocation(locationKind, token).location()
             typename = Typename.from_location(references, location)
             navResult = self._ast_try_navigate_dependency(typename)
-            if navResult:
+            if navResult is not None and navResult.explicitLocation[-1].kind == locationKind:
                 return navResult
 
         return None
