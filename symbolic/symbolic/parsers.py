@@ -71,7 +71,7 @@ class UnitParser(BaseParser):
     def parse_all_references(self):
         """Parse all library references."""
         # using statements
-        self.references = []
+        self.references = [Reference(Symto(Token.Text, self.libName, self.fileName, self.libName, 1, 1), [], None)] if self.libName is not None else []
 
         while True:
             self.push_state()

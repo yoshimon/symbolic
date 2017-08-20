@@ -2592,6 +2592,8 @@ class Template(Named):
 
         # Emit the references.
         result += "\n".join("import {0};".format(str(ref)) for ref in self.references)
+        if self.references:
+            result += "\n"
 
         # Emit the annotations
         result += Annotation.collection_to_str(self.annotations)
