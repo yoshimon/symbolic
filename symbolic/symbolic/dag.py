@@ -839,7 +839,7 @@ class ProjectDependencyCollection:
 
         if possibleMatchNR is not None:
             # Lookup the return type.
-            funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename)
+            funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename, False)
             return funcRetTypenameNR
 
         raise UnaryOperatorOverloadNotFoundError(atom.token, childTypename)
