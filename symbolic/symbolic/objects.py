@@ -1937,8 +1937,9 @@ class Struct(TemplateObject, Namespace):
         for loc in struct.locatables:
             if isinstance(loc, Function):
                 loc.kind = FunctionKind.Property
-                thisParameter = Parameter.this_parameter(struct.references, struct.location())
-                loc.parameters.insert(0, thisParameter)
+                if not Annotation.has("static", loc.annotations):
+                    thisParameter = Parameter.this_parameter(struct.references, struct.location())
+                    loc.parameters.insert(0, thisParameter)
 
         return struct
 

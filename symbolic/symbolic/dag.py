@@ -215,12 +215,13 @@ class AstNavigationResult:
     This is a convenience class to extract from a navigation result with an expected dependency match count of exactly one.
     """
 
-    def __init__(self, navResult):
+    def __init__(self, navResult, isLHSType):
         """
         Initialize the object.
 
         Args:
             navResult (dag.NavigationResult): The navigation result to wrap.
+            isLHSType (bool): True, if this is a LHS type. Otherwise False.
         """
         self.dependency = navResult.dependency
         explicitLoc = self.dependency.location.path
@@ -228,6 +229,7 @@ class AstNavigationResult:
             explicitLoc = [RelativeLocation(LocationKind.Reference, navResult.libName)] + explicitLoc
 
         self.explicitLocation = Location(explicitLoc)
+        self.isLHSType = isLHSType
 
     def as_array(self, dims):
         """
@@ -241,7 +243,7 @@ class AstNavigationResult:
         """
         resolvedDependencyLocation = ResolvedDependencyLocation([self.dependency])
         navResult = NavigationResult(self.explicitLocation[0].name, resolvedDependencyLocation, self.dependency)
-        arrayNR = AstNavigationResult(navResult)
+        arrayNR = AstNavigationResult(navResult, self.isLHSType)
         
         # We need to modify the last relative location so copy the path.
         copiedPath = Location([RelativeLocation(p.kind, p.name, templateParameters=p.templateParameters, parameters=p.parameters, dims=p.dims) for p in self.dependency.location.path])
@@ -352,7 +354,7 @@ class ProjectDependencyCollection:
             ExpressionAtomKind.BinaryOp: self._verify_ast_binary_op
         }
 
-    def _ast_try_navigate_dependency(self, locatable):
+    def _ast_try_navigate_dependency(self, locatable, isLHSType):
         """
         Try to navigate to a locatable object.
 
@@ -366,25 +368,26 @@ class ProjectDependencyCollection:
         if navResult is None:
             return None
 
-        astNavResult = AstNavigationResult(navResult)
+        astNavResult = AstNavigationResult(navResult, isLHSType)
 
         # Navigate through aliases down to base.
         if astNavResult.explicitLocation.path[-1].kind == LocationKind.Type:
             navResult = self.navigate_alias_base(navResult)
-            astNavResult = AstNavigationResult(navResult)
+            astNavResult = AstNavigationResult(navResult, isLHSType)
         
         return astNavResult
 
-    def _ast_navigate_dependency(self, locatable):
+    def _ast_navigate_dependency(self, locatable, isLHSType):
         """
         Navigate to a locatable object.
 
         Args:
             locatable (objects.Locatable): The locatable object to search for.
+            isLHSType (bool): True, if this is a LHS type.
         Returns:
             dag.AstNavigationResult: The navigation result.
         """
-        navResult = self._ast_try_navigate_dependency(locatable)
+        navResult = self._ast_try_navigate_dependency(locatable, isLHSType)
         if navResult is None:
             raise DependencyNotFoundError(locatable.anchor, locatable.location())
         
@@ -417,13 +420,13 @@ class ProjectDependencyCollection:
             if not isinstance(struct, Struct):
                 return None
 
-        result = self._try_verify_ast_property(struct, atom.token)
-        if result is None:
+        result = self._try_verify_ast_property(struct, atom.token, lhs.isLHSType)
+        if result is None and not lhs.isLHSType:
             result = self._try_verify_ast_member(struct, atom.token)
-
+            
         return result
 
-    def _try_verify_ast_property(self, struct, propertyName):
+    def _try_verify_ast_property(self, struct, propertyName, isStatic):
         """
         Verify a property in an AST.
 
@@ -433,11 +436,12 @@ class ProjectDependencyCollection:
         Returns:
             dag.AstNavigationResult or None: The location of the resulting type of this AST.
         """
-        thisParameter = Parameter.this_parameter(struct.references, struct.location())
-        propertyNR = self._try_find_function(struct, propertyName, FunctionKind.Property, [thisParameter])
+        # Add implicit this if not static.
+        parameters = [] if isStatic else [Parameter.this_parameter(struct.references, struct.location())]
+        propertyNR = self._try_find_function(struct, propertyName, FunctionKind.Property, parameters)
         if propertyNR is not None:
             # Lookup the return type.
-            funcRetTypenameNR = self._ast_navigate_dependency(propertyNR.dependency.locatable.returnTypename)
+            funcRetTypenameNR = self._ast_navigate_dependency(propertyNR.dependency.locatable.returnTypename, False)
             return funcRetTypenameNR
 
         return None
@@ -456,7 +460,7 @@ class ProjectDependencyCollection:
         if memberTypename is None:
             raise MemberNotFoundError(memberName)
 
-        return self._ast_try_navigate_dependency(memberTypename)
+        return self._ast_try_navigate_dependency(memberTypename, False)
 
     def _try_verify_ast_namespace_object(self, atom, lhs):
         """
@@ -476,10 +480,10 @@ class ProjectDependencyCollection:
             return None
 
         for loc in namespace.locatables:
-            if loc.token == atom.token:
+            if isinstance(loc, Namespace) and loc.token == atom.token:
                 libName = str(lhs.explicitLocation[0])
                 loc.token.anchor.libName = libName
-                objNR = self._ast_try_navigate_dependency(loc)
+                objNR = self._ast_try_navigate_dependency(loc, True)
                 return objNR
 
         return None
@@ -503,7 +507,7 @@ class ProjectDependencyCollection:
             # Handle boolean values: true, false.
             if atom.token in ["true", "false"]:
                 boolTypename = self.native_bool_typename(container.references)
-                navResult = self._ast_navigate_dependency(boolTypename)
+                navResult = self._ast_navigate_dependency(boolTypename, False)
                 return navResult
 
             # Try local variables next.
@@ -528,7 +532,7 @@ class ProjectDependencyCollection:
             return navResult
 
         if not isOptional:
-            raise VariableNotFoundError(atom.token)
+            raise UnresolvedSymbolError(atom.token)
 
         return None
 
@@ -544,7 +548,7 @@ class ProjectDependencyCollection:
         for locationKind in locationKinds:
             location = RelativeLocation(locationKind, token).location()
             typename = Typename.from_location(references, location)
-            navResult = self._ast_try_navigate_dependency(typename)
+            navResult = self._ast_try_navigate_dependency(typename, True)
             if navResult is not None and navResult.explicitLocation[-1].kind == locationKind:
                 return navResult
 
@@ -593,7 +597,7 @@ class ProjectDependencyCollection:
         else:
             assert(False)
 
-        result = self._ast_navigate_dependency(typename)
+        result = self._ast_navigate_dependency(typename, False)
         return result
 
     def _verify_ast_function(self, container, atom, children, localVars, newLocalVars, isOptional, lhs):
@@ -616,17 +620,16 @@ class ProjectDependencyCollection:
         childTypenames = [Typename.from_location(container.references, childNR.explicitLocation) for childNR in childNRs]
         baseChildParameters = [Parameter(container, child.atom.token, [], None, childTypenames[i], child.isRef) for i, child in enumerate(children)]
 
-        allChildParameters = [baseChildParameters]
-        isExplicitRef = lhs is not None
         kinds = [FunctionKind.Regular]
+        allChildParameters = [baseChildParameters]
+        
+        isExplicitRef = lhs is not None
         if isExplicitRef:
             parent = lhs.dependency.locatable
             if isinstance(parent, Struct):
-                kinds.append(FunctionKind.Property)
-                propChildParameters = list(baseChildParameters)
-                thisParameter = Parameter.this_parameter(parent.references, lhs.dependency.location)
-                propChildParameters.insert(0, thisParameter)
-                allChildParameters.append(propChildParameters)
+                kinds = [FunctionKind.Property]
+                if not lhs.isLHSType:
+                    baseChildParameters.insert(0, Parameter.this_parameter(parent.references, lhs.dependency.location))
         else:
             parent = container
 
@@ -635,7 +638,7 @@ class ProjectDependencyCollection:
             possibleMatchNR = self._try_find_function(parent, atom.token, kind, childParameters, isExplicitRef=isExplicitRef)
             if possibleMatchNR is not None:
                 # Lookup the return type.
-                funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename)
+                funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename, False)
                 return funcRetTypenameNR
 
         raise FunctionOverloadNotFoundError(atom.token, childParameters)
@@ -663,7 +666,7 @@ class ProjectDependencyCollection:
         
             # Make sure the child (here: array index) resolves to an integer.
             intTypename = self.native_int_typename(container.references)
-            intNR = self._ast_navigate_dependency(intTypename)
+            intNR = self._ast_navigate_dependency(intTypename, False)
 
             if childNR != intNR:
                 raise InvalidArrayIndexTypeError(atom.token.anchor)
@@ -854,7 +857,7 @@ class ProjectDependencyCollection:
             dag.AstNavigationResult: The location of the resulting type of this AST.
         """
         locatable = FunctionReference(container.references, container, nameToken, kind, parameters, isExplicitRef)
-        navResult = self._ast_try_navigate_dependency(locatable)
+        navResult = self._ast_try_navigate_dependency(locatable, False)
         return navResult
 
     def _verify_ast_binary_op(self, container, atom, children, localVars, newLocalVars, isOptional, lhs):
@@ -913,7 +916,7 @@ class ProjectDependencyCollection:
 
                 # Update LHS using library root.
                 libRoot = self.libRoots[matchedLibName]
-                lhs = self._ast_navigate_dependency(libRoot)
+                lhs = self._ast_navigate_dependency(libRoot, True)
 
         leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isNewVarOp, lhs=lhs)
         leftResolved = leftNR if isStructOp else None
@@ -966,7 +969,7 @@ class ProjectDependencyCollection:
 
             if possibleMatchNR is not None:
                 # Lookup the return type.
-                funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename)
+                funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename, False)
                 return funcRetTypenameNR
 
             raise BinaryOperatorOverloadNotFoundError(atom.token, pLeft, pRight)
@@ -1517,7 +1520,7 @@ class ProjectDependencyCollection:
 
         # Push the function parameters as local variables.
         for p in func.parameters:
-            pNR = self._ast_navigate_dependency(p.typename)
+            pNR = self._ast_navigate_dependency(p.typename, False)
             localVars[str(p.token)] = pNR
 
         scopeState = ScopeState.Default
@@ -1550,13 +1553,13 @@ class ProjectDependencyCollection:
         elif instruction.kind == InstructionKind.Return:
             if instruction.expression is None:
                 exprType = self.native_void_typename(container.references)
-                exprTypeNR = self._ast_navigate_dependency(exprType)
+                exprTypeNR = self._ast_navigate_dependency(exprType, False)
             else:
                 exprTypeNR = self._verify_expression_ast(container, localVars, instruction.expression.ast)
             
             # Make sure the expression type matches the function return type.
             func = instruction.parent
-            funcRetNR = self._ast_navigate_dependency(func.returnTypename)
+            funcRetNR = self._ast_navigate_dependency(func.returnTypename, False)
             if funcRetNR != exprTypeNR:
                 raise ReturnTypeMismatchError(instruction.token.anchor)
         elif instruction.kind in [InstructionKind.If, InstructionKind.While, InstructionKind.Elif]:
@@ -1569,7 +1572,7 @@ class ProjectDependencyCollection:
 
             # Make sure the return type evaluates to bool.
             nativeBoolType = self.native_bool_typename(container.references)
-            nativeBoolNR = self._ast_navigate_dependency(nativeBoolType)
+            nativeBoolNR = self._ast_navigate_dependency(nativeBoolType, False)
             if exprType != nativeBoolNR:
                 raise PredicateExpectedError(instruction.token.anchor)
 

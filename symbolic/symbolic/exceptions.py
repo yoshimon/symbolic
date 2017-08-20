@@ -479,12 +479,12 @@ class VariableAlreadyExistsError(SourceError):
         """
         return super().__str__() + 'A variable named "{0}" already exists.'.format(str(self.token))
 
-class VariableNotFoundError(SourceError):
+class UnresolvedSymbolError(SourceError):
     """
-    An exception class, that indicates that a variable with a given name was not found.
+    An exception class, that indicates that a symbol could not be resolved.
     
     Attributes:
-        token (lexer.Symto): The variable token.
+        token (lexer.Symto): The symbol token.
     """
 
     def __init__(self, token):
@@ -492,7 +492,7 @@ class VariableNotFoundError(SourceError):
         Initialize the object.
 
         Args:
-            token (lexer.Symto): The variable token.
+            token (lexer.Symto): The symbol token.
         """
         super().__init__(token.anchor)
         self.token = token
@@ -504,7 +504,7 @@ class VariableNotFoundError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + 'Could not find any variable named "{0}".'.format(str(self.token))
+        return super().__str__() + 'Could not resolve symbol "{0}".'.format(str(self.token))
 
 class LValueRequiredError(SourceError):
     """An exception class, that indicates that an L-value was required but not found."""
