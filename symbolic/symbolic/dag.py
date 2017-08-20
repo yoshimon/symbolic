@@ -920,6 +920,9 @@ class ProjectDependencyCollection:
 
         leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isNewVarOp, lhs=lhs)
         leftResolved = leftNR if isStructOp else None
+        if leftResolved is not None and leftResolved.explicitLocation[-1].dims:
+            raise MissingArrayDimensionsError(left.atom.token.anchor)
+
         rightNR = self._verify_expression_ast_recursive(container, localVars, right, newLocalVars, lhs=leftResolved)
 
         if isStructOp:

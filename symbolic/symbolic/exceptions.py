@@ -518,6 +518,18 @@ class LValueRequiredError(SourceError):
         """
         return super().__str__() + 'L-value required.'.format(str(self.anchor))
 
+class MissingArrayDimensionsError(SourceError):
+    """An exception class, that indicates that not all array dimensions were specified."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + 'Missing array dimension index.'.format(str(self.anchor))
+
 class BinaryOperatorOverloadNotFoundError(SourceError):
     """
     An exception class, that indicates that a binary operator overload was not found.
