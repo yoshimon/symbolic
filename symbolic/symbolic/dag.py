@@ -1210,7 +1210,7 @@ class ProjectDependencyCollection:
 
         if dependencyLocationStr not in self.templateLinks:
             # Generate the translation unit for the template.
-            templateSrc = template.generate_translation_unit()
+            templateSrc = template.generate_translation_unit(references)
 
             # Run the pre-processor on the source.
             # TODO: run pre-processor based on the location
