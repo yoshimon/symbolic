@@ -365,7 +365,7 @@ class ProjectDependencyCollection:
         """
         dependency = Dependency(locatable)
         navResult = self.try_navigate_dependency(dependency)
-        if navResult is None:
+        if navResult is None or navResult.dependency is None:
             return None
 
         astNavResult = AstNavigationResult(navResult, isLHSType)
