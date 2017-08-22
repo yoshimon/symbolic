@@ -201,7 +201,7 @@ class Project:
             dependencyCollection.begin_library(libName)
 
             # Process all symbolic files in the library
-            for filePath in libConfig.directoryPath.enumerate("*.sym", True):
+            for filePath in libConfig.directoryPath.enumerate("**/*.sym", True):
                 print('Parsing "{0}"...'.format(filePath))
 
                 # Load the per-file pre-processor table
