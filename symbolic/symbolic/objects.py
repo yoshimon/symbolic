@@ -2578,18 +2578,20 @@ class Template(Named):
 
         return loc
 
-    def generate_translation_unit(self):
+    def generate_translation_unit(self, references):
         """
         Generate a translation unit from the template.
         
+        Args:
+            references (list): The references of the unit which instantiates the template.
         Returns:
             formatter.PrettyString: The pretty-formatted string.
         """
         result = PrettyString()
 
         # Emit the references.
-        result += "\n".join("import {0};".format(str(ref)) for ref in self.references)
-        if self.references:
+        result += "\n".join("import {0};".format(str(ref)) for ref in references)
+        if references:
             result += "\n"
 
         # Emit the annotations

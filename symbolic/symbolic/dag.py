@@ -365,7 +365,7 @@ class ProjectDependencyCollection:
         """
         dependency = Dependency(locatable)
         navResult = self.try_navigate_dependency(dependency)
-        if navResult is None:
+        if navResult is None or navResult.dependency is None:
             return None
 
         astNavResult = AstNavigationResult(navResult, isLHSType)
@@ -1224,7 +1224,7 @@ class ProjectDependencyCollection:
 
         if dependencyLocationStr not in self.templateLinks:
             # Generate the translation unit for the template.
-            templateSrc = template.generate_translation_unit()
+            templateSrc = template.generate_translation_unit(references)
 
             # Run the pre-processor on the source.
             # TODO: run pre-processor based on the location

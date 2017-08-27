@@ -201,7 +201,8 @@ class Project:
             dependencyCollection.begin_library(libName)
 
             # Process all symbolic files in the library
-            for filePath in libConfig.directoryPath.enumerate("*.sym", True):
+            numFilesParsed = 0
+            for filePath in libConfig.directoryPath.enumerate("**/*.sym", True):
                 print('Parsing "{0}"...'.format(filePath))
 
                 # Load the per-file pre-processor table
@@ -232,6 +233,15 @@ class Project:
 
                 # Create a dependency graph for the unit
                 dependencyCollection.insert_unit(rootNamespace)
+                
+                numFilesParsed += 1
+
+            if numFilesParsed > 0:
+                print("")
+                if numFilesParsed == 1:
+                    print("{0} file successfully parsed.".format(numFilesParsed))
+                else:
+                    print("{0} files successfully parsed.".format(numFilesParsed))
 
             # Signal that we are done with this library
             dependencyCollection.end_library()
