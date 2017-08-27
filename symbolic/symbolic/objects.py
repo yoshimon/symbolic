@@ -282,8 +282,6 @@ class Locatable:
     Attributes:
         references ([objects.Reference]): The references visible to this locatable.
         parent (objects.Locatable): The parent object.
-        grandParent (objects.Locatable or None): The grand-parent object.
-        grandParentWithoutRoot (objects.Locatable or None): The grand-parent object or None if the grandparent is the root.
         anchor (Token): The anchor in the source code.        
     """
 
@@ -298,8 +296,6 @@ class Locatable:
         """
         self.references = references
         self.parent = parent
-        self.grandParent = parent.parent if parent else None
-        self.grandParentWithoutRoot = self.grandParent if (self.grandParent) and (self.grandParent.parent) else None
         self.anchor = anchor
 
     def location(self):
@@ -361,7 +357,7 @@ class Named(Locatable):
         """Validate the object."""
         assert(False)
 
-    def default_location(self, kind, *, templateParameters=None, parameters=None):
+    def default_location(self, kind, *, templateParameters=None, parameters=None, isExplicitRef=False):
         """
         Return the default location within the library.
         
@@ -369,11 +365,12 @@ class Named(Locatable):
             kind (objects.LocationKind): The location kind of the final RelativeLocation.
             templateParameters ([objects.TemplateParameter]): The template parameters at the final RelativeLocation.
             parameters ([objects.Parameter]): The parameters at the final RelativeLocation.
+            isExplicitRef (bool): True, if the location is assumed to be explicit. Otherwise False.
         Returns:
             objects.Location: A location within the library.
         """
         rl = [RelativeLocation(kind, str(self.token), templateParameters=templateParameters, parameters=parameters)]
-        if self.parent is not None and self.parent.parent is not None:
+        if isExplicitRef or (self.parent is not None and self.parent.parent is not None):
             return Location(self.parent.location().path + rl)
         else:
             libPrefix = [RelativeLocation(LocationKind.Reference, self.anchor.libName)]
@@ -1496,7 +1493,7 @@ class FunctionReference(Named):
         Returns:
             objects.Location: A location within the library.
         """
-        loc = self.default_location(LocationKind.Function, parameters=self.parameters)
+        loc = self.default_location(LocationKind.Function, parameters=self.parameters, isExplicitRef=self.hasExplicitRef)
         return loc if self.hasExplicitRef else loc[-1].location()
 
 class Function(TemplateObject, Namespace):

@@ -881,6 +881,7 @@ class ProjectDependencyCollection:
 
         isNewVarOp = atom.token == ":="
         isStructOp = atom.token == "."
+        leftNR = None
 
         # Try to deduce the LHS.
         if isStructOp and lhs is None:
@@ -889,6 +890,7 @@ class ProjectDependencyCollection:
             nodeChildren = children
             nodeLhs = None
             nodeRhs = None
+            leftNR = None
             while node.token == ".":
                 nodeLhs = nodeChildren[0]
                 nodeRhs = nodeChildren[1]
@@ -917,8 +919,12 @@ class ProjectDependencyCollection:
                 # Update LHS using library root.
                 libRoot = self.libRoots[matchedLibName]
                 lhs = self._ast_navigate_dependency(libRoot, True)
+                
+                if len(inOrderTokens) == 1:
+                    leftNR = lhs
 
-        leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isNewVarOp, lhs=lhs)
+        if leftNR is None:
+            leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isNewVarOp, lhs=lhs)
         leftResolved = leftNR if isStructOp else None
         if leftResolved is not None and leftResolved.explicitLocation[-1].dims:
             raise MissingArrayDimensionsError(left.atom.token.anchor)
@@ -1020,11 +1026,15 @@ class ProjectDependencyCollection:
         # Strip the library name
         locationWithoutLibName = location[offset:]
 
+        # Skip explicit library namespace.
+        if locationWithoutLibName and locationWithoutLibName[0].kind == LocationKind.Namespace and locationWithoutLibName[0].name[0] == "@":
+            locationWithoutLibName = locationWithoutLibName[1:]
+
         # Generate a sequence of additional locations to search at.
         # This will search the parent location, and all of its parents first.
         locationsWithoutLibName = deque()
         currentParent = parent
-        while (currentParent is not None) and (currentParent.parent is not None):
+        while currentParent is not None and currentParent.parent is not None:
             # Prepend the location of the parent to the search path.
             parentPath = currentParent.location().pathWithoutRef
             otherLocationWithoutLibName = Location(parentPath + locationWithoutLibName)
@@ -1048,7 +1058,11 @@ class ProjectDependencyCollection:
             # Assume this library contains the dependency
             resolvedLibName = libName
             baseLookup = self.resolvedObjects[libName]
+            baseLookup = next(iter(baseLookup.subLocations.values())) if baseLookup.subLocations else baseLookup
             lookup = baseLookup
+
+            # Assume we match the root lib namespace.
+            matchedDependency = Dependency(self.libRoots[libName])
 
             # Loop through all sublocations and verify the assumption above
             allSubLocationsFound = True
@@ -1233,8 +1247,6 @@ class ProjectDependencyCollection:
             # Lookup the template object
             templateObj = rootNamespace.locatables[0]
             templateObj.parent = template.parent
-            templateObj.grandParent = template.grandParent
-            templateObj.grandParentWithoutRoot = template.grandParentWithoutRoot
 
             # Bind the location to a template.
             self.templateLinks[dependencyLocationStr] = templateObj
@@ -1277,7 +1289,7 @@ class ProjectDependencyCollection:
         """
         locatable = dependency.locatable
         location = dependency.baseLocation
-        return self.navigate(locatable.anchor, locatable.references, locatable.grandParentWithoutRoot, location[:-1])
+        return self.navigate(locatable.anchor, locatable.references, locatable.parent.parent if locatable.parent is not None else None, location[:-1])
 
     def try_merge_namespace(self, locatable):
         """
@@ -1350,8 +1362,7 @@ class ProjectDependencyCollection:
             if isinstance(locatable, Struct):
                 self._generate_type_constructor(locatable, locatable)
             elif isinstance(locatable, Alias):
-                dep = Dependency(locatable)
-                nr = self.navigate_dependency(dep)
+                nr = self.navigate_dependency(dependency)
                 structNR = self.navigate_alias_base(nr)
                 struct = structNR.resolvedDependencyLocation.dependencies[0].locatable
                 self._generate_type_constructor(locatable, struct)
