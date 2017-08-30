@@ -245,3 +245,5 @@ class Project:
 
             # Signal that we are done with this library
             dependencyCollection.end_library()
+
+            print("Successfully built library.")
