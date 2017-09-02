@@ -62,6 +62,8 @@ class LibraryConfiguration:
     Attributes:
         directoryPath (paths.VirtualPath): The directory path.
         references ([str]): The library reference.
+        preImports ([str]): The auto-imports before to insert before user imports.
+        postImports ([str]): The auto-imports before to insert after user imports.
         preprocessorModuleFilePath (paths.VirtualPath or None): The file path for the pre-processor module.
         preprocessorClass (str): The class name inside the preprocessor module.
         ppt (preprocessors.PPT): The pre-processor table to use.
@@ -77,6 +79,8 @@ class LibraryConfiguration:
         """
         self.directoryPath = filePath.directory_path()
         self.references = []
+        self.preImports = []
+        self.postImports = []
         self.preprocessorModuleFilePath = None
         self.preprocessorClass = ""
         self.ppt = PPT(optFilePath=filePath.with_extension(".pp"))
@@ -93,6 +97,13 @@ class LibraryConfiguration:
                 # Load references
                 for ref in jsonLibFileLibrary.get("references", []):
                     self.references.append(VirtualPath(ref).expanded().last().text)
+
+                # Load pre and post imports.
+                for ref in jsonLibFileLibrary.get("pre_imports", []):
+                    self.preImports.append(ref)
+
+                for ref in jsonLibFileLibrary.get("post_imports", []):
+                    self.postImports.append(ref)
 
                 # Load the user pre-processor
                 jsonLibFilePP = jsonLibFileLibrary.get("preprocessor", {})
@@ -198,7 +209,7 @@ class Project:
             projLibPPT = self.projConfig.ppt.combine(libConfig.ppt)
 
             # Signal the dependency collection that a new library is being processed
-            dependencyCollection.begin_library(libName)
+            dependencyCollection.begin_library(libName, libConfig.preImports, libConfig.postImports)
 
             # Process all symbolic files in the library
             numFilesParsed = 0
@@ -222,7 +233,7 @@ class Project:
                 srcFileTokens = lexer.tokenize(ppSrcFileText)
 
                 # Parse the unit and extract an object representation
-                unitParser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
+                unitParser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens, libConfig.preImports, libConfig.postImports)
                 rootNamespace = unitParser.parse()
 
                 # Make sure that all references are valid (specified in the manifest)

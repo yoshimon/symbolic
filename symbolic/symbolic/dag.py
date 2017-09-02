@@ -296,6 +296,8 @@ class ProjectDependencyCollection:
         self.libName = None # The name of the library that is being monitored.
         self.templateLinks = {} # Maps locations to template instantiation results.
         self.functions = [] # An internal cache of function objects inside the current library.
+        self.preImports = [] # The pre-imports to use.
+        self.postImports = [] # The post-imports to use.
         self._libLocationNavResults = {} # Maps navigation queries to their resolved navigation result.
 
         # Cache the user-specified locations for numeric types.
@@ -313,7 +315,7 @@ class ProjectDependencyCollection:
             userTypeLocationTokens = lexer.tokenize(userLocationString)
 
             # Setup a parser to analyze that token stream.
-            parser = UnitParser(lexer.libName, lexer.fileName, userTypeLocationTokens)
+            parser = UnitParser(lexer.libName, lexer.fileName, userTypeLocationTokens, self.preImports, self.postImports)
 
             # This will only >setup< the root namespace, i.e. an anonymous namespace
             # containing the references within the translation unit.
@@ -1238,7 +1240,7 @@ class ProjectDependencyCollection:
             srcFileTokens = lexer.concatenate_tokens(srcFileTokens)
 
             # Analyze the token stream.
-            parser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens)
+            parser = UnitParser(lexer.libName, lexer.fileName, srcFileTokens, self.preImports, self.postImports)
             rootNamespace = parser.parse()
 
             # Lookup the template object
@@ -1414,13 +1416,17 @@ class ProjectDependencyCollection:
         # Remember this function for instruction verification later.
         self.functions.append(func)
 
-    def begin_library(self, libName):
+    def begin_library(self, libName, preImports, postImports):
         """
         Begin collecting dependencies for a new library.
         
         Args:
             libName (str): The name of the library.
+            preImports (list): The pre-imports to use.
+            postImports (list): The post-imports to use.
         """
+        assert(self.libName is None)
+
         print()
         print("-" * 80)
         print("Building {0}".format(libName))
@@ -1443,6 +1449,8 @@ class ProjectDependencyCollection:
         self.libNamespaces = dict()
         self.libName = libName
         self.functions = []
+        self.preImports = preImports
+        self.postImports = postImports
         self._libLocationNavResults = {}
 
     def end_library(self):

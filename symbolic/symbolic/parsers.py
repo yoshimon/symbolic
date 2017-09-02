@@ -12,6 +12,21 @@ from symbolic.objects import Namespace, Expression, Reference, Annotation, Struc
 class UnitParser(BaseParser):
     """A parser for symbolic source files (units)."""
 
+    def __init__(self, libName, fileName, tokens, preImports, postImports):
+        """
+        Initialize the object.
+
+        Args:
+            libName (str): The library name.
+            fileName (str): The file name.
+            tokens ([lexer.Symto]): The token list.
+            preImports (list): The list of pre-import strings.
+            postImports (list): The list of post-import strings.
+        """
+        super().__init__(libName, fileName, tokens)
+        self.preImports = preImports
+        self.postImports = postImports
+
     def try_parse_any(self, classes, args):
         """
         Parse all object types in the supplied list.
@@ -70,9 +85,12 @@ class UnitParser(BaseParser):
 
     def parse_all_references(self):
         """Parse all library references."""
-        # using statements
+         # Add library name.
         self.references = [Reference(Symto(Token.Text, self.libName, self.fileName, self.libName, 1, 1), [], None)] if self.libName is not None else []
 
+        # Add post-imports.
+        self.references += [Reference(Symto(Token.Text, self.libName, self.fileName, postImport, 1, 1), [], None) for postImport in self.postImports] if self.postImports is not None else []
+        
         while True:
             self.push_state()
             annotations = Annotation.parse_annotations(self)
@@ -96,6 +114,9 @@ class UnitParser(BaseParser):
             ref = Reference(token, annotations, semantic)
             self.references.append(ref)
             self.remove_state()
+
+        # Add pre-imports.
+        self.references += [Reference(Symto(Token.Text, self.libName, self.fileName, preImport, 1, 1), [], None) for preImport in self.preImports] if self.preImports is not None else []
 
     def namespace(self):
         """
