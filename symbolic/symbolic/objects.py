@@ -569,8 +569,12 @@ class TemplateObject(Named):
     A templatable object.
     
     Attributes:
+        templateCount (int): The number of instantiated template instances. This is used
+            to generate a unique template name for each new instantiated template object.
         body ([lexer.Symto]): The template body, represented by a list of tokens.
     """
+
+    templateCount = 0
 
     def __init__(self, references, parent, token, annotations, semantic, body):
         """
@@ -594,7 +598,8 @@ class TemplateObject(Named):
         Returns:
             str: The name for the template instance of this object.
         """
-        return "___{0}_template_{1}".format(str(self.token), str(id(self)))
+        TemplateObject.templateCount += 1
+        return "___{0}_template_{1}".format(str(self.token), str(TemplateObject.templateCount))
 
 class InstructionKind(Enum):
     """

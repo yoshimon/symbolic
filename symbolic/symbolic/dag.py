@@ -179,21 +179,18 @@ class NavigationResult:
     A result of a navigation operation.
 
     Attributes:
-        libName (str): The library name.
         resolvedDependencyLocation ([dag.ResolvedDependencyLocation]): The resolved dependency location.
         dependency (dag.Dependency): The matched dependency.
     """
 
-    def __init__(self, libName, resolvedDependencyLocation, dependency):
+    def __init__(self, resolvedDependencyLocation, dependency):
         """
         Initialize the object.
 
         Args:
-            libName (str): The library name.
             resolvedDependencyLocation ([dag.ResolvedDependencyLocation]): The resolved dependency location.
             dependency (dag.Dependency): The matched dependency.
         """
-        self.libName = libName
         self.resolvedDependencyLocation = resolvedDependencyLocation
         self.dependency = dependency
 
@@ -206,7 +203,7 @@ class NavigationResult:
         Returns:
             bool: True, if both results point to the same location. Otherwise False.
         """
-        return self.libName == other.libName and id(self.resolvedDependencyLocation) == id(other.resolvedDependencyLocation)
+        return id(self.resolvedDependencyLocation) == id(other.resolvedDependencyLocation)
 
 class AstNavigationResult:
     """
@@ -226,7 +223,7 @@ class AstNavigationResult:
         self.dependency = navResult.dependency
         explicitLoc = self.dependency.location.path
         if explicitLoc[0].kind != LocationKind.Reference:
-            explicitLoc = [RelativeLocation(LocationKind.Reference, navResult.libName)] + explicitLoc
+            explicitLoc = [RelativeLocation(LocationKind.Reference, navResult.dependency.libName)] + explicitLoc
 
         self.explicitLocation = Location(explicitLoc)
         self.isLHSType = isLHSType
@@ -242,7 +239,7 @@ class AstNavigationResult:
             dag.AstNavigationResult: The same result as an array.
         """
         resolvedDependencyLocation = ResolvedDependencyLocation([self.dependency])
-        navResult = NavigationResult(self.explicitLocation[0].name, resolvedDependencyLocation, self.dependency)
+        navResult = NavigationResult(resolvedDependencyLocation, self.dependency)
         arrayNR = AstNavigationResult(navResult, self.isLHSType)
         
         # We need to modify the last relative location so copy the path.
@@ -1137,9 +1134,9 @@ class ProjectDependencyCollection:
                             # But only do that if this is not the last relative location
                             # since we are actually looking for the Alias in that case.
                             if i != len(location.pathWithoutRef) - 1:
-                                aliasNavResult = NavigationResult(resolvedLibName, resolvedDependencyLocation, resolvedDependencyLocation.dependencies[0])
+                                aliasNavResult = NavigationResult(resolvedDependencyLocation, resolvedDependencyLocation.dependencies[0])
                                 aliasNavResult = self.navigate_alias_base(aliasNavResult)
-                                libName = aliasNavResult.libName
+                                libName = aliasNavResult.dependency.libName
                                 resolvedDependencyLocation = aliasNavResult.resolvedDependencyLocation
                                 matchedDependency = resolvedDependencyLocation.dependencies[0]
                             else:
@@ -1166,7 +1163,7 @@ class ProjectDependencyCollection:
         if not locationFound:
             return None
 
-        result = NavigationResult(resolvedLibName, lookup, matchedDependency)
+        result = NavigationResult(lookup, matchedDependency)
 
         # Cache the result.
         # This is used to lookup function parameter typename locations later.
