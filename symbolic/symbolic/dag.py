@@ -18,7 +18,7 @@ from symbolic.preprocessors import ExternalPreprocessor
 
 class ScopeState(Enum):
     """
-    Enumeration of all ExpressionAtom kinds.
+    Enumeration of all scope states inside a function.
 
     Attributes:
         Default (int): The default scope state.
@@ -105,7 +105,9 @@ class LocationConflict:
 
 class ResolvedDependencyLocation:
     """
-    A collection of dependencies that have been resolved to a location.
+    A resolved location for a dependency.
+    
+    The location might be shared by other dependencies and it may contain sub-locations.
 
     Attributes:
         dependencies ([dag.Dependency]): The dependencies at this location.
