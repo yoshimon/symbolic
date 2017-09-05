@@ -1837,10 +1837,6 @@ class Struct(TemplateObject, Namespace):
             annotations ([objects.Annotation]): The annotations.
             semantic (lexer.Symto): The semantic annotation.
             body ([lexer.Symto]): The template body.
-            parentTypename (None of objects.Typename): The parent typename.
-            parentUserAnnotations (None or [objects.Annotation]): The user annotations for the parent typename.
-            parentSysAnnotations (None or [objects.Annotation]): The system annotations for the parent typename.
-            parentSemantic (None or lexer.Symto): The semantic annotation for the parent typename.
         """
         Namespace.__init__(self, references, parent, token, annotations, semantic)
         TemplateObject.__init__(self, references, parent, token, annotations, semantic, body)
