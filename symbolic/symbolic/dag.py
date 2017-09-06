@@ -373,6 +373,10 @@ class ProjectDependencyCollection:
         if astNavResult.explicitLocation.path[-1].kind == LocationKind.Type:
             navResult = self.navigate_alias_base(navResult)
             astNavResult = AstNavigationResult(navResult, isLHSType)
+
+        # Copy array dimensions.
+        if isinstance(locatable, Typename):
+            astNavResult = astNavResult.as_array(locatable.dims)
         
         return astNavResult
 
@@ -389,10 +393,6 @@ class ProjectDependencyCollection:
         navResult = self._ast_try_navigate_dependency(locatable, isLHSType)
         if navResult is None:
             raise DependencyNotFoundError(locatable.anchor, locatable.location())
-        
-        # Copy array dimensions.
-        if isinstance(locatable, Typename):
-            navResult = navResult.as_array(locatable.dims)
 
         return navResult
 
