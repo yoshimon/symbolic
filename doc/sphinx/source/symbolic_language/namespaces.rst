@@ -20,6 +20,11 @@ illustrates the problem:
     	// Do something else.
         return 0;
     }
+    
+    void g()
+    {
+        f(1.0, 2.0); // Error: which f?
+    }
 	
 Namespaces can be used as an alternative way of resolving this location conflict without changing the name of the function.
 
@@ -44,6 +49,16 @@ The following example illustrates the use of namespaces to resolve the location 
 	    // Do something else.
             return 0;
         }
+	
+	void g()
+	{
+	    f(1.0, 2.0); // Second f.
+	}
+    }
+    
+    void g()
+    {
+        f(1.0, 2.0); // First f.
     }
     
 While not strictly necessary, namespaces provide a convenient way to resolve location conflicts without renaming an object.
