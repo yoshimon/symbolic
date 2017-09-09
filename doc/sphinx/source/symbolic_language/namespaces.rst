@@ -4,14 +4,14 @@ Namespaces are containers for other objects types in the symbolic language.
 
 Problem
 ---------------------
-Objects with the same name can lead to location clashes, if they are declared within the same scope. The following example
+Objects with the same name can lead to location conflicts, if they are declared within the same scope. The following example
 illustrates the problem:
 
 .. code-block:: cpp
 
     float f(float a, float b)
     {
-        // Do something...
+        // Do something.
 	return 0.0;
     }
     
