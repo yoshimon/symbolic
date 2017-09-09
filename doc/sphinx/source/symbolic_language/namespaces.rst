@@ -52,13 +52,13 @@ The following example illustrates the use of namespaces to resolve the location 
 	
 	void g()
 	{
-	    f(1.0, 2.0); // Second f.
+	    f(1.0, 2.0); // Resolves to `int f(float a, float b)`.
 	}
     }
     
     void g()
     {
-        f(1.0, 2.0); // First f.
+        f(1.0, 2.0); // Resolves to `float f(float a, float b)`.
     }
     
 While not strictly necessary, namespaces provide a convenient way to resolve location conflicts without renaming an object.
