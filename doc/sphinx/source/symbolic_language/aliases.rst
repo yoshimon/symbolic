@@ -35,3 +35,13 @@ Instead of having to write :code:`vector<float, 4>` for every instance of such c
 
     void f(v4f);
     void g(v4f);
+
+Aliases can be templated too. In the example above, a :code:`vector4` can be templated like this:
+
+.. code-block:: cpp
+
+    template<T>
+    using vector4 { vector<T, 4> }
+    
+    void f(vector4<float>);
+    void g(vector4<float>);
