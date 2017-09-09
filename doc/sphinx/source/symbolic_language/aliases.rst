@@ -31,10 +31,10 @@ Instead of having to write :code:`vector<float, 4>` for every instance of such c
         Type >< Dimension data;
     }
     
-    using v4f { vector<float, 4> }
+    using vector4f { vector<float, 4> }
 
-    void f(v4f);
-    void g(v4f);
+    void f(vector4f);
+    void g(vector4f);
 
 Aliases can be templated too. In the example above, a :code:`vector4` can be templated like this:
 
