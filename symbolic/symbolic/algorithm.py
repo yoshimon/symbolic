@@ -1,4 +1,4 @@
-﻿"""Contains common algorithms used throughout the project."""
+﻿"""Contains common algorithms."""
 
 class Algorithm:
     """Custom algorithms on Python data structures."""
