@@ -1,9 +1,14 @@
-﻿"""Contains all custom exceptions classes used in the project."""
+﻿"""Contains all custom exceptions classes."""
 
 from symbolic.algorithm import Algorithm
 
 class UnmappedNativeTypename(Exception):
-    """An exception class, that indicates that a system typename was not mapped but referenced."""
+    """
+    An exception class, that indicates that a system typename was not mapped but referenced.
+    
+    Attributes:
+        name (str): The typename.
+    """
 
     def __init__(self, name):
         """
@@ -25,7 +30,12 @@ class UnmappedNativeTypename(Exception):
         return super().__str__() + "The native typename '{0}' was not mapped in the project configuration and is therefore not allowed.".format(self.name)
 
 class LibraryDependencyError(Exception):
-    """An exception class, that indicates that there is a circular dependency cycle between libraries."""
+    """
+    An exception class, that indicates that there is a circular dependency between libraries.
+    
+    Attributes:
+        dependencyChain (str): The dependency chain that caused the error.
+    """
 
     def __init__(self, dependencyChain):
         """
@@ -59,7 +69,7 @@ class SourceError(Exception):
         Initialize the object.
 
         Args:
-            anchor (lexer.Anchor): The source code anchor.
+            anchor (Anchor): The source code anchor.
         """
         super().__init__()
         self.anchor = anchor
@@ -122,7 +132,7 @@ class UnsupportedAnnotationError(SourceError):
     An exception class, that indicates an unsupported annotation.
     
     Attributes:
-       annotation ([objects.Annotation]): The annotation.
+        annotation (objects.Annotation): The annotation.
     """
 
     def __init__(self, annotation):
@@ -130,7 +140,7 @@ class UnsupportedAnnotationError(SourceError):
         Initialize the object.
 
         Args:
-            annotation ([objects.Annotation]): The annotation.
+            annotation (objects.Annotation): The annotation.
         """
         super().__init__(annotation.token.anchor)
         self.annotation = annotation
@@ -143,46 +153,6 @@ class UnsupportedAnnotationError(SourceError):
             str: The string representation.
         """
         return super().__str__() + '"{0}" annotation is not allowed in this context.'.format(str(self.annotation))
-
-class UnknownAnnotationError(SourceError):
-    """
-    An exception class, that indicates an unknown annotation.
-    
-    Attributes:
-        annotation (objects.Annotation): The annotation.
-    """
-
-    def __init__(self, annotation):
-        """
-        Initialize the object.
-
-        Args:
-            anchor (lexer.Anchor): The anchor to associate with this error.
-            annotation (objects.Annotation): The annotation.
-        """
-        super().__init__(annotation.token.anchor)
-        self.annotation = annotation
-    
-    def __str__(self):
-        """
-        Return a string representation of the object.
-
-        Returns:
-            str: The string representation.
-        """
-        return super().__str__() + '"{0}" is not a known annotation.'.format(str(self.annotation))
-
-class MissingScopeError(SourceError):
-    """An exception class, that indicates a missing scope."""
-
-    def __str__(self):
-        """
-        Return a string representation of the object.
-
-        Returns:
-            str: The string representation.
-        """
-        return super().__str__() + "Missing scope."
 
 class TypenameExpectedError(SourceError):
     """An exception class, that indicates a missing typename."""
@@ -303,18 +273,6 @@ class TemplateMismatchError(SourceError):
             str: The string representation.
         """
         return super().__str__() + "Invalid template invocation."
-
-class UnknownIdentifierError(SourceError):
-    """An exception class, that indicates the reference to an unknown identifier."""
-
-    def __str__(self):
-        """
-        Return a string representation of the object.
-
-        Returns:
-            str: The string representation.
-        """
-        return super().__str__() + "Unknown identifier."
 
 class OverloadNotFoundError(SourceError):
     """An exception class, that indicates a missing overload."""
