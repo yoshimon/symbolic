@@ -6,13 +6,13 @@ class Algorithm:
     @staticmethod
     def pop_while(stack, predicate, action=None):
         """
-        Pop all elements from a stack until a predicate returns False.
+        Pop all elements from a stack until the specified predicate returns False.
         
         An optional action is invoked after each iteration.
 
         Args:
-            stack (list): The list to modify.
-            predicate (function): The predicate to query.
+            stack (list): The list to operate on.
+            predicate (function): The predicate to query in each iteration.
             action (function): The action to invoke after each iteration.
         Returns:
             bool: True, if the stack is empty when returning. Otherwise, False.
@@ -31,14 +31,14 @@ class Algorithm:
     @staticmethod
     def zip_all(a, b, predicate):
         """
-        Compare two sequences for equality based on a predicate.
+        Compare two sequences for equality using a specified predicate.
 
         Args:
             a: The first sequence.
             b: The second sequence.
             predicate (function): The predicate.
         Returns:
-            bool: True, if the lists are equal. Otherwise False.
+            bool: True, if the sequences are equal. Otherwise False.
         """
         if len(a) != len(b):
             return False
@@ -52,36 +52,36 @@ class Algorithm:
     @staticmethod
     def join(delimiter, sequence):
         """
-        Return a joined list of strings.
+        Return a joined string from an input sequence and a delimiter.
 
         Args:
-            delimiter (str): The separator.
-            sequence (iterable): The sequence to convert.
+            delimiter (str): The delimiter (separator).
+            sequence (iterable): The sequence to join.
         Returns:
-            str: The joined string values.
+            str: The joined string.
         """
         return delimiter.join(str(e) for e in sequence)
 
     @staticmethod
     def join_comma(sequence):
         """
-        Return a comma-separated list of strings.
+        Return a joined string from an input sequence and a ','-separator.
 
         Args:
-            sequence (iterable): The list to convert.
+            sequence (iterable): The sequence to join.
         Returns:
-            str: The comma-separated string values.
+            str: The joined string.
         """
         return Algorithm.join(", ", sequence)
 
     @staticmethod
     def join_dot(sequence):
         """
-        Return a joined list of strings.
+        Return a joined string from an input sequence and a '.'-separator.
 
         Args:
-            sequence (iterable): The sequence to convert.
+            sequence (iterable): The sequence to join.
         Returns:
-            str: The joined string values.
+            str: The joined string.
         """
         return Algorithm.join(".", sequence)
