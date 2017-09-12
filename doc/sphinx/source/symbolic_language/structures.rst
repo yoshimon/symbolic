@@ -13,7 +13,7 @@ Functions represent data transforms which operate on structures. So, to pass in 
         float x, y, z, w;
     }
   
-This data can now be passed in to a function `add` which adds two vectors together:
+This data can now be passed in to a function :code:`add` which adds two vectors together:
 
 .. code-block:: cpp
 
@@ -21,7 +21,7 @@ This data can now be passed in to a function `add` which adds two vectors togeth
 
 Constructors
 ------------
-To initialize a structure within a function body, a function can be declared which returns an instance of the requested type. By default, the symbolic compiler will generate a *default constructor* function, when a new type is declared, whose parameter list is deduced from the members of the structure. The :code:`float4` type declaration above will generate the following default constructor:
+To initialize local variables within a function body, a new function can be declared, whose return type is the desired variable type. By default, the symbolic compiler will generate a *default constructor* function, when a new type is declared, whose parameter list is deduced from the members of the structure. The :code:`float4` type declaration above will generate the following default constructor:
 
 .. code-block:: cpp
 
