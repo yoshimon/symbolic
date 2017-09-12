@@ -4,7 +4,7 @@ Structures represent chunks of data. However, these data chunks do not necessari
 
 Description
 -----------
-Functions represent data transforms which operate on structures. So, to pass in data to any function, the data has to be represented as a structure. Structures are namespaces and can therefore contain other namespace objects. They can also contain special namespace objects  called *member lists*. A member list consists of multiple *members* which share a common type. The following example illustrates the declaration of a four-dimensional vector type :code:`float4`, which has one member list of type :code:`float` and four members:
+Functions represent data transforms which operate on structures. So, to pass in data to any function, the data has to be represented as a structure. They can hold an arbitrary number of *member lists*. A member list consists of multiple *members* which share a common type. The following example illustrates the declaration of a four-dimensional vector type :code:`float4`, which has one member list of type :code:`float` and four members:
 
 .. code-block:: cpp
 
