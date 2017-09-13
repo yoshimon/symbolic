@@ -48,3 +48,16 @@ Likewise, if a member list should not be part of the default constructors parame
     // Generated constructor: MyStruct MyStruct(float x, float y, float w);
 
 The :code:`[uninitialized]` annotation has no effect, if the :code:`[noconstructor]` annotation is specified.
+
+Properties
+----------
+Properties are functions which operate on a structure instance. Every property function receives an implicit :code:`ref T this` argument, where :code:`T` is the structure. This simplifies writing accessors to structure members:
+
+.. code-block:: cpp
+
+    struct MyStruct
+    {
+        float x, y;
+        float sum() => this.x + y; // Explicit and implicit member reference.
+    }
+    
