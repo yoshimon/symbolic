@@ -403,6 +403,7 @@ class ProjectDependencyCollection:
         Verify a struct member or property in an AST.
 
         Args:
+            container (objects.Locatable): The locatable container (parent) object.
             atom (objects.ExpressionAtom): The root atom.
             lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
         Returns:
@@ -415,14 +416,18 @@ class ProjectDependencyCollection:
             # Container is implicit LHS.
             struct = container.parent
             assert(isinstance(struct, Struct))
+
+            isLHSType = False
         else:
             # Deduce struct from LHS if possible.
             struct = lhs.dependency.locatable
             if not isinstance(struct, Struct):
                 return None
 
-        result = self._try_verify_ast_property(struct, atom.token, lhs.isLHSType)
-        if result is None and not lhs.isLHSType:
+            isLHSType = lhs.isLHSType 
+
+        result = self._try_verify_ast_property(struct, atom.token, isLHSType)
+        if result is None and not isLHSType:
             result = self._try_verify_ast_member(struct, atom.token)
             
         return result
