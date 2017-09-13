@@ -4,7 +4,7 @@ Structures represent chunks of data. However, these data chunks do not necessari
 
 Description
 -----------
-Structures represent input and output data, which can be passed into and returned from functions (transforms). They can hold an arbitrary number of *member lists*. A member list consists of multiple *members* which share a common type. The following example illustrates the declaration of a four-dimensional vector type :code:`float4`, which has one member list of type :code:`float` with four members:
+Structures represent input and output data, which can be passed into and returned from functions (transforms). Each structure can hold an arbitrary number of *member lists*. A member list consists of multiple *members* which share a common type. The following example illustrates the declaration of a four-dimensional vector type :code:`float4`, which has one member list of type :code:`float` with four members:
 
 .. code-block:: cpp
 
