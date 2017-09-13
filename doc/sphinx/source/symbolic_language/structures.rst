@@ -60,5 +60,7 @@ Properties are functions which operate on a structure instance. Every property f
         float x, y;
         float sum => this.x + y; // Explicit and implicit member reference.
         float foo(float z, float w) => x + y + z + w; // With 2 arguments. 
+        [static] float sum => 1.0 + 2.0;
     }
     
+The :code:`[static]` annotation can be used to declare static property functions, which do not operate on an instance. Static property functions are regular functions within the namespace of the type they are declared in.
