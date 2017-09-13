@@ -58,6 +58,7 @@ Properties are functions which operate on a structure instance. Every property f
     struct MyStruct
     {
         float x, y;
-        float sum() => this.x + y; // Explicit and implicit member reference.
+        float sum => this.x + y; // Explicit and implicit member reference.
+        float foo(float z, float w) => x + y + z + w; // With 2 arguments. 
     }
     
