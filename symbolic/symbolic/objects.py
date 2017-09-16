@@ -326,7 +326,7 @@ class Named(Locatable):
     Attributes:
         token (lexer.Symto): A token which holds the name.
         annotations ([objects.Annotation]): The system annotations.
-        semantic (lexer.Symto): The semantic annotation.
+        semantic (objects.Annotation): The semantic annotation.
     """
 
     def __init__(self, references, parent, token, annotations, semantic):
@@ -338,7 +338,7 @@ class Named(Locatable):
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             annotations ([objects.Annotation]): The user annotations.
-            semantic (lexer.Symto): The semantic annotation.
+            semantic (objects.Annotation): The semantic annotation.
         """
         super().__init__(references, parent, token.anchor)
         assert token is not None
@@ -428,7 +428,7 @@ class Reference(Named):
             references ([objects.Reference]): The references visible to this locatable.
             token (lexer.Symto): The reference text.
             annotations ([objects.Annotation]): The annotations.
-            semantic (lexer.Symto): The semantic annotation.
+            semantic (objects.Annotation): The semantic annotation.
         """
         super().__init__([], None, token, annotations, semantic)
 
@@ -483,7 +483,7 @@ class Namespace(Named):
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             annotations ([objects.Annotation]): The annotations.
-            semantic (lexer.Symto): The semantic annotation.
+            semantic (objects.Annotation): The semantic annotation.
         """
         Named.__init__(self, references, parent, token, annotations, semantic)
         self.locatables = []
@@ -585,7 +585,7 @@ class TemplateObject(Named):
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             annotations ([objects.Annotation]): The annotations.
-            semantic (lexer.Symto): The semantic annotation.
+            semantic (objects.Annotation): The semantic annotation.
             body ([lexer.Symto]): The template body, represented by a list of tokens.
         """
         super().__init__(references, parent, token, annotations, semantic)
@@ -653,7 +653,7 @@ class Instruction(Named):
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): An anomymous identifier for the object.
             annotations ([objects.Annotation]): The annotations.
-            semantic (lexer.Symto): The semantic annotation.
+            semantic (objects.Annotation): The semantic annotation.
             kind (objects.InstructionKind): The instruction type specifier.
             expression (objects.Expression): The expression within the instruction.
             instructions ([objects.Instruction]): The sub-instructions within the instruction (e.g. a for-loop body).
@@ -1380,7 +1380,7 @@ class Parameter(Named):
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             annotations ([objects.Annotation]): The annotations.
-            semantic (lexer.Symto): The semantic annotation.
+            semantic (objects.Annotation): The semantic annotation.
             typename (objects.Typename): The typename.
             isRef (bool): True, if the parameter is a reference. Otherwise False.
         """
@@ -1521,7 +1521,7 @@ class Function(TemplateObject, Namespace):
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             annotations ([objects.Annotation]): The annotations.
-            semantic (lexer.Symto): The semantic annotation.
+            semantic (objects.Annotation): The semantic annotation.
             body ([lexer.Symto]): The template body.
             kind (objects.FunctionKind): The function kind.
             returnTypename (objects.Typename): The return typename.
@@ -1702,7 +1702,7 @@ class Member(Named):
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             annotations ([objects.Annotation]): The annotations.
-            semantic (lexer.Symto): The semantic annotation.
+            semantic (objects.Annotation): The semantic annotation.
             typename (objects.Typename): The member typename.
         """
         super().__init__(references, parent, token, annotations, semantic)
@@ -1765,7 +1765,7 @@ class MemberList(Named):
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             annotations ([objects.Annotation]): The annotations.
-            semantic (lexer.Symto): The semantic annotation.
+            semantic (objects.Annotation): The semantic annotation.
             members ([objects.Member]): A list of members.
             typename (objects.Typename): The member typename.
         """
@@ -1835,7 +1835,7 @@ class Struct(TemplateObject, Namespace):
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             annotations ([objects.Annotation]): The annotations.
-            semantic (lexer.Symto): The semantic annotation.
+            semantic (objects.Annotation): The semantic annotation.
             body ([lexer.Symto]): The template body.
         """
         Namespace.__init__(self, references, parent, token, annotations, semantic)
@@ -2026,7 +2026,7 @@ class Alias(TemplateObject):
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             annotations ([objects.Annotation]): The annotations.
-            semantic (lexer.Symto): The semantic annotation.
+            semantic (objects.Annotation): The semantic annotation.
             body ([lexer.Symto]): The template body.
             targetTypename (objects.Typename): The target typename.
         """
@@ -2469,7 +2469,7 @@ class TemplateParameter(Named):
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             annotations ([objects.Annotation]): The annotations.
-            semantic (lexer.Symto): The semantic annotation.
+            semantic (objects.Annotation): The semantic annotation.
             partialMatch (lexer.Symto or None): A token that represents the partial template mask.
         """
         super().__init__(references, parent, token, annotations, semantic)
@@ -2546,7 +2546,7 @@ class Template(Named):
             references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             annotations ([objects.Annotation]): The annotations.
-            semantic (lexer.Symto): The semantic annotation.
+            semantic (objects.Annotation): The semantic annotation.
             parameters ([objects.TemplateParameter]): The template parameter list.
             obj (objects.TemplateObject): The template object attached to this template.
         """
