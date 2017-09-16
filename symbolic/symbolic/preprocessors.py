@@ -1,8 +1,8 @@
 ﻿"""Contains classes that can be used to pre-process text."""
 
 # Built-in
-import json
 import importlib.util
+import yaml
 
 # Library
 from symbolic.paths import VirtualPath
@@ -27,8 +27,8 @@ class PPT:
         # Load it from file
         if optFilePath:
             with optFilePath.open() as optFile:
-                jsonFile = json.load(optFile)
-                self.contents = jsonFile["preprocessor"]
+                yamlFile = yaml.load(optFile)
+                self.contents = yamlFile["preprocessor"]
 
     def __iter__(self):
         """

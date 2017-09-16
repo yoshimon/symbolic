@@ -1,23 +1,23 @@
 ﻿"""Contains classes to manage symbolic projects."""
 
 # Built-in
-import sys
-import json
+import io
 import os
 import glob
-import io
+import sys
+import yaml
 
 # Library
-import networkx as nx
 from jinja2 import Environment
+import networkx as nx
 
 # Project
-from symbolic.parsers import UnitParser
-from symbolic.lexer import SymbolicLexer, Symto
 from symbolic.dag import ProjectDependencyCollection
-from symbolic.paths import VirtualPath
-from symbolic.preprocessors import PPT, ExternalPreprocessor
 from symbolic.exceptions import *
+from symbolic.lexer import SymbolicLexer, Symto
+from symbolic.paths import VirtualPath
+from symbolic.parsers import UnitParser
+from symbolic.preprocessors import PPT, ExternalPreprocessor
 
 class ProjectConfiguration:
     """
@@ -39,21 +39,21 @@ class ProjectConfiguration:
         self.systemTypes = {}
         self.ppt = PPT(optFilePath=filePath.with_extension(".pp"))
 
-        # Read & parse the project JSON descriptor
+        # Read & parse the project YAML descriptor
         projDirPath = filePath.directory_path()
-        with filePath.open() as jsonProjFileData:
-            jsonProjFile = json.load(jsonProjFileData)
+        with filePath.open() as yamlProjFileData:
+            yamlProjFile = yaml.load(yamlProjFileData)
 
             # Load all library descriptors
-            jsonProject = jsonProjFile["project"]
-            for relLibPath in jsonProject.get("libraries", str()):
+            yamlProject = yamlProjFile["project"]
+            for relLibPath in yamlProject.get("libraries", str()):
                 # Register combined path
                 self.libraryDirectoryPaths.append(projDirPath + relLibPath)
 
             # Load all system type mappings
-            self.systemTypes = jsonProject.get("system_types", {})
+            self.systemTypes = yamlProject.get("system_types", {})
             
-            self.libraryConfiguration = jsonProject.get("library_configuration", "manifest.json")
+            self.libraryConfiguration = yamlProject.get("library_configuration", "manifest.yaml")
 
 class LibraryConfiguration:
     """
@@ -89,26 +89,26 @@ class LibraryConfiguration:
         self.libName = filePath.expanded().folder_name().text
 
         if filePath:
-            with filePath.open() as jsonLibFileData:
-                jsonLibFile = json.load(jsonLibFileData)
+            with filePath.open() as yamlLibFileData:
+                yamlLibFile = yaml.load(yamlLibFileData)
 
-                jsonLibFileLibrary = jsonLibFile.get("library", {})
+                yamlLibFileLibrary = yamlLibFile.get("library", {})
 
                 # Load references
-                for ref in jsonLibFileLibrary.get("references", []):
+                for ref in yamlLibFileLibrary.get("references", []):
                     self.references.append(VirtualPath(ref).expanded().last().text)
 
                 # Load pre and post imports.
-                for ref in jsonLibFileLibrary.get("pre_imports", []):
+                for ref in yamlLibFileLibrary.get("pre_imports", []):
                     self.preImports.append(ref)
 
-                for ref in jsonLibFileLibrary.get("post_imports", []):
+                for ref in yamlLibFileLibrary.get("post_imports", []):
                     self.postImports.append(ref)
 
                 # Load the user pre-processor
-                jsonLibFilePP = jsonLibFileLibrary.get("preprocessor", {})
-                self.preprocessorModuleFilePath = jsonLibFilePP.get("module", "")
-                self.preprocessorClass = jsonLibFilePP.get("class", "")
+                yamlLibFilePP = yamlLibFileLibrary.get("preprocessor", {})
+                self.preprocessorModuleFilePath = yamlLibFilePP.get("module", "")
+                self.preprocessorClass = yamlLibFilePP.get("class", "")
 
 class LibraryDependencyGraph:
     """A dependency graph for libraries in a project."""
