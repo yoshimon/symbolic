@@ -280,6 +280,7 @@ class ProjectDependencyCollection:
 
     Attributes:
         unresolvedDependencies ({dag.Dependency}): A set of unresolved dependencies.
+        unresolvedAliasDependencies ({dag.Dependency}): A set of unresolved alias dependencies.
         libraries (dict): The libraries lookup table.
         resolvedObjects (defaultdict): Maps each library to a list of resolved objects
         links (dict): Maps unresolved dependencies to their resolved counterparts
@@ -1367,11 +1368,6 @@ class ProjectDependencyCollection:
             # If it's a type generate the default constructors.
             if isinstance(locatable, Struct):
                 self._generate_type_constructor(locatable, locatable)
-            elif isinstance(locatable, Alias):
-                nr = self.navigate_dependency(dependency)
-                structNR = self.navigate_alias_base(nr)
-                struct = structNR.resolvedDependencyLocation.dependencies[0].locatable
-                self._generate_type_constructor(locatable, struct)
 
     def insert_unit(self, rootNamespace):
         """
@@ -1389,11 +1385,6 @@ class ProjectDependencyCollection:
         while locatables:
             locatable = locatables.popleft()
             
-            # NOTE: instructions are resolved later.
-            # Functions will buffer up instructions below.
-            if not isinstance(locatable, Instruction):
-                self.insert(locatable)
-
             if isinstance(locatable, Function):
                 self._insert_function_dependencies(locatable)
             elif isinstance(locatable, Alias):
@@ -1402,6 +1393,11 @@ class ProjectDependencyCollection:
             elif isinstance(locatable, MemberList):
                 # Unknown member types.
                 self.insert(locatable.typename)
+
+            # NOTE: instructions are resolved later.
+            # Functions will buffer up instructions below.
+            if not isinstance(locatable, Instruction):
+                self.insert(locatable)
 
             if isinstance(locatable, Namespace):
                 locatables += locatable.locatables
@@ -1497,32 +1493,35 @@ class ProjectDependencyCollection:
         # Insert the functions dependencies (return type and parameters).
         self._insert_function_dependencies(constructor)
 
+    def _resolve_pending_dependencies(self, unresolvedDependencies):
+        """Resolve all dependencies."""
+        # Traverse from top to bottom
+        localUnresolvedDependencies = deque(unresolvedDependencies)
+
+        # Clear the unresolved dependencies, they are in the queue
+        unresolvedDependencies.clear()
+            
+        while localUnresolvedDependencies:
+            dependency = localUnresolvedDependencies.popleft()
+
+            # The name has to be resolvable by now
+            # Catching unresolved objects will spawn templates, if encountered
+            self.links[dependency] = self.navigate_dependency(dependency)
+
+            # Add new unresolved dependencies to the queue
+            localUnresolvedDependencies += unresolvedDependencies
+
+            # And clear the cache again
+            unresolvedDependencies.clear()
+
     def _resolve(self):
         """Resolve all dependencies."""
-        if self.unresolvedDependencies:
-            # Traverse from top to bottom
-            unresolvedDependencies = deque(self.unresolvedDependencies)
-            
-            # Clear the unresolved dependencies, they are in the queue
-            self.unresolvedDependencies.clear()
-            
-            while unresolvedDependencies:
-                dependency = unresolvedDependencies.popleft()
+        self._resolve_pending_dependencies(self.unresolvedDependencies)
 
-                # The name has to be resolvable by now
-                # Catching unresolved objects will spawn templates, if encountered
-                self.links[dependency] = self.navigate_dependency(dependency)
-
-                # Add the unresolved dependencies to the queue
-                unresolvedDependencies += self.unresolvedDependencies
-
-                # And clear the cache again
-                self.unresolvedDependencies.clear()
-
-            # Now that each dependency has been resolved
-            # we solve location conflicts due to clashing parameter
-            # signatures by comparing the types
-            self._solve_location_conflicts()
+        # Now that each dependency has been resolved
+        # we solve location conflicts due to clashing parameter
+        # signatures by comparing the types
+        self._solve_location_conflicts()
 
         # Now that all members and function parameters are resolved we can look at the instructions within
         # the functions.
