@@ -280,7 +280,7 @@ class ProjectDependencyCollection:
 
     Attributes:
         unresolvedDependencies ({dag.Dependency}): A set of unresolved dependencies.
-        unresolvedAliasDependencies ({dag.Dependency}): A set of unresolved alias dependencies.
+        unresolvedAliasDefaultConstructorDependencies ({dag.Dependency}): A set of unresolved alias constructor dependencies.
         libraries (dict): The libraries lookup table.
         resolvedObjects (defaultdict): Maps each library to a list of resolved objects
         links (dict): Maps unresolved dependencies to their resolved counterparts
@@ -290,6 +290,7 @@ class ProjectDependencyCollection:
     def __init__(self, userTypeLocationStrings):
         """Initialize the object."""
         self.unresolvedDependencies = list()
+        self.unresolvedAliasDefaultConstructorDependencies = list()
         self.libraries = {} # The libraries lookup table
         self.libRoots = {} # The library root namespace lookup table
         self.libNamespaces = dict() # Maps namespace locations to namespaces
@@ -427,9 +428,8 @@ class ProjectDependencyCollection:
 
             isLHSType = lhs.isLHSType 
 
-        result = self._try_verify_ast_property(struct, atom.token, isLHSType)
-        if result is None and not isLHSType:
-            result = self._try_verify_ast_member(struct, atom.token)
+        result = self._try_verify_ast_member(struct, atom.token) if not isLHSType else None
+        result = self._try_verify_ast_property(struct, atom.token, isLHSType) if result is None else result
             
         return result
 
@@ -465,7 +465,7 @@ class ProjectDependencyCollection:
         """
         memberTypename = struct.try_find_member_typename(memberName.anchor, memberName)
         if memberTypename is None:
-            raise MemberNotFoundError(memberName)
+            return None
 
         return self._ast_try_navigate_dependency(memberTypename, False)
 
@@ -1039,6 +1039,7 @@ class ProjectDependencyCollection:
 
         # Generate a sequence of additional locations to search at.
         # This will search the parent location, and all of its parents first.
+        isPropertyLocation = location[-1].kind == LocationKind.Function and isinstance(parent, Struct)
         locationsWithoutLibName = deque()
         currentParent = parent
         while currentParent is not None and currentParent.parent is not None:
@@ -1048,7 +1049,11 @@ class ProjectDependencyCollection:
             locationsWithoutLibName.append(otherLocationWithoutLibName)
             currentParent = currentParent.parent
 
-        locationsWithoutLibName.append(locationWithoutLibName)
+            if isPropertyLocation:
+                break
+
+        if not isPropertyLocation:
+            locationsWithoutLibName.append(Location(locationWithoutLibName))
 
         # Find the library and the object in the library
         lookup = None
@@ -1058,7 +1063,7 @@ class ProjectDependencyCollection:
         discardParentLocations = False
         for libName in libNameGen:
             if not discardParentLocations:
-                discardParentLocations = True
+                discardParentLocations = not isPropertyLocation
             else:
                 locationsWithoutLibName = [locationWithoutLibName]
 
@@ -1332,6 +1337,24 @@ class ProjectDependencyCollection:
         if self.try_merge_namespace(locatable):
             return
 
+        # Recurse on the locatables dependencies.
+        if isinstance(locatable, Function):
+            # The unknown return type
+            self.insert(locatable.returnTypename)
+
+            # The unknown parameter types
+            for parameter in locatable.parameters:
+                self.insert(parameter.typename)
+
+            # Remember this function for instruction verification later.
+            self.functions.append(locatable)
+        elif isinstance(locatable, Alias):
+            # The unknown aliased typename.
+            self.insert(locatable.targetTypename)
+        elif isinstance(locatable, MemberList):
+            # Unknown member types.
+            self.insert(locatable.typename)
+
         # Create and cache the dependency
         dependency = Dependency(locatable)
         rl = dependency.baseLocation[-1]
@@ -1368,6 +1391,20 @@ class ProjectDependencyCollection:
             # If it's a type generate the default constructors.
             if isinstance(locatable, Struct):
                 self._generate_type_constructor(locatable, locatable)
+            elif isinstance(locatable, Alias):
+                self.unresolvedAliasDefaultConstructorDependencies.append(dependency)
+
+    def _generate_alias_constructor(self, dependency):
+        """
+        Generate the default constructor for an alias.
+
+        Args:
+            dependency (dag.Dependency): The alias dependency.
+        """
+        nr = self.navigate_dependency(dependency)
+        structNR = self.navigate_alias_base(nr)
+        struct = structNR.resolvedDependencyLocation.dependencies[0].locatable
+        self._generate_type_constructor(dependency.locatable, struct)
 
     def insert_unit(self, rootNamespace):
         """
@@ -1384,15 +1421,6 @@ class ProjectDependencyCollection:
         locatables.append(rootNamespace)
         while locatables:
             locatable = locatables.popleft()
-            
-            if isinstance(locatable, Function):
-                self._insert_function_dependencies(locatable)
-            elif isinstance(locatable, Alias):
-                # The unknown typename
-                self.insert(locatable.targetTypename)
-            elif isinstance(locatable, MemberList):
-                # Unknown member types.
-                self.insert(locatable.typename)
 
             # NOTE: instructions are resolved later.
             # Functions will buffer up instructions below.
@@ -1401,23 +1429,6 @@ class ProjectDependencyCollection:
 
             if isinstance(locatable, Namespace):
                 locatables += locatable.locatables
-
-    def _insert_function_dependencies(self, func):
-        """
-        Insert a function and its dependencies.
-
-        Args:
-            func (objects.Function): The function to insert.
-        """
-        # The unknown return type
-        self.insert(func.returnTypename)
-
-        # The unknown parameter types
-        for parameter in func.parameters:
-            self.insert(parameter.typename)
-
-        # Remember this function for instruction verification later.
-        self.functions.append(func)
 
     def begin_library(self, libName, preImports, postImports):
         """
@@ -1476,7 +1487,7 @@ class ProjectDependencyCollection:
             return
 
         # The return type is the struct.
-        returnTypename = Typename.from_location(locatable.references, locatable.location())
+        returnTypename = Typename.from_location(locatable.references, struct.location())
         
         # The parameters are deduced from the member lists.
         parameters = []
@@ -1486,12 +1497,7 @@ class ProjectDependencyCollection:
                     parameters += [Parameter(None, member.token, [], None, memberList.typename, False) for member in memberList.members]
 
         constructor = Function(locatable.references, locatable.parent, locatable.token, [], None, None, FunctionKind.Regular, returnTypename, parameters, None, None)
-        
-        # Insert the function itself.
         self.insert(constructor)
-
-        # Insert the functions dependencies (return type and parameters).
-        self._insert_function_dependencies(constructor)
 
     def _resolve_pending_dependencies(self, unresolvedDependencies):
         """Resolve all dependencies."""
@@ -1518,13 +1524,16 @@ class ProjectDependencyCollection:
         """Resolve all dependencies."""
         self._resolve_pending_dependencies(self.unresolvedDependencies)
 
-        # Now that each dependency has been resolved
-        # we solve location conflicts due to clashing parameter
-        # signatures by comparing the types
+        # Now that each dependency has been resolved we can generate the alias default constructor which require the base type to be resolvable.
+        for dependency in self.unresolvedAliasDefaultConstructorDependencies:
+            self._generate_alias_constructor(dependency)
+
+        self.unresolvedAliasDefaultConstructorDependencies.clear()
+
+        # We solve location conflicts due to clashing parameter signatures by comparing the types now.
         self._solve_location_conflicts()
 
-        # Now that all members and function parameters are resolved we can look at the instructions within
-        # the functions.
+        # Now that all members and function parameters are resolved we can look at the instructions within the functions.
         self._verify_functions()
 
     def _verify_functions(self):

@@ -593,34 +593,6 @@ class InvalidArrayIndexTypeError(SourceError):
         """
         return super().__str__() + 'Invalid array index type. Array indices must be integers.'
 
-class MemberNotFoundError(SourceError):
-    """
-    An exception class, that indicates that a struct member was not found.
-    
-    Attributes:
-        memberName (str): The name of the member associated with this error.
-    """
-
-    def __init__(self, memberToken):
-        """
-        Initialize the object.
-
-        Args:
-            anchor (lexer.Anchor): The error anchor.
-            memberName (lexer.Symto): The member token.
-        """
-        super().__init__(memberToken.anchor)
-        self.memberName = str(memberToken)
-
-    def __str__(self):
-        """
-        Return a string representation of the object.
-
-        Returns:
-            str: The string representation.
-        """
-        return super().__str__() + "Could not find member '{0}'.".format(self.memberName)
-
 class InvalidArrayDimensionsError(SourceError):
     """An exception class, that indicates that an invalid array bounds was provided."""
 
