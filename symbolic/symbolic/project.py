@@ -132,7 +132,7 @@ class LibraryDependencyGraph:
         self.graph = nx.DiGraph()
 
         # Create a node for each library
-        print("-" * 80)
+        print("=" * 80)
         print("(1) Library Gatherer")
         print("-" * 80)
         for libDirPath in self.projConfig.libraryDirectoryPaths:
@@ -283,7 +283,9 @@ class Project:
             print("Library build successful. {0} elapsed.".format(self.dt_ms_string(libBuildStartTime)))
 
         print()
+        print("-" * 80)
         print("Project build successful. {0} elapsed.".format(self.dt_ms_string(projBuildStartTime)))
+        print("=" * 80)
 
     @classmethod
     def dt_ms_string(cls, start):
