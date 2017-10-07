@@ -202,6 +202,8 @@ class Project:
 
     def translate(self):
         """Translate the project."""
+        projBuildStartTime = datetime.datetime.now()
+
         # Create a dependency graph from the current configuration
         dependencyGraph = LibraryDependencyGraph(self.projConfig)
 
@@ -212,7 +214,10 @@ class Project:
         dependencyCollection = ProjectDependencyCollection(self.projConfig.systemTypes)
 
         # Translate each library by going through all *.sym files
+        libIndex = 0
+        libCount = len(self.projConfig.libraryNames)
         for libName, libConfig in orderedLibs:
+            libIndex += 1
             libBuildStartTime = datetime.datetime.now()
 
             # Load the pre-processor
@@ -223,6 +228,11 @@ class Project:
 
             # Signal the dependency collection that a new library is being processed
             dependencyCollection.begin_library(libName, libConfig.preImports, libConfig.postImports)
+
+            print()
+            print("-" * 80)
+            print("(3) [{1}/{2}] Building {0}".format(libName, libIndex, libCount))
+            print("-" * 80)
 
             # Process all symbolic files in the library
             numFilesParsed = 0
@@ -269,7 +279,20 @@ class Project:
 
             # Signal that we are done with this library
             dependencyCollection.end_library()
-            seconds = int(round((datetime.datetime.now() - libBuildStartTime).total_seconds()))
-            minutes, seconds = divmod(seconds, 60)
-            libBuildDtTimeStr = "{:02d}m:{:02d}s".format(minutes, seconds)
-            print("Build successful after {0}.".format(libBuildDtTimeStr))
+
+            print("Library build successful. {0} elapsed.".format(self.dt_ms_string(libBuildStartTime)))
+
+        print()
+        print("Project build successful. {0} elapsed.".format(self.dt_ms_string(projBuildStartTime)))
+
+    @classmethod
+    def dt_ms_string(cls, start):
+        """
+        Return a pretty string for a time delta with a given start value.
+        
+        Args:
+            start: The start date time.
+        """
+        seconds = int(round((datetime.datetime.now() - start).total_seconds()))
+        minutes, seconds = divmod(seconds, 60)
+        return "{:02d}m:{:02d}s".format(minutes, seconds)

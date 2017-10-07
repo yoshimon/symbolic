@@ -1441,11 +1441,6 @@ class ProjectDependencyCollection:
         """
         assert(self.libName is None)
 
-        print()
-        print("-" * 80)
-        print("Building {0}".format(libName))
-        print("-" * 80)
-
         # Create an empty entry in the global dict
         # Breakup the library name and insert it
         # Each part of the library name is its own subspace
