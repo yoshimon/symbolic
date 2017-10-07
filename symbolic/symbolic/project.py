@@ -1,6 +1,7 @@
 ﻿"""Contains classes to manage symbolic projects."""
 
 # Built-in
+import datetime
 import io
 import os
 import glob
@@ -38,22 +39,26 @@ class ProjectConfiguration:
         self.libraryDirectoryPaths = []
         self.systemTypes = {}
         self.ppt = PPT(optFilePath=filePath.with_extension(".pp"))
+        self.libraryNames = set()
 
         # Read & parse the project YAML descriptor
-        projDirPath = filePath.directory_path()
+        projDirPath = str(filePath.directory_path())
         with filePath.open() as yamlProjFileData:
             yamlProjFile = yaml.load(yamlProjFileData)
 
             # Load all library descriptors
             yamlProject = yamlProjFile["project"]
-            for relLibPath in yamlProject.get("libraries", str()):
+            for libPath in yamlProject.get("libraries", str()):
                 # Register combined path
-                self.libraryDirectoryPaths.append(projDirPath + relLibPath)
+                libPath = VirtualPath(libPath)
+                libPath.vars["PROJECT_DIR"] = projDirPath
+                self.libraryDirectoryPaths.append(libPath)
+                self.libraryNames.add(libPath.expanded().last().text)
 
             # Load all system type mappings
-            self.systemTypes = yamlProject.get("system_types", {})
+            self.systemTypes = yamlProject.get("system types", {})
             
-            self.libraryConfiguration = yamlProject.get("library_configuration", "manifest.yaml")
+            self.libraryConfiguration = yamlProject.get("library configuration", "manifest.yaml")
 
 class LibraryConfiguration:
     """
@@ -78,7 +83,7 @@ class LibraryConfiguration:
             filePath (paths.VirtualPath): The file path to the configuration.
         """
         self.directoryPath = filePath.directory_path()
-        self.references = []
+        self.references = set()
         self.preImports = []
         self.postImports = []
         self.preprocessorModuleFilePath = None
@@ -95,18 +100,19 @@ class LibraryConfiguration:
                 yamlLibFileLibrary = yamlLibFile.get("library", {})
 
                 # Load references
-                for ref in yamlLibFileLibrary.get("references", []):
-                    self.references.append(VirtualPath(ref).expanded().last().text)
+                self.references = set(yamlLibFileLibrary.get("references", {}))
 
                 # Load pre and post imports.
-                for ref in yamlLibFileLibrary.get("pre_imports", []):
+                for ref in yamlLibFileLibrary.get("pre imports", []):
                     self.preImports.append(ref)
+                    self.references.add(ref)
 
-                for ref in yamlLibFileLibrary.get("post_imports", []):
+                for ref in yamlLibFileLibrary.get("post imports", []):
                     self.postImports.append(ref)
+                    self.references.add(ref)
 
                 # Load the user pre-processor
-                yamlLibFilePP = yamlLibFileLibrary.get("preprocessor", {})
+                yamlLibFilePP = yamlLibFileLibrary.get("pre processor", {})
                 self.preprocessorModuleFilePath = yamlLibFilePP.get("module", "")
                 self.preprocessorClass = yamlLibFilePP.get("class", "")
 
@@ -132,6 +138,11 @@ class LibraryDependencyGraph:
         for libDirPath in self.projConfig.libraryDirectoryPaths:
             # Load the library configuration
             libConfig = LibraryConfiguration(libDirPath + self.projConfig.libraryConfiguration)
+
+            # Make sure library references are actual project libraries.
+            for ref in libConfig.references:
+                if ref not in projConfig.libraryNames:
+                    raise MissingLibraryReference(libConfig.libName, ref)
 
             self.graph.add_node(libConfig.libName, libConfig=libConfig)
             
@@ -202,6 +213,8 @@ class Project:
 
         # Translate each library by going through all *.sym files
         for libName, libConfig in orderedLibs:
+            libBuildStartTime = datetime.datetime.now()
+
             # Load the pre-processor
             preprocessor = ExternalPreprocessor(libConfig.preprocessorModuleFilePath, libConfig.preprocessorClass)
             
@@ -250,11 +263,13 @@ class Project:
             if numFilesParsed > 0:
                 print("")
                 if numFilesParsed == 1:
-                    print("{0} file successfully parsed.".format(numFilesParsed))
+                    print("{0} file successfully parsed. Finalizing library...".format(numFilesParsed))
                 else:
-                    print("{0} files successfully parsed.".format(numFilesParsed))
+                    print("{0} files successfully parsed. Finalizing library...".format(numFilesParsed))
 
             # Signal that we are done with this library
             dependencyCollection.end_library()
-
-            print("Successfully built library.")
+            seconds = int(round((datetime.datetime.now() - libBuildStartTime).total_seconds()))
+            minutes, seconds = divmod(seconds, 60)
+            libBuildDtTimeStr = "{:02d}m:{:02d}s".format(minutes, seconds)
+            print("Build successful after {0}.".format(libBuildDtTimeStr))

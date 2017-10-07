@@ -2,6 +2,37 @@
 
 from symbolic.algorithm import Algorithm
 
+class MissingLibraryReference(Exception):
+    """
+    An exception class, that indicates that a project library was not found.
+    
+    Attributes:
+        name (str): The library name.
+        libName (str): The library which is asking for the reference.
+    """
+
+    def __init__(self, libName, name):
+        """
+        Initialize the object.
+
+        Args:
+            name (str): The library name.
+            libName (str): The library which is asking for the reference.
+        """
+        super().__init__()
+        self.libName = libName
+        self.name = name
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + "Missing library '{0}' referenced by '{1}'.".format(self.name, self.libName)
+
+
 class UnmappedNativeTypename(Exception):
     """
     An exception class, that indicates that a system typename was not mapped but referenced.

@@ -168,7 +168,7 @@ class VirtualPath:
         text = self.text
 
         # Replace all variable placeholders
-        text = re.sub(r"(?<!\\)\${?(^[^\d\W]\w*\Z)}?", lambda m: self.vars[m.group()], text)
+        text = re.sub(r"\$\((\w*)\)", lambda m: self.vars[m.group(1)], text)
 
         # Expand user and system variables
         text = os.path.expanduser(text)
@@ -231,3 +231,23 @@ class VirtualPath:
         with self.open() as file:
             result = file.read()
             return result
+
+    def is_absolute(self):
+        """
+        Return whether the path is absolute.
+
+        Returns:
+            bool: True, if the path is absolute. Otherwise False.
+        """
+        return os.path.isabs(self.text)
+
+    def absolute(self, base):
+        """
+        Make the path absolute, if it is relative.
+
+        Args:
+            base (paths.VirtualPath): The virtual base path.
+        Returns:
+            paths.VirtualPath: The new, absolute path, if the path is relative. Otherwise the object itself.
+        """
+        return self if self.is_absolute() else base + self
