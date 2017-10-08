@@ -13,9 +13,10 @@ class Language:
         minArrayDim (int): The minimum array dimensions.
     """
 
+    ref = "ref"
     this = "this"
     value = "value"
-    keywords = { "if", "elif", "else", "return", "for", "while", "do", "break", "continue", value, this }
+    keywords = { "if", "elif", "else", "return", "for", "while", "do", "break", "continue", value, this, ref }
     systemTypenames = { "void", "int", "float", "string" }
     invalidNames = systemTypenames.union(keywords)
     tokenConcatenation = r"><" # As agreed upon by the committee (reviewed by eppo). 

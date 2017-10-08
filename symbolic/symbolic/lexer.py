@@ -155,7 +155,7 @@ class Symto:
             column (int): The column in which the token was lexed.
         """
         self.text = str(text)
-        self.kind = Token.Operator if self.text == "ref" else kind
+        self.kind = Token.Operator if self.text == Language.ref else kind
         self.anchor = Anchor(libName, fileName, line, column)
         self.isTerminal = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex, Token.Name, Token.Literal.String]
         self.isNumber = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex]
@@ -482,15 +482,15 @@ class Ops:
 
     unary = {
             # Name: Precedence, Left-associative
-            'ref': [2, False],
-            '+': [2, False],
-            '-': [2, False],
-            '!': [2, False],
-            '~': [2, False],
-            '*': [2, False],
-            '&': [2, False],
-            '++': [2, False],
-            '--': [2, False],
+            Language.ref: [2, False],
+            "+": [2, False],
+            "-": [2, False],
+            "!": [2, False],
+            "~": [2, False],
+            "*": [2, False],
+            "&": [2, False],
+            "++": [2, False],
+            "--": [2, False],
             }
 
     binary = {

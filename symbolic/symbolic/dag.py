@@ -451,8 +451,7 @@ class ProjectDependencyCollection:
         propertyParameters = list(parameters)
 
         if not isStatic:
-            structLocation = struct.location()
-            propertyParameters.insert(0, Parameter.this_parameter(struct.references, structLocation))
+            propertyParameters.insert(0, Parameter.this_parameter(struct.references, struct.location()))
 
         propertyNR = self._try_find_property(struct, name, propertyParameters)
         if propertyNR is not None:
@@ -644,8 +643,8 @@ class ProjectDependencyCollection:
         parameters = [Parameter(container, child.atom.token, [], None, childTypenames[i], child.isRef) for i, child in enumerate(children)]
         
         isExplicitRef = lhs is not None
-        if isExplicitRef and isinstance(container, Struct):
-            result = self._try_verify_ast_property(container, atom.token, parameters, lhs.isLHSType, isAssignment)
+        if isExplicitRef and isinstance(lhs.dependency.locatable, Struct):
+            result = self._try_verify_ast_property(lhs.dependency.locatable, atom.token, parameters, lhs.isLHSType, isAssignment)
             if result is not None:
                 return result
         else:
@@ -839,7 +838,7 @@ class ProjectDependencyCollection:
         childTypename = Typename.from_location(container.references, childNR.explicitLocation)
 
         # Lookup the operator.
-        childParameter = Parameter(container, child.atom.token, [], None, childTypename, child.is_lvalue())
+        childParameter = Parameter(container, child.atom.token, [], None, childTypename, True)
         possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Operator, [childParameter])
 
         if possibleMatchNR is None:
@@ -987,9 +986,9 @@ class ProjectDependencyCollection:
             rightTypename = Typename.from_location(container.references, rightNR.explicitLocation)
 
             # Turn them into parameters.
-            pLeft = Parameter(container, left.atom.token, [], None, leftTypename, left.is_lvalue())
-            pRight = Parameter(container, right.atom.token, [], None, rightTypename, right.is_lvalue())
-                    
+            pLeft = Parameter(container, left.atom.token, [], None, leftTypename, isAssignOp)
+            pRight = Parameter(container, right.atom.token, [], None, rightTypename, False)
+               
             # Try to find a match for the signature.
             possibleMatchNR = self._try_find_function(container.parent, atom.token, FunctionKind.Operator, [pLeft, pRight])
             if possibleMatchNR is None:
@@ -1610,7 +1609,8 @@ class ProjectDependencyCollection:
             func (objects.Function): The function object.
         """
         localVars = self._local_vars_from_parameters(func.parameters)
-        self._verify_instructions(func, localVars, func.instructions, ScopeState.Default)
+        returnTypeNR = self._ast_navigate_dependency(func.returnTypename, False)
+        self._verify_instructions(func, localVars, func.instructions, ScopeState.Default, returnTypeNR)
 
     def _verify_property(self, prop):
         """
@@ -1621,13 +1621,14 @@ class ProjectDependencyCollection:
         """
         localVars = self._local_vars_from_parameters(prop.parameters)
         
-        self._verify_instructions(prop, localVars, prop.getInstructions, ScopeState.Default)
+        returnTypeNR = self._ast_navigate_dependency(prop.returnTypename, False)
+        self._verify_instructions(prop, localVars, prop.getInstructions, ScopeState.Default, returnTypeNR)
 
         if prop.hasSet:
             localVars[Language.value] = self._ast_navigate_dependency(prop.returnTypename, False)
-            self._verify_instructions(prop, localVars, prop.setInstructions, ScopeState.Default)
+            self._verify_instructions(prop, localVars, prop.setInstructions, ScopeState.Default, returnTypeNR)
 
-    def _verify_instruction(self, container, localVars, instruction, scopeState, prevInstruction):
+    def _verify_instruction(self, container, localVars, instruction, scopeState, prevInstruction, returnTypeNR):
         """
         Verify an instruction.
 
@@ -1637,6 +1638,7 @@ class ProjectDependencyCollection:
             instruction (objects.Instruction): The instruction to verify.
             scopeState (dag.ScopeState): The current scope state.
             prevInstruction (objects.Instruction): The previous instruction in the same scope.
+            returnTypeNR (dag.AstNavigationResult): The return type AST navigation result.
         """
         # Verify the AST.
         if instruction.kind == InstructionKind.Expression:
@@ -1653,10 +1655,8 @@ class ProjectDependencyCollection:
             else:
                 exprTypeNR = self._verify_expression_ast(container, localVars, instruction.expression.ast)
             
-            # Make sure the expression type matches the function return type.
-            func = instruction.parent
-            funcRetNR = self._ast_navigate_dependency(func.returnTypename, False)
-            if funcRetNR != exprTypeNR:
+            # Make sure the expression type matches the return type.
+            if returnTypeNR != exprTypeNR:
                 raise ReturnTypeMismatchError(instruction.anchor)
         elif instruction.kind in [InstructionKind.If, InstructionKind.While, InstructionKind.Elif]:
             # Verify instruction.
@@ -1673,13 +1673,13 @@ class ProjectDependencyCollection:
                 raise PredicateExpectedError(instruction.anchor)
 
             childScopeState = ScopeState.Loop if instruction.kind == InstructionKind.While else scopeState
-            self._verify_instructions(container, localVars, instruction.instructions, childScopeState)
+            self._verify_instructions(container, localVars, instruction.instructions, childScopeState, returnTypeNR)
         elif instruction.kind == InstructionKind.Else:
             # We need an if or elif above.
             if prevInstruction is None or prevInstruction.kind not in [InstructionKind.If, InstructionKind.Elif]:
                 raise InvalidElseError(instruction.anchor)
 
-            self._verify_instructions(container, localVars, instruction.instructions, scopeState)
+            self._verify_instructions(container, localVars, instruction.instructions, scopeState, returnTypeNR)
         elif instruction.kind == InstructionKind.For:
             for forInit in instruction.forInits:
                 self._verify_expression_ast(container, localVars, forInit.ast)
@@ -1690,9 +1690,9 @@ class ProjectDependencyCollection:
             for forStep in instruction.forSteps:
                 self._verify_expression_ast(container, localVars, forStep.ast)
 
-            self._verify_instructions(container, localVars, instruction.instructions, ScopeState.Loop)
+            self._verify_instructions(container, localVars, instruction.instructions, ScopeState.Loop, returnTypeNR)
 
-    def _verify_instructions(self, container, localVars, instructions, scopeState):
+    def _verify_instructions(self, container, localVars, instructions, scopeState, returnTypeNR):
         """
         Verify all child instructions of an instruction.
 
@@ -1702,10 +1702,11 @@ class ProjectDependencyCollection:
             instructions ([objects.Instruction]): The instructions to verify.
             scopeState (dag.ScopeState): The current scope state.
             prevInstruction (objects.Instruction): The previous instruction in the same scope.
+            returnTypeNR (dag.AstNavigationResult): The return type navigation result.
         """
         prevInstruction = None
         for instruction in instructions:
-            self._verify_instruction(container, localVars, instruction, scopeState, prevInstruction)
+            self._verify_instruction(container, localVars, instruction, scopeState, prevInstruction, returnTypeNR)
             prevInstruction = instruction
 
     def _verify_expression_ast(self, container, localVars, ast):

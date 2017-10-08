@@ -886,20 +886,6 @@ class ExpressionAST:
         self.parent = parent
         self.children = [] if children is None else children
         self.isRef = False
-        
-    def is_lvalue(self):
-        """
-        Return whether the atom is an L-value.
-
-        Returns:
-            bool: True, if the atom is an L-value. Otherwise False.
-        """
-        kind = self.atom.kind
-        if self.children and str(self.atom.token) == ".":
-            # x.x
-            kind = self.children[0].atom.kind
-        
-        return kind == ExpressionAtomKind.Var
 
 class Expression(Named):
     """
@@ -1260,12 +1246,10 @@ class Expression(Named):
                 child = argStack[-1]
                 argStack = argStack[:-1]
 
-                if not atom.token == "ref":
+                if not atom.token == Language.ref:
                     root.children = [child]
                 else:
-                    if parent is None or \
-                       parent.atom.kind != ExpressionAtomKind.FunctionBegin or \
-                       not child.is_lvalue():
+                    if parent is None or parent.atom.kind != ExpressionAtomKind.FunctionBegin:
                         raise InvalidExpressionError(atom.token.anchor)
 
                     root = child
@@ -1404,7 +1388,7 @@ class Parameter(Named):
         Returns:
             str: The string representation.
         """
-        return ("ref " if self.isRef else "") + str(self.typename)
+        return ("{0} ".format(Language.ref) if self.isRef else "") + str(self.typename)
 
     @staticmethod
     def parse(parser, args):
@@ -1420,7 +1404,7 @@ class Parameter(Named):
         annotations = Annotation.parse_annotations(parser)
 
         # Reference prefix
-        isRef = parser.match('ref')
+        isRef = parser.match(Language.ref)
 
         # Typename
         typename = Typename.try_parse(parser)
