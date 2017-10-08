@@ -47,6 +47,7 @@ class LocationKind(Enum):
         Unresolved (int): The location kind has not been resolved yet.
         Function (int): The location is occupied by a Function.
         Type (int): The location is occupied by a Struct or Alias.
+        Property (int): The location is occupied by a Property.
         Template (int): The location is occupied by a Template.
         Instruction (int): The location is occupied by a Instruction.
         Namespace (int): The location is occupied by a Namespace.
@@ -56,10 +57,11 @@ class LocationKind(Enum):
     Unresolved = 0
     Function = 1
     Type = 2
-    Template = 3
-    Instruction = 4
-    Namespace = 5
-    Reference = 6
+    Property = 3
+    Template = 4
+    Instruction = 5
+    Namespace = 6
+    Reference = 7
 
 class RelativeLocation:
     """
@@ -276,16 +278,14 @@ class Locatable:
     """
     A locatable object within a library.
 
-    Multiple Locatable objects represent a hierarchy. An Anchor is used
-    to locate the object within a library.
-    
     Attributes:
         references ([objects.Reference]): The references visible to this locatable.
         parent (objects.Locatable): The parent object.
         anchor (Token): The anchor in the source code.        
+        annotations ([objects.Annotation]): The system annotations.
     """
 
-    def __init__(self, references, parent, anchor):
+    def __init__(self, references, parent, anchor, annotations):
         """
         Initialize the object.
         
@@ -293,10 +293,12 @@ class Locatable:
             references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
             anchor (Token): The anchor in the source code.
+            annotations ([objects.Annotation]): The system annotations.
         """
         self.references = references
         self.parent = parent
         self.anchor = anchor
+        self.annotations = [] if annotations is None else annotations
 
     def location(self):
         """
@@ -319,62 +321,6 @@ class Locatable:
         """
         return any(str(ref) == name for ref in self.references)
 
-class Named(Locatable):
-    """
-    A named object within a library.
-    
-    Attributes:
-        token (lexer.Symto): A token which holds the name.
-        annotations ([objects.Annotation]): The system annotations.
-        semantic (objects.Annotation): The semantic annotation.
-    """
-
-    def __init__(self, references, parent, token, annotations, semantic):
-        """
-        Initialize the object.
-
-        Args:
-            references ([objects.Reference]): The references visible to this object.
-            parent (objects.Locatable): The parent object.
-            token (lexer.Symto): A token which holds the name.
-            annotations ([objects.Annotation]): The user annotations.
-            semantic (objects.Annotation): The semantic annotation.
-        """
-        super().__init__(references, parent, token.anchor)
-        assert token is not None
-        assert annotations is not None
-        self.annotations = annotations
-        self.semantic = semantic
-        self.token = token
-
-        # Validate the name
-        if self.token == '':
-            # Generate an anonymous name
-            self.token.text = '@{0}'.format(id(self))
-            self.token.kind = Token.Text
-
-    def validate(self):
-        """Validate the object."""
-        assert(False)
-
-    def default_location(self, kind, *, templateParameters=None, parameters=None, isExplicitRef=False):
-        """
-        Return the default location within the library.
-        
-        Args:
-            kind (objects.LocationKind): The location kind of the final RelativeLocation.
-            templateParameters ([objects.TemplateParameter]): The template parameters at the final RelativeLocation.
-            parameters ([objects.Parameter]): The parameters at the final RelativeLocation.
-            isExplicitRef (bool): True, if the location is assumed to be explicit. Otherwise False.
-        Returns:
-            objects.Location: A location within the library.
-        """
-        rl = [RelativeLocation(kind, str(self.token), templateParameters=templateParameters, parameters=parameters)]
-        if isExplicitRef or (self.parent is not None and self.parent.parent is not None):
-            return Location(self.parent.location().path + rl)
-        else:
-            libPrefix = [RelativeLocation(LocationKind.Reference, self.anchor.libName)]
-            return Location(libPrefix + rl)
 
     def validate_no_system_annotations(self):
         """Ensure that there are no system annotation associated to this object."""
@@ -406,6 +352,58 @@ class Named(Locatable):
             s = str(annotation)
             if s in Language.annotations and s not in compatibleNamesSet:
                 raise UnsupportedAnnotationError(annotation)
+
+    def validate(self):
+        """Validate the object."""
+        assert(False)
+
+
+class Named(Locatable):
+    """
+    A named object within a library.
+    
+    Attributes:
+        token (lexer.Symto): A token which holds the name.
+        semantic (objects.Annotation): The semantic annotation.
+    """
+
+    def __init__(self, references, parent, token, annotations, semantic, *, allowKeywordName=False):
+        """
+        Initialize the object.
+
+        Args:
+            references ([objects.Reference]): The references visible to this object.
+            parent (objects.Locatable): The parent object.
+            token (lexer.Symto): A token which holds the name.
+            annotations ([objects.Annotation]): The user annotations.
+            semantic (objects.Annotation): The semantic annotation.
+            allowKeywordName (bool): If true, keyword names will be allowed.
+        """
+        super().__init__(references, parent, token.anchor, annotations)
+        self.semantic = semantic
+        self.token = token
+        
+        if not allowKeywordName and str(token) in Language.keywords:
+            raise InvalidNameError(token.anchor)
+
+    def default_location(self, kind, *, templateParameters=None, parameters=None, isExplicitRef=False):
+        """
+        Return the default location within the library.
+        
+        Args:
+            kind (objects.LocationKind): The location kind of the final RelativeLocation.
+            templateParameters ([objects.TemplateParameter]): The template parameters at the final RelativeLocation.
+            parameters ([objects.Parameter]): The parameters at the final RelativeLocation.
+            isExplicitRef (bool): True, if the location is assumed to be explicit. Otherwise False.
+        Returns:
+            objects.Location: A location within the library.
+        """
+        rl = [RelativeLocation(kind, str(self.token), templateParameters=templateParameters, parameters=parameters)]
+        if isExplicitRef or (self.parent is not None and self.parent.parent is not None):
+            return Location(self.parent.location().path + rl)
+        else:
+            libPrefix = [RelativeLocation(LocationKind.Reference, self.anchor.libName)]
+            return Location(libPrefix + rl)
 
     def __str__(self):
         """
@@ -630,7 +628,7 @@ class InstructionKind(Enum):
     Elif = 8
     Else = 9
 
-class Instruction(Named):
+class Instruction(Locatable):
     """
     An instruction within a function.
     
@@ -644,16 +642,15 @@ class Instruction(Named):
     """
 
     @Decorators.validated
-    def __init__(self, references, parent, token, annotations, semantic, kind, *, expression=None, instructions=None, forInits=None, forPredicates=None, forSteps=None):
+    def __init__(self, references, parent, anchor, annotations, kind, *, expression=None, instructions=None, forInits=None, forPredicates=None, forSteps=None):
         """
         Initialize the object.
 
         Args:
             references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
-            token (lexer.Symto): An anomymous identifier for the object.
+            anchor (lexer.Anchor): The source anchor.
             annotations ([objects.Annotation]): The annotations.
-            semantic (objects.Annotation): The semantic annotation.
             kind (objects.InstructionKind): The instruction type specifier.
             expression (objects.Expression): The expression within the instruction.
             instructions ([objects.Instruction]): The sub-instructions within the instruction (e.g. a for-loop body).
@@ -661,7 +658,7 @@ class Instruction(Named):
             forPredicates ([objects.Expression]): The expressions for the for-loop predicates.
             forSteps ([objects.Expression]): The expressions for the for-loop step.
         """
-        super().__init__(references, parent, token, annotations, semantic)
+        super().__init__(references, parent, anchor, annotations)
         self.kind = kind
         self.expression = expression
         self.instructions = instructions
@@ -713,17 +710,10 @@ class Instruction(Named):
         Args:
             parser (parsers.UnitParser): The parser to use.
         Returns:
-            objects.Expression, objects.Annotation: The expression and semantic of the instruction.
+            objects.Expression: The expression and semantic of the instruction.
         """
         parser.expect('(')
-        
-        # Require a non-empty expression
-        expression = Instruction.expect_expression(parser, ')')
-
-        # Parse the semantic after if(expression) : SEMANTIC
-        semantic = Annotation.parse_semantic(parser)
-
-        return expression, semantic
+        return Instruction.expect_expression(parser, ')')
 
     @staticmethod
     def parse_instruction_body(parser):
@@ -753,9 +743,7 @@ class Instruction(Named):
             objects.Instruction: The instruction object or None, if no instruction was parsed.
         """
         annotations = Annotation.parse_annotations(parser)
-
-        # Create a dummy token (anonymous) for the instruction
-        token = Symto.from_token(parser.token, Token.Text, '')
+        anchor = parser.token.anchor
 
         # Grab the current parent
         parent = parser.namespace()
@@ -772,15 +760,15 @@ class Instruction(Named):
         if kind != InstructionKind.Expression:
             if kind not in [InstructionKind.Do, InstructionKind.For, InstructionKind.Else]:
                 # KEYWORD(EXPRESSION)
-                expression, semantic = Instruction.parse_parenthesized_expression(parser)
+                expression = Instruction.parse_parenthesized_expression(parser)
                 instructions = Instruction.parse_instruction_body(parser)
-                return Instruction(parser.references, parent, token, annotations, semantic, kind, expression=expression, instructions=instructions)
+                return Instruction(parser.references, parent, anchor, annotations, kind, expression=expression, instructions=instructions)
             elif kind == InstructionKind.Do:
                 # DO { ... } WHILE(EXPRESSION)
                 instructions = Instruction.parse_instruction_body(parser)
                 parser.expect('while')
-                expression, semantic = Instruction.parse_parenthesized_expression(parser)
-                return Instruction(parser.references, parent, token, annotations, semantic, kind, expression=expression, instructions=instructions)
+                expression = Instruction.parse_parenthesized_expression(parser)
+                return Instruction(parser.references, parent, anchor, annotations, kind, expression=expression, instructions=instructions)
             elif kind == InstructionKind.For:
                 # FOR(INIT_EXPR, INIT_EXPR; COND, COND; STEP, STEP)
                 parser.expect('(')
@@ -792,12 +780,11 @@ class Instruction(Named):
                 parser.expect(')')
                 semantic = Annotation.parse_semantic(parser)
                 instructions = Instruction.parse_instruction_body(parser)
-                return Instruction(parser.references, parent, token, annotations, semantic, kind, instructions=instructions, forInits=forInits, forPredicates=forPredicates, forSteps=forSteps)
+                return Instruction(parser.references, parent, anchor, annotations, kind, instructions=instructions, forInits=forInits, forPredicates=forPredicates, forSteps=forSteps)
             elif kind == InstructionKind.Else:
                 # ELSE { ... }
-                semantic = Annotation.parse_semantic(parser)
                 instructions = Instruction.parse_instruction_body(parser)
-                return Instruction(parser.references, parent, token, annotations, semantic, kind, instructions=instructions)
+                return Instruction(parser.references, parent, anchor, annotations, kind, instructions=instructions)
             else:
                 assert(False)
         else:
@@ -823,7 +810,7 @@ class Instruction(Named):
 
             parser.expect(';')
 
-            return Instruction(parser.references, parent, token, [], None, kind, expression=expression) 
+            return Instruction(parser.references, parent, anchor, [], kind, expression=expression) 
 
 class ExpressionAtomKind(Enum):
     """
@@ -1355,12 +1342,10 @@ class FunctionKind(Enum):
     
     Regular (int): The Function is a regular function.
     Operator (int): The Function is an operator.
-    Property (int): The Function is a type property.
     """
 
     Regular = 0
     Operator = 1
-    Property = 2
 
 class Parameter(Named):
     """
@@ -1384,7 +1369,7 @@ class Parameter(Named):
             typename (objects.Typename): The typename.
             isRef (bool): True, if the parameter is a reference. Otherwise False.
         """
-        super().__init__(typename.references, parent, token, annotations, semantic)
+        super().__init__(typename.references, parent, token, annotations, semantic, allowKeywordName=True)
         self.typename = typename
         self.isRef = isRef
 
@@ -1501,7 +1486,7 @@ class FunctionReference(Named):
         loc = self.default_location(LocationKind.Function, parameters=self.parameters, isExplicitRef=self.hasExplicitRef)
         return loc if self.hasExplicitRef else loc[-1].location()
 
-class Function(TemplateObject, Namespace):
+class Function(Named):
     """
     A function.
     
@@ -1509,10 +1494,11 @@ class Function(TemplateObject, Namespace):
         kind (objects.FunctionKind): The function kind.
         returnTypename (objects.Typename): The return typename.
         parameters ([objects.Parameter]): The parameters.
+        instructions ([objects.Instruction]): The function instructions.
     """
 
     @Decorators.validated
-    def __init__(self, references, parent, token, annotations, semantic, body, kind, returnTypename, parameters, returnTypenameTemplateTokens, parameterTemplateTokens):
+    def __init__(self, references, parent, token, annotations, semantic, kind, returnTypename, parameters):
         """
         Initialize the object.
 
@@ -1522,21 +1508,16 @@ class Function(TemplateObject, Namespace):
             token (lexer.Symto): A token which holds the name.
             annotations ([objects.Annotation]): The annotations.
             semantic (objects.Annotation): The semantic annotation.
-            body ([lexer.Symto]): The template body.
             kind (objects.FunctionKind): The function kind.
             returnTypename (objects.Typename): The return typename.
             parameters ([objects.Parameter]): The parameters.
-            returnTypenameTemplateTokens ([lexer.Symto]): The return typename tokens in a template.
-            parameterTemplateTokens ([lexer.Symto]): The parameter tokens in a template.
         """
         # Has to be bound first for validation
         self.kind = kind
         self.returnTypename = returnTypename
         self.parameters = parameters
-        self.returnTypenameTemplateTokens = returnTypenameTemplateTokens
-        self.parameterTemplateTokens = parameterTemplateTokens
-        Namespace.__init__(self, references, parent, token, annotations, semantic)
-        TemplateObject.__init__(self, references, parent, token, annotations, semantic, body)
+        self.instructions = []
+        super().__init__(references, parent, token, annotations, semantic)
 
     def validate(self):
         """Validate the object."""
@@ -1552,45 +1533,26 @@ class Function(TemplateObject, Namespace):
         return self.default_location(LocationKind.Function, parameters=self.parameters)
 
     @staticmethod
-    def parse_template(parser, isTemplate):
+    def parse(parser, args):
         """
-        Parse the template.
+        Parse an expression.
 
         Args:
             parser (parsers.UnitParser): The parser to use.
-            isTemplate (bool): Indicates whether the object should be parsed as a template.
+            args: Unused.
         Returns:
             objects.Function: The function or None, if no function was parsed.
         """
         annotations = Annotation.parse_annotations(parser)
-
+        
         kind = FunctionKind.Regular
         parent = parser.namespace()
         parameters = []
-        parameterTemplateTokens = None
-        returnTypename = None
-        returnTypenameTemplateTokens = None
 
         # 1. Return type
-        if isTemplate:
-            # Fetch all tokens until we run into one of these tokens.
-            returnTypenameTemplateTokens = parser.until_any(["(", ":", "{", "operator"])
-
-            # We require a return type.
-            if returnTypenameTemplateTokens:
-                return None
-
-            # Go back one step, we parsed the function name.
-            if parser.previous() != "operator":
-                returnTypenameTemplateTokens.pop()
-                if returnTypenameTemplateTokens:
-                    return None
-                
-                parser.back()
-        else:
-            returnTypename = Typename.try_parse(parser)
-            if returnTypename is None:
-                return None
+        returnTypename = Typename.try_parse(parser)
+        if returnTypename is None:
+            return None
 
         # 2. Name
         # Operators require 1 extra token
@@ -1598,56 +1560,122 @@ class Function(TemplateObject, Namespace):
             kind = FunctionKind.Operator
             name = parser.expect_kind(Token.Operator)
         else:
-            # Try fetching the name.
-            # The function might be anonymous so this can fail.
-            name = parser.match_kind(Token.Name)
-            if name is None:
-                return None
-
-        # Verify we have a valid function name.
-        if str(name) in Language.keywords:
-            return None
+            name = parser.expect_kind(Token.Name)
 
         # 3. Parameters
-        if isTemplate:
-            # Fetch whatever is in the upcoming parameter list, if there is one.
-            parameterTemplateTokens = parser.fetch_block("(", [")"])
-        elif parser.match('('):
+        if parser.match('('):
             parameters = parser.gather_objects([Parameter], ',')
             parser.expect(')')
 
         semantic = Annotation.parse_semantic(parser)
 
         # Register the function with the current namespace
-        parent = parser.namespace()
-        func = Function(parser.references, parent, name, annotations, semantic, None, kind, returnTypename, parameters, returnTypenameTemplateTokens, parameterTemplateTokens)
+        func = Function(parser.references, parent, name, annotations, semantic, kind, returnTypename, parameters)
         parser.namespaceStack.append(func)
         try:
-            if isTemplate:
-                func.body = parser.fetch_block('{', ['}'])
+            parent.locatables.append(func)
+            if parser.match('{'):
+                func.instructions = parser.gather_objects([Instruction], args=['}'])
+                parser.expect('}')
                 parser.match(';')
-            else:
-                parent.locatables.append(func)
-                if parser.match('{'):
-                    func.locatables = parser.gather_objects([Instruction], args=['}'])
-                    parser.expect('}')
-                    parser.match(';')
-                elif parser.match("=>"):
-                    func.locatables = parser.gather_objects([Instruction], args=[';'], firstMatchOnly=True)
-                    if not func.locatables:
-                        parent.locatables.pop()
-                        return None
-
-                    instruction = func.locatables[0]
-                    if instruction.kind == InstructionKind.Expression:
-                        instruction.kind = InstructionKind.Return
-                elif not parser.match(';'):
+            elif parser.match("=>"):
+                func.instructions = parser.gather_objects([Instruction], args=[';'], firstMatchOnly=True)
+                if not func.instructions:
                     parent.locatables.pop()
                     return None
+
+                instruction = func.instructions[0]
+                if instruction.kind == InstructionKind.Expression:
+                    instruction.kind = InstructionKind.Return
+            elif not parser.match(';'):
+                parent.locatables.pop()
+                return None
         finally:
             parser.namespaceStack.pop()
 
         return func
+
+class PropertyReference(Named):
+    """
+    A property reference.
+
+    Attributes:
+        returnTypename (objects.Typename): The return typename.
+        parameters ([objects.Parameter]): The parameters.
+        hasExplicitRef (bool): Indicates, whether references should be stripped from the location.
+    """
+
+    def __init__(self, references, parent, token, parameters, hasExplicitRef):
+        """
+        Initialize the object.
+
+        Args:
+            references ([objects.Reference]): The references visible to this locatable.
+            parent (objects.Locatable): The parent object.
+            token (lexer.Symto): A token which holds the name.
+            parameters ([objects.Parameter]): The parameters.
+            hasExplicitRef (bool): Indicates, whether references should be stripped from the location.
+        """
+        self.parameters = parameters
+        self.hasExplicitRef = hasExplicitRef
+        Named.__init__(self, references, parent, token, [], None)
+
+    def location(self):
+        """
+        Return the location within the library.
+
+        Returns:
+            objects.Location: A location within the library.
+        """
+        loc = self.default_location(LocationKind.Property, parameters=self.parameters, isExplicitRef=self.hasExplicitRef)
+        return loc if self.hasExplicitRef else loc[-1].location()
+
+class Property(Named):
+    """
+    A property.
+    
+    Attributes:
+        returnTypename (objects.Typename): The return typename.
+        parameters ([objects.Parameter]): The parameters.
+        getInstructions (list): The get instructions.
+        setInstructions (list): The set instructions.
+        hasSet (bool): True, if the property supports write operations.
+    """
+
+    @Decorators.validated
+    def __init__(self, references, parent, token, annotations, semantic, returnTypename, parameters):
+        """
+        Initialize the object.
+
+        Args:
+            references ([objects.Reference]): The references visible to this locatable.
+            parent (objects.Locatable): The parent object.
+            token (lexer.Symto): A token which holds the name.
+            annotations ([objects.Annotation]): The annotations.
+            semantic (objects.Annotation): The semantic annotation.
+            returnTypename (objects.Typename): The return typename.
+            parameters ([objects.Parameter]): The parameters.
+        """
+        # Has to be bound first for validation
+        self.returnTypename = returnTypename
+        self.parameters = parameters
+        self.getInstructions = []
+        self.setInstructions = []
+        self.hasSet = False
+        Named.__init__(self, references, parent, token, annotations, semantic)
+
+    def validate(self):
+        """Validate the object."""
+        self.validate_system_annotations('private', 'deprecate', 'static')
+
+    def location(self):
+        """
+        Return the location within the library.
+
+        Returns:
+            objects.Location: A location within the library.
+        """
+        return self.default_location(LocationKind.Property, parameters=self.parameters)
 
     @staticmethod
     def parse(parser, args):
@@ -1658,31 +1686,80 @@ class Function(TemplateObject, Namespace):
             parser (parsers.UnitParser): The parser to use.
             args: Unused.
         Returns:
-            objects.Expression: The parameter or None, if no parameter was parsed.
+            objects.Function: The function or None, if no function was parsed.
         """
-        return Function.parse_template(parser, False)
+        annotations = Annotation.parse_annotations(parser)
+        
+        parent = parser.namespace()
+        parameters = []
 
-    def generate_from_template(self, prettyString):
-        """
-        Generate a template string from the parsed object.
+        # 1. Return type
+        returnTypename = Typename.try_parse(parser)
+        if returnTypename is None:
+            return None
 
-        Args:
-            prettyString (formatter.PrettyString): The string to append the Function to.
-        """
-        # Emit return type.
-        prettyString += PrettyString.from_tokens(self.returnTypenameTemplateTokens, self.returnTypenameTemplateTokens[0].anchor.line)
+        # 2. Name
+        name = parser.expect_kind(Token.Name)
 
-        # Emit name.
-        prettyString += self.template_instance_name()
+        # Verify we have a valid function name.
+        if str(name) in Language.keywords:
+            raise InvalidNameError(name.anchor)
 
-        # Emit parameter list.
-        if self.parameterTemplateTokens:
-            prettyString += "("
-            prettyString += "\n"
-            prettyString.indentLevel += 1
-            prettyString += PrettyString.from_tokens(self.parameterTemplateTokens, self.parameterTemplateTokens[0].anchor.line)
-            prettyString.indentLevel -= 1
-            prettyString += ")"
+        # 3. Parameters
+        if parser.match('('):
+            parameters = parser.gather_objects([Parameter], ',')
+            parser.expect(')')
+
+        # Add implicit "this" ref.
+        if not Annotation.has("static", annotations):
+            thisParameter = Parameter.this_parameter(parent.references, parent.location())
+            parameters.insert(0, thisParameter)
+
+        # NOTE: if set is enabled below, the value parameter is not added but injected into the variable scope later.
+        # The assignment operator guarantees that the LHS and RHS types must match.
+
+        semantic = Annotation.parse_semantic(parser)
+
+        # Register the function with the current namespace
+        prop = Property(parser.references, parent, name, annotations, semantic, returnTypename, parameters)
+        parser.namespaceStack.append(prop)
+        try:
+            parent.locatables.append(prop)
+            if parser.match('{'):
+                didMatchGet = parser.match("get")
+                if didMatchGet:
+                    parser.expect("{")
+                    prop.getInstructions = parser.gather_objects([Instruction], args=['}'])
+                    parser.expect("}")
+
+                if parser.match("set"):
+                    prop.hasSet = True
+                    if not parser.match(";"):
+                        parser.expect("{")
+                        prop.setInstructions = parser.gather_objects([Instruction], args=['}'])
+                        parser.expect("}")
+
+                if not didMatchGet:
+                    prop.getInstructions = parser.gather_objects([Instruction], args=['}'])
+
+                parser.expect('}')
+                parser.match(';')
+            elif parser.match("=>"):
+                prop.getInstructions = parser.gather_objects([Instruction], args=[';'], firstMatchOnly=True)
+                if not prop.getInstructions:
+                    parent.locatables.pop()
+                    return None
+
+                instruction = prop.instructions[0]
+                if instruction.kind == InstructionKind.Expression:
+                    instruction.kind = InstructionKind.Return
+            elif not parser.match(';'):
+                parent.locatables.pop()
+                return None
+        finally:
+            parser.namespaceStack.pop()
+
+        return prop
 
 class Member(Named):
     """
@@ -1909,7 +1986,7 @@ class Struct(TemplateObject, Namespace):
                 parent.locatables.append(struct)
 
                 if parser.match('{'):
-                    parser.gather_objects([MemberList, Function], args=['}'])
+                    parser.gather_objects([MemberList, Property], args=['}'])
                     parser.expect('}')
                     parser.match(';')
                 elif not parser.match(';'):
@@ -1930,14 +2007,6 @@ class Struct(TemplateObject, Namespace):
                         raise DuplicateNameError(memberToken.anchor, t.anchor)
 
                     memberNames[s] = memberToken
-
-        # Add implicit "this" ref.
-        for loc in struct.locatables:
-            if isinstance(loc, Function):
-                loc.kind = FunctionKind.Property
-                if not Annotation.has("static", loc.annotations):
-                    thisParameter = Parameter.this_parameter(struct.references, struct.location())
-                    loc.parameters.insert(0, thisParameter)
 
         return struct
 
@@ -1962,51 +2031,6 @@ class Struct(TemplateObject, Namespace):
             prettyString (formatter.PrettyString): The string to append the Function to.
         """
         prettyString += 'struct ' + self.template_instance_name()
-
-class Property(TemplateObject):
-    """
-    A type property.
-    """
-
-    def __init__(self, references, parent, token, annotations, semantic, body):
-        """Initialize the object."""
-        TemplateObject.__init__(self, references, parent, token, annotations, semantic, body)
-
-    @staticmethod
-    def parse_template(parser, isTemplate):
-        """
-        Parse the template.
-
-        Args:
-            parser (parsers.UnitParser): The parser to use.
-            isTemplate (bool): Indicates whether the object should be parsed as a template.
-        Returns:
-            objects.Alias: The alias or None, if no alias was parsed.
-        """
-        annotations = Annotation.parse_annotations(parser)
-        if not parser.match('using'):
-            return None
-
-        token = parser.match_name()
-        if token is None:
-            return None
-
-        semantic = Annotation.parse_semantic(parser)
-        
-        return
-
-    @staticmethod
-    def parse(parser, args):
-        """
-        Parse a structure.
-
-        Args:
-            parser (parsers.UnitParser): The parser to use.
-            args: Unused.
-        Returns:
-            objects.Alias: The parameter or None, if no alias was parsed.
-        """
-        return Property.parse_template(parser, False)
 
 class Alias(TemplateObject):
     """
@@ -2256,7 +2280,7 @@ class Typename(Locatable):
         """
         assert scope
 
-        super().__init__(references, parent, scope[-1].anchor)
+        super().__init__(references, parent, scope[-1].anchor, [])
         self.scope = scope
         
         # Overwrite the scope strings
@@ -2641,7 +2665,7 @@ class Template(Named):
         semantic = Annotation.parse_semantic(parser)
 
         # Deduce the template kind
-        templateClasses = [Struct, Alias, Function]
+        templateClasses = [Struct, Alias]
         for c in templateClasses:
             parser.push_state()
             obj = c.parse_template(parser, True)

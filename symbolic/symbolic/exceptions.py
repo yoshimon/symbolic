@@ -761,3 +761,15 @@ class VariableTypeMismatchError(SourceError):
             str: The string representation.
         """
         return super().__str__() + "The variable has already been initialized with a different type."
+
+class SetNotSupportedError(SourceError):
+    """An exception class, that indicates that a set operation is not supported."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + "The property does not support write access."
