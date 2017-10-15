@@ -62,6 +62,11 @@ class Dependency:
         self.isPrivate = Annotation.has('private', locatable.annotations) if locatable is isinstance(locatable, Named) else False
         self.isDeprecated = Annotation.has('deprecated', locatable.annotations) if locatable is isinstance(locatable, Named) else False
 
+        # Internal caches.
+        self._hash = None
+        self._dependencyCollection = None
+        self._resolvedParameterLocations = []
+
     def __eq__(self, other):
         """
         Return whether two dependencies are identical.
@@ -80,8 +85,35 @@ class Dependency:
         Returns:
             int: The hash value.
         """
-        h0 = ("{0} {1} {2}".format(str(self.libName), str(self.baseLocation), str(self.references))).__hash__()
-        return h0
+        # Lazily compute and cache hash.
+        if self._hash == None:
+            self._hash = ("{0} {1} {2}".format(str(self.libName), str(self.baseLocation), str(self.references))).__hash__()
+
+        return self._hash
+
+    def resolve_parameter_locations(self, projectDependencyCollection):
+        """
+        Return a generator sequence for the resolved parameter types.
+        
+        Args:
+            projectDependencyCollection (dag.ProjectDependencyCollection): The dependency collection to resolve the parameter with.
+        Returns:
+            list: The resolved parameter types.
+        """
+        if self._dependencyCollection != projectDependencyCollection:
+            self._dependencyCollection = projectDependencyCollection
+            self._resolvedParameterLocations = []
+
+            # Rebuild cache.
+            if projectDependencyCollection is not None:
+                for p in self.baseLocation[-1].parameters:
+                    pDep = Dependency(p)
+                    pResolved = projectDependencyCollection.navigate_dependency(pDep)
+                    pResolvedBase = projectDependencyCollection.navigate_alias_base(pResolved)
+                    pResolvedLocation = pResolvedBase.resolvedDependencyLocation
+                    self._resolvedParameterLocations.append(pResolvedLocation)
+                    
+        return self._resolvedParameterLocations
 
 class LocationConflict:
     """
@@ -1025,7 +1057,8 @@ class ProjectDependencyCollection:
         """
         # Lookup from ID cache.
         navQuery = NavigationQuery(references, parent, location)
-        result = self._libLocationNavResults.get(str(navQuery), None)
+        navQueryStr = str(navQuery)
+        result = self._libLocationNavResults.get(navQueryStr, None)
         if result is not None:
             return result
 
@@ -1197,7 +1230,7 @@ class ProjectDependencyCollection:
 
         # Cache the result.
         # This is used to lookup function parameter typename locations later.
-        self._libLocationNavResults[str(navQuery)] = result
+        self._libLocationNavResults[navQueryStr] = result
 
         return result
 
@@ -1620,7 +1653,6 @@ class ProjectDependencyCollection:
             prop (objects.Property): The property object.
         """
         localVars = self._local_vars_from_parameters(prop.parameters)
-        
         returnTypeNR = self._ast_navigate_dependency(prop.returnTypename, False)
         self._verify_instructions(prop, localVars, prop.getInstructions, ScopeState.Default, returnTypeNR)
 
@@ -1801,9 +1833,18 @@ class ProjectDependencyCollection:
         Args:
             dependency (dag.Dependency): The dependency to lookup.
         Returns:
-            dag.NavigationResult: The navigation result.
+            dag.NavigationResult or None: The navigation result.
         """
-        return self.links[dependency] if dependency in self.links else self.try_navigate(dependency.locatable.anchor, dependency.locatable.references, dependency.locatable.parent, dependency.baseLocation)
+        navResult = self.links.get(dependency, None)
+        if navResult is not None:
+            return navResult
+
+        navResult = self.try_navigate(dependency.locatable.anchor, dependency.locatable.references, dependency.locatable.parent, dependency.baseLocation)
+        if navResult is not None:
+            self.links[navResult.dependency] = navResult
+            return navResult
+
+        return None
 
     def navigate_dependency(self, dependency):
         """
@@ -1821,45 +1862,16 @@ class ProjectDependencyCollection:
 
     def _solve_location_conflicts(self):
         """Solve all known location conflicts."""
-        # Try to resolve location conflicts now.
         for conflict in self.locationConflicts:
-            # Look at both conflicts:
-            # They have to be parameter conflicts, i.e. f(int) and f(int).
-            dep0 = conflict.firstDependency
-            dep1 = conflict.secondDependency
-
-            dep0Params = dep0.baseLocation[-1].parameters
-            dep1Params = dep1.baseLocation[-1].parameters
-
-            # Assume this is a conflict
-            isConflict = True
-
-            # Look at all parameter types in the conflict signatures and
-            # lookup the resolved locations for the types.
-            for p0, p1 in zip(dep0Params, dep1Params):
-                # Create a dependency for the parameters
-                p0Dep = Dependency(p0)
-                p1Dep = Dependency(p1)
-
-                # Try to find the actual dependency location.
-                p0Resolved = self.navigate_dependency(p0Dep)
-                p1Resolved = self.navigate_dependency(p1Dep)
-
-                # Navigate aliases down to the base type, if the dependency was an alias.
-                # This allows us so to compare the locations for a conflict below.
-                p0Resolved = self.navigate_alias_base(p0Resolved)
-                p0ResolvedLocation = p0Resolved.resolvedDependencyLocation
-                
-                p1Resolved = self.navigate_alias_base(p1Resolved)
-                p1ResolvedLocation = p1Resolved.resolvedDependencyLocation
-
-                # If the resolved locations differ this is not a conflict.
-                if p0ResolvedLocation != p1ResolvedLocation:
-                    isConflict = False
-                    break
-
-            if isConflict:
-                raise DuplicateParameterSignatureError(dep0.locatable.anchor, dep1.locatable.anchor)
+            d0 = conflict.firstDependency
+            d1 = conflict.secondDependency
+            d0Params = d0.resolve_parameter_locations(self)
+            d1Params = d1.resolve_parameter_locations(self)
+            isFalsePositive = any(p0 != p1 for p0, p1 in zip(d0Params, d1Params))
+            if not isFalsePositive:
+                d0Params = d0.resolve_parameter_locations(self)
+                d1Params = d1.resolve_parameter_locations(self)
+                raise DuplicateParameterSignatureError(d0.locatable.anchor, d1.locatable.anchor)
 
         self.locationConflicts = []
 
