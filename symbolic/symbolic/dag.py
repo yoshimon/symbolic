@@ -7,6 +7,7 @@ from collections import deque, defaultdict
 import functools
 
 # Library
+import matplotlib.pyplot as plt
 import networkx as nx
 
 # Project
@@ -87,9 +88,18 @@ class Dependency:
         """
         # Lazily compute and cache hash.
         if self._hash == None:
-            self._hash = ("{0} {1} {2}".format(str(self.libName), str(self.baseLocation), str(self.references))).__hash__()
+            self._hash = str(self).__hash__()
 
         return self._hash
+
+    def __str__(self):
+        """
+        Return a unique string descriptor for the dependency.
+
+        Returns:
+            str: The location string.
+        """
+        return "{0} using {1}".format(str(self.baseLocation), NavigationQuery.references_to_string(self.references))
 
     def resolve_parameter_locations(self, projectDependencyCollection):
         """
@@ -165,6 +175,16 @@ class NavigationQuery:
         _uid (str): The UID of the query.
     """
 
+    @staticmethod
+    def references_to_string(references):
+        """
+        Convert a references list to a string representation.
+
+        Returns:
+            str: The string representation of the list.
+        """
+        return "[{0}]".format(",".join(str(ref) for ref in references))
+
     def __init__(self, references, parent, location):
         """
         Initialize the object.
@@ -174,7 +194,7 @@ class NavigationQuery:
             parent (objects.Locatable): The parent locatable object.
             location (objects.Location): The location to find.
         """
-        refStr = "[{0}]".format(",".join(str(ref) for ref in references))
+        refStr = NavigationQuery.references_to_string(references)
         parentStr = str(parent)
         locationStr = str(location)
         self._uid = "{0} {1} {2}".format(refStr, parentStr, locationStr)
@@ -389,6 +409,63 @@ class ProjectDependencyCollection:
             ExpressionAtomKind.UnaryOp: self._verify_ast_unary_op,
             ExpressionAtomKind.BinaryOp: self._verify_ast_binary_op
         }
+
+    def to_graph(self):
+        """
+        Convert the collection to a dependency graph.
+
+        Returns:
+            ProjectDependencyGraph: The project dependency graph.
+        """
+        functionDag = nx.DiGraph()
+        typeDag = nx.DiGraph()
+        for libName, resolvedLocation in self.resolvedObjects.items():
+            self._to_graph(typeDag, functionDag, libName, resolvedLocation)
+        nx.draw_networkx(typeDag)
+        plt.show()
+        return typeDag
+
+    def _to_graph(self, typeDag, functionDag, libName, resolvedLocation):
+        """
+        Insert a resolved location with all its dependencies and sublocation into the given graph.
+
+        Args:
+            typeDag: The type reference DAG (Type -> Type).
+            functionDag: The function call DAG (Function -> Function, Function -> Type).
+            libName: The library name.
+            resolvedLocation (dag.ResolvedLocation): The resolved location.
+        """
+        # Insert all structs types first.
+        for dependency in resolvedLocation.dependencies:
+            locatable = dependency.locatable
+            if isinstance(locatable, Struct):
+                typeDag.add_node(dependency, libName=libName)
+
+        # Insert all aliases next, connecting them to the existing structs.
+        for dependency in resolvedLocation.dependencies:
+            locatable = dependency.locatable
+            if isinstance(locatable, Alias):
+                typeDag.add_node(dependency, libName=libName)
+                navResult = self.links[Dependency(locatable.targetTypename)]
+                typeDag.add_edge(navResult.dependency, dependency)
+
+        # Now add all struct member lists, connecting them to existing structs or aliases.
+        for dependency in resolvedLocation.dependencies:
+            locatable = dependency.locatable
+            if isinstance(locatable, Struct):
+                for locatable in locatable.locatables:
+                    if isinstance(locatable, MemberList):
+                        typeDag.add_node(dependency, libName=libName)
+                        navResult = self.links[Dependency(locatable.typename)]
+                        typeDag.add_edge(dependency, navResult.dependency)
+
+        # Add all function declarations.
+
+        # Add all function instructions, connecting them to existing functions.
+
+        # And repeat.
+        for subLocationName, subLocation in resolvedLocation.subLocations.items():
+            self._to_graph(typeDag, functionDag, libName, subLocation)
 
     def _ast_try_navigate_dependency(self, locatable, isLHSType):
         """
@@ -1486,7 +1563,6 @@ class ProjectDependencyCollection:
             
             self.insert(locatable)
             
-            # Instructions are verified later, after all types are resolved.
             if isinstance(locatable, Namespace):
                 locatables += locatable.locatables
 

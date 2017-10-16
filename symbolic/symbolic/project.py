@@ -13,6 +13,7 @@ from jinja2 import Environment
 import networkx as nx
 
 # Project
+from symbolic.algorithm import Algorithm
 from symbolic.dag import ProjectDependencyCollection
 from symbolic.exceptions import *
 from symbolic.lexer import SymbolicLexer, Symto
@@ -166,7 +167,7 @@ class LibraryDependencyGraph:
 
         # All dependencies have to resolve nicely
         try:
-            sortedLibs = nx.topological_sort(self.graph)
+            sortedLibs = list(nx.topological_sort(self.graph))
         except nx.exception.NetworkXUnfeasible:
             cycle = nx.find_cycle(self.graph)
 
@@ -179,7 +180,6 @@ class LibraryDependencyGraph:
             raise LibraryDependencyError(dependencyChain)
 
         print("Resolved build order: [{0}].".format(", ".join(libName for libName in sortedLibs)))
-
         return ((libName, self.graph.node[libName]["libConfig"]) for libName in sortedLibs)
 
 class Project:
@@ -202,8 +202,6 @@ class Project:
 
     def translate(self):
         """Translate the project."""
-        projBuildStartTime = datetime.datetime.now()
-
         # Create a dependency graph from the current configuration
         dependencyGraph = LibraryDependencyGraph(self.projConfig)
 
@@ -280,21 +278,7 @@ class Project:
             # Signal that we are done with this library
             dependencyCollection.end_library()
 
-            print("Library build successful. {0} elapsed.".format(self.dt_ms_string(libBuildStartTime)))
+            print("Library build successful. {0} elapsed.".format(Algorithm.dt_ms_string(libBuildStartTime)))
 
-        print()
-        print("-" * 80)
-        print("Project build successful. {0} elapsed.".format(self.dt_ms_string(projBuildStartTime)))
-        print("=" * 80)
-
-    @classmethod
-    def dt_ms_string(cls, start):
-        """
-        Return a pretty string for a time delta with a given start value.
-        
-        Args:
-            start: The start date time.
-        """
-        seconds = int(round((datetime.datetime.now() - start).total_seconds()))
-        minutes, seconds = divmod(seconds, 60)
-        return "{:02d}m:{:02d}s".format(minutes, seconds)
+        # Create a dependency graph from the collection.
+        return dependencyCollection.to_graph()

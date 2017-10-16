@@ -1,7 +1,21 @@
-﻿"""Contains common algorithms."""
+﻿import datetime
+
+"""Contains common algorithms."""
 
 class Algorithm:
     """Custom algorithms on Python data structures."""
+
+    @staticmethod
+    def dt_ms_string(start):
+        """
+        Return a pretty string for a time delta with a given start value.
+        
+        Args:
+            start: The start date time.
+        """
+        seconds = int(round((datetime.datetime.now() - start).total_seconds()))
+        minutes, seconds = divmod(seconds, 60)
+        return "{:02d}m:{:02d}s".format(minutes, seconds)
 
     @staticmethod
     def pop_while(stack, predicate, action=None):
