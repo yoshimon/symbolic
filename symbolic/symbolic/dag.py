@@ -423,6 +423,21 @@ class ProjectDependencyCollection:
             self._to_graph(typeDag, functionDag, libName, resolvedLocation)
         nx.draw_networkx(typeDag)
         plt.show()
+
+        # All dependencies have to resolve nicely
+        try:
+            list(nx.topological_sort(typeDag))
+        except nx.exception.NetworkXUnfeasible:
+            cycle = nx.find_cycle(typeDag)
+
+            # Circular dependency string
+            dependencyChain = []
+            for p in reversed(cycle):
+                dependencyChain.append(p[0].location)
+            dependencyChain.append(p[1].location)
+
+            raise CircularDependencyError(dependencyChain)
+
         return typeDag
 
     def _to_graph(self, typeDag, functionDag, libName, resolvedLocation):
@@ -446,8 +461,16 @@ class ProjectDependencyCollection:
             locatable = dependency.locatable
             if isinstance(locatable, Alias):
                 typeDag.add_node(dependency, libName=libName)
-                navResult = self.links[Dependency(locatable.targetTypename)]
-                typeDag.add_edge(navResult.dependency, dependency)
+                aliasDependency = dependency
+                while isinstance(locatable, Alias):
+                    aliasDependency = dependency
+                    navResult = self.links[Dependency(locatable.targetTypename)]
+                    typeDag.add_edge(navResult.dependency, aliasDependency) # TargetType -> Alias
+                    dependency = navResult.dependency
+                    locatable = dependency.locatable
+
+                if isinstance(locatable, Struct):
+                    typeDag.add_edge(dependency, aliasDependency) # Struct -> Alias
 
         # Now add all struct member lists, connecting them to existing structs or aliases.
         for dependency in resolvedLocation.dependencies:
@@ -455,9 +478,8 @@ class ProjectDependencyCollection:
             if isinstance(locatable, Struct):
                 for locatable in locatable.locatables:
                     if isinstance(locatable, MemberList):
-                        typeDag.add_node(dependency, libName=libName)
                         navResult = self.links[Dependency(locatable.typename)]
-                        typeDag.add_edge(dependency, navResult.dependency)
+                        typeDag.add_edge(navResult.dependency, dependency) # MemberType -> Struct
 
         # Add all function declarations.
 
@@ -1895,11 +1917,18 @@ class ProjectDependencyCollection:
             dag.NavigationResult: The next navigation result.
         """
         result = navResult
+        visitedResults = set()
+        dependencyChain = [result.dependency.location]
         while True:
+            if result.dependency.location in visitedResults:
+                raise CircularDependencyError(dependencyChain)
+
+            visitedResults.add(result.dependency.location)
             nextResult = self.navigate_alias_target(result)
             if nextResult is None:
                 return result
             
+            dependencyChain.append(nextResult.dependency.location)
             result = nextResult
 
     def try_navigate_dependency(self, dependency):

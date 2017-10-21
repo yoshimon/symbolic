@@ -32,7 +32,6 @@ class MissingLibraryReference(Exception):
         """
         return super().__str__() + "Missing library '{0}' referenced by '{1}'.".format(self.name, self.libName)
 
-
 class UnmappedNativeTypename(Exception):
     """
     An exception class, that indicates that a system typename was not mapped but referenced.
@@ -773,3 +772,30 @@ class SetNotSupportedError(SourceError):
             str: The string representation.
         """
         return super().__str__() + "The property does not support write access."
+
+class CircularDependencyError(Exception):
+    """
+    An exception class, that indicates a circular dependency.
+
+    Attributes:
+        dependencyChain (generator): The dependency chain.
+    """
+
+    def __init__(self, dependencyChain):
+        """
+        Initialize the object.
+
+        Args:
+            dependencyChain (generator): The dependency chain.
+        """
+        super().__init__()
+        self.dependencyChain = dependencyChain
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return "Circular dependency detected: [{0}].".format(Algorithm.join(" -> ", self.dependencyChain))

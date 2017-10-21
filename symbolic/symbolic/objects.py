@@ -213,6 +213,15 @@ class Location:
 
         return Algorithm.join_dot(self.path) + kindStr
 
+    def __hash__(self):
+        """
+        Return a hash value for this object.
+
+        Returns:
+            int: The hash value.
+        """
+        return str(self).__hash__()
+
     def __eq__(self, other):
         """
         Compare for equality with another location.
