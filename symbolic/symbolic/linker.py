@@ -1911,6 +1911,8 @@ class LinkedProject:
 
     Attributes:
         linkableProject (linker.LinkableProject): The project to link.
+        sortedTypeDependencies ([linker.Dependency]): All type dependencies (dependency-sorted).
+        functions ([linker.Dependency]): All function dependencies (unsorted).
     """
 
     def __init__(self, linkableProject):
@@ -1921,21 +1923,25 @@ class LinkedProject:
             linkableProject (linker.LinkableProject): The project to link.
         """
         self.linkableProject = linkableProject
-        self.typeDict = dict()
-        self.functionDict = dict()
-        self._full_link()
+        self.sortedTypeDependencies = self._sorted_type_dependencies()
+        self.functions = []
 
-    def _full_link(self):
-        """Link the associated project."""
+    def _sorted_type_dependencies(self):
+        """
+        Return the sorted type dependencies from the unlinked project.
+
+        Returns:
+            list: A sorted list of type dependencies.
+        """
         typeDag = nx.DiGraph()
-        for libName, resolvedLocation in self.linkableProject.resolvedObjects.items():
-            self._link(typeDag, resolvedLocation)
+        for resolvedLocation in self.linkableProject.resolvedObjects.values():
+            self._create_type_dag(typeDag, resolvedLocation)
         nx.draw_networkx(typeDag)
         plt.show()
 
         # All dependencies have to resolve nicely
         try:
-            list(nx.topological_sort(typeDag))
+            return list(nx.topological_sort(typeDag))
         except nx.exception.NetworkXUnfeasible:
             cycle = nx.find_cycle(typeDag)
 
@@ -1947,9 +1953,7 @@ class LinkedProject:
 
             raise CircularDependencyError(dependencyChain)
 
-        return typeDag
-
-    def _link(self, typeDag, resolvedLocation):
+    def _create_type_dag(self, typeDag, resolvedLocation):
         """
         Insert a resolved location with all its dependencies and sublocations into the given graph.
 
@@ -1981,4 +1985,4 @@ class LinkedProject:
 
         # And repeat.
         for subLocationName, subLocation in resolvedLocation.subLocations.items():
-            self._link(typeDag, subLocation)
+            self._create_type_dag(typeDag, subLocation)
