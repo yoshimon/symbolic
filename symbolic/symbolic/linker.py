@@ -415,69 +415,6 @@ class LinkableProject:
             ExpressionAtomKind.BinaryOp: self._verify_ast_binary_op
         }
 
-    def to_graph(self):
-        """
-        Convert the collection to a dependency graph.
-
-        Returns:
-            ProjectDependencyGraph: The project dependency graph.
-        """
-        typeDag = nx.DiGraph()
-        for libName, resolvedLocation in self.resolvedObjects.items():
-            self._to_graph(typeDag, resolvedLocation)
-        nx.draw_networkx(typeDag)
-        plt.show()
-
-        # All dependencies have to resolve nicely
-        try:
-            list(nx.topological_sort(typeDag))
-        except nx.exception.NetworkXUnfeasible:
-            cycle = nx.find_cycle(typeDag)
-
-            # Circular dependency string
-            dependencyChain = []
-            for p in reversed(cycle):
-                dependencyChain.append(p[0].location)
-            dependencyChain.append(p[1].location)
-
-            raise CircularDependencyError(dependencyChain)
-
-        return typeDag
-
-    def _to_graph(self, typeDag, resolvedLocation):
-        """
-        Insert a resolved location with all its dependencies and sublocation into the given graph.
-
-        Args:
-            typeDag: The type reference DAG (Type -> Type).
-            resolvedLocation (linker.ResolvedLocation): The resolved location.
-        """
-        for dependency in resolvedLocation.dependencies:
-            locatable = dependency.locatable
-            if isinstance(locatable, Struct):
-                typeDag.add_node(dependency)
-
-                for locatable in locatable.locatables:
-                    if isinstance(locatable, MemberList):
-                        navResult = self.links[Dependency(locatable.typename)]
-                        typeDag.add_edge(navResult.dependency, dependency) # MemberType -> Struct
-            elif isinstance(locatable, Alias):
-                typeDag.add_node(dependency)
-                aliasDependency = dependency
-                while isinstance(locatable, Alias):
-                    aliasDependency = dependency
-                    navResult = self.links[Dependency(locatable.targetTypename)]
-                    typeDag.add_edge(navResult.dependency, aliasDependency) # TargetType -> Alias
-                    dependency = navResult.dependency
-                    locatable = dependency.locatable
-
-                if isinstance(locatable, Struct):
-                    typeDag.add_edge(dependency, aliasDependency) # Struct -> Alias
-
-        # And repeat.
-        for subLocationName, subLocation in resolvedLocation.subLocations.items():
-            self._to_graph(typeDag, subLocation)
-
     def _ast_try_navigate_dependency(self, locatable, isLHSType):
         """
         Try to navigate to a locatable object.
@@ -1970,7 +1907,7 @@ class LinkableProject:
 
 class LinkedProject:
     """
-    A project which has been linked.
+    A fully linked project.
 
     Attributes:
         linkableProject (linker.LinkableProject): The project to link.
@@ -1984,8 +1921,64 @@ class LinkedProject:
             linkableProject (linker.LinkableProject): The project to link.
         """
         self.linkableProject = linkableProject
-        self._link()
+        self.typeDict = dict()
+        self.functionDict = dict()
+        self._full_link()
 
-    def _link(self):
+    def _full_link(self):
         """Link the associated project."""
-        pass
+        typeDag = nx.DiGraph()
+        for libName, resolvedLocation in self.linkableProject.resolvedObjects.items():
+            self._link(typeDag, resolvedLocation)
+        nx.draw_networkx(typeDag)
+        plt.show()
+
+        # All dependencies have to resolve nicely
+        try:
+            list(nx.topological_sort(typeDag))
+        except nx.exception.NetworkXUnfeasible:
+            cycle = nx.find_cycle(typeDag)
+
+            # Circular dependency string
+            dependencyChain = []
+            for p in reversed(cycle):
+                dependencyChain.append(p[0].location)
+            dependencyChain.append(p[1].location)
+
+            raise CircularDependencyError(dependencyChain)
+
+        return typeDag
+
+    def _link(self, typeDag, resolvedLocation):
+        """
+        Insert a resolved location with all its dependencies and sublocations into the given graph.
+
+        Args:
+            typeDag: The type reference DAG (Type -> Type).
+            resolvedLocation (linker.ResolvedLocation): The resolved location.
+        """
+        for dependency in resolvedLocation.dependencies:
+            locatable = dependency.locatable
+            if isinstance(locatable, Struct):
+                typeDag.add_node(dependency)
+
+                for locatable in locatable.locatables:
+                    if isinstance(locatable, MemberList):
+                        navResult = self.linkableProject.links[Dependency(locatable.typename)]
+                        typeDag.add_edge(navResult.dependency, dependency) # MemberType -> Struct
+            elif isinstance(locatable, Alias):
+                typeDag.add_node(dependency)
+                aliasDependency = dependency
+                while isinstance(locatable, Alias):
+                    aliasDependency = dependency
+                    navResult = self.linkableProject.links[Dependency(locatable.targetTypename)]
+                    typeDag.add_edge(navResult.dependency, aliasDependency) # TargetType -> Alias
+                    dependency = navResult.dependency
+                    locatable = dependency.locatable
+
+                if isinstance(locatable, Struct):
+                    typeDag.add_edge(dependency, aliasDependency) # Struct -> Alias
+
+        # And repeat.
+        for subLocationName, subLocation in resolvedLocation.subLocations.items():
+            self._link(typeDag, subLocation)
