@@ -33,7 +33,7 @@
     <Compile Include="symbolic\base_parser.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="symbolic\dag.py">
+    <Compile Include="symbolic\linker.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="symbolic\paths.py">

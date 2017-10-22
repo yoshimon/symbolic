@@ -65,7 +65,7 @@ class Dependency:
 
         # Internal caches.
         self._hash = None
-        self._dependencyCollection = None
+        self._linkableProject = None
         self._resolvedParameterLocations = []
 
     def __eq__(self, other):
@@ -101,25 +101,25 @@ class Dependency:
         """
         return "{0} using {1}".format(str(self.baseLocation), NavigationQuery.references_to_string(self.references))
 
-    def resolve_parameter_locations(self, projectDependencyCollection):
+    def resolve_parameter_locations(self, linkableProject):
         """
         Return a generator sequence for the resolved parameter types.
         
         Args:
-            projectDependencyCollection (dag.ProjectDependencyCollection): The dependency collection to resolve the parameter with.
+            linkableProject (linker.LinkableProject): The dependency collection to resolve the parameter with.
         Returns:
             list: The resolved parameter types.
         """
-        if self._dependencyCollection != projectDependencyCollection:
-            self._dependencyCollection = projectDependencyCollection
+        if self._linkableProject != linkableProject:
+            self._linkableProject = linkableProject
             self._resolvedParameterLocations = []
 
             # Rebuild cache.
-            if projectDependencyCollection is not None:
+            if linkableProject is not None:
                 for p in self.baseLocation[-1].parameters:
                     pDep = Dependency(p)
-                    pResolved = projectDependencyCollection.navigate_dependency(pDep)
-                    pResolvedBase = projectDependencyCollection.navigate_alias_base(pResolved)
+                    pResolved = linkableProject.navigate_dependency(pDep)
+                    pResolvedBase = linkableProject.navigate_alias_base(pResolved)
                     pResolvedLocation = pResolvedBase.resolvedDependencyLocation
                     self._resolvedParameterLocations.append(pResolvedLocation)
                     
@@ -130,8 +130,8 @@ class LocationConflict:
     A conflict between two locations.
     
     Attributes:
-        firstDependency (dag.Dependency): The first dependency.
-        secondDependency (dag.Dependency): The second dependency.
+        firstDependency (linker.Dependency): The first dependency.
+        secondDependency (linker.Dependency): The second dependency.
     """
 
     def __init__(self, firstDependency, secondDependency):
@@ -139,8 +139,8 @@ class LocationConflict:
         Initialize the object.
         
         Args:
-            firstDependency (dag.Dependency): The first dependency.
-            secondDependency (dag.Dependency): The second dependency.
+            firstDependency (linker.Dependency): The first dependency.
+            secondDependency (linker.Dependency): The second dependency.
         """
         self.firstDependency = firstDependency
         self.secondDependency = secondDependency
@@ -152,8 +152,8 @@ class ResolvedDependencyLocation:
     The location might be shared by other dependencies and it may contain sub-locations.
 
     Attributes:
-        dependencies ([dag.Dependency]): The dependencies at this location.
-        subLocations ({str, dag.ResolvedDependencyLocation}): The sub-locations.    
+        dependencies ([linker.Dependency]): The dependencies at this location.
+        subLocations ({str, linker.ResolvedDependencyLocation}): The sub-locations.    
     """
 
     def __init__(self, dependencies=None, subLocations=None):
@@ -161,8 +161,8 @@ class ResolvedDependencyLocation:
         Initialize the object.
 
         Args:
-            dependencies ([dag.Dependency]): The dependencies at this location.
-            subLocations ({str, dag.ResolvedDependencyLocation}): The sub-locations.
+            dependencies ([linker.Dependency]): The dependencies at this location.
+            subLocations ({str, linker.ResolvedDependencyLocation}): The sub-locations.
         """
         self.dependencies = dependencies if dependencies is not None else []
         self.subLocations = subLocations if subLocations is not None else {}
@@ -233,8 +233,8 @@ class NavigationResult:
     A result of a navigation operation.
 
     Attributes:
-        resolvedDependencyLocation ([dag.ResolvedDependencyLocation]): The resolved dependency location.
-        dependency (dag.Dependency): The matched dependency.
+        resolvedDependencyLocation ([linker.ResolvedDependencyLocation]): The resolved dependency location.
+        dependency (linker.Dependency): The matched dependency.
     """
 
     def __init__(self, resolvedDependencyLocation, dependency):
@@ -242,8 +242,8 @@ class NavigationResult:
         Initialize the object.
 
         Args:
-            resolvedDependencyLocation ([dag.ResolvedDependencyLocation]): The resolved dependency location.
-            dependency (dag.Dependency): The matched dependency.
+            resolvedDependencyLocation ([linker.ResolvedDependencyLocation]): The resolved dependency location.
+            dependency (linker.Dependency): The matched dependency.
         """
         self.resolvedDependencyLocation = resolvedDependencyLocation
         self.dependency = dependency
@@ -253,7 +253,7 @@ class NavigationResult:
         Return whether two navigation results point to the same location.
         
         Args:
-            other (dag.NavigationResult): The navigation result to compare with.
+            other (linker.NavigationResult): The navigation result to compare with.
         Returns:
             bool: True, if both results point to the same location. Otherwise False.
         """
@@ -271,7 +271,7 @@ class AstNavigationResult:
         Initialize the object.
 
         Args:
-            navResult (dag.NavigationResult): The navigation result to wrap.
+            navResult (linker.NavigationResult): The navigation result to wrap.
             isLHSType (bool): True, if this is a LHS type. Otherwise False.
         """
         self.dependency = navResult.dependency
@@ -290,7 +290,7 @@ class AstNavigationResult:
         will have the array dimensions set.
 
         Returns:
-            dag.AstNavigationResult: The same result as an array.
+            linker.AstNavigationResult: The same result as an array.
         """
         resolvedDependencyLocation = ResolvedDependencyLocation([self.dependency])
         navResult = NavigationResult(resolvedDependencyLocation, self.dependency)
@@ -311,7 +311,7 @@ class AstNavigationResult:
         will have the array dimensions unset.
 
         Returns:
-            dag.AstNavigationResult: The same result as a base type.
+            linker.AstNavigationResult: The same result as a base type.
         """
         return self.as_array([])
 
@@ -320,19 +320,19 @@ class AstNavigationResult:
         Return whether two navigation results point to the same location.
         
         Args:
-            other (dag.NavigationResult): The navigation result to compare with.
+            other (linker.NavigationResult): The navigation result to compare with.
         Returns:
             bool: True, if both results point to the same location. Otherwise False.
         """
         return self.explicitLocation == other.explicitLocation
 
-class ProjectDependencyCollection:
+class LinkableProject:
     """
-    A colllection of dependencies within a project.
+    A project which can be linked.
 
     Attributes:
-        unresolvedDependencies ({dag.Dependency}): A set of unresolved dependencies.
-        unresolvedAliasDefaultConstructorDependencies ({dag.Dependency}): A set of unresolved alias constructor dependencies.
+        unresolvedDependencies ({linker.Dependency}): A set of unresolved dependencies.
+        unresolvedAliasDefaultConstructorDependencies ({linker.Dependency}): A set of unresolved alias constructor dependencies.
         libraries (dict): The libraries lookup table.
         resolvedObjects (defaultdict): Maps each library to a list of resolved objects
         links (dict): Maps unresolved dependencies to their resolved counterparts
@@ -340,7 +340,12 @@ class ProjectDependencyCollection:
     """
 
     def __init__(self, userTypeLocationStrings):
-        """Initialize the object."""
+        """
+        Initialize the object.
+        
+        Args:
+            userTypeLocationStrings (dict): The user-defined system type location strings from the project configuration.
+        """
         self.unresolvedDependencies = list()
         self.unresolvedAliasDefaultConstructorDependencies = list()
         self.libraries = {} # The libraries lookup table
@@ -417,10 +422,9 @@ class ProjectDependencyCollection:
         Returns:
             ProjectDependencyGraph: The project dependency graph.
         """
-        functionDag = nx.DiGraph()
         typeDag = nx.DiGraph()
         for libName, resolvedLocation in self.resolvedObjects.items():
-            self._to_graph(typeDag, functionDag, libName, resolvedLocation)
+            self._to_graph(typeDag, resolvedLocation)
         nx.draw_networkx(typeDag)
         plt.show()
 
@@ -440,27 +444,25 @@ class ProjectDependencyCollection:
 
         return typeDag
 
-    def _to_graph(self, typeDag, functionDag, libName, resolvedLocation):
+    def _to_graph(self, typeDag, resolvedLocation):
         """
         Insert a resolved location with all its dependencies and sublocation into the given graph.
 
         Args:
             typeDag: The type reference DAG (Type -> Type).
-            functionDag: The function call DAG (Function -> Function, Function -> Type).
-            libName: The library name.
-            resolvedLocation (dag.ResolvedLocation): The resolved location.
+            resolvedLocation (linker.ResolvedLocation): The resolved location.
         """
-        # Insert all structs types first.
         for dependency in resolvedLocation.dependencies:
             locatable = dependency.locatable
             if isinstance(locatable, Struct):
-                typeDag.add_node(dependency, libName=libName)
+                typeDag.add_node(dependency)
 
-        # Insert all aliases next, connecting them to the existing structs.
-        for dependency in resolvedLocation.dependencies:
-            locatable = dependency.locatable
-            if isinstance(locatable, Alias):
-                typeDag.add_node(dependency, libName=libName)
+                for locatable in locatable.locatables:
+                    if isinstance(locatable, MemberList):
+                        navResult = self.links[Dependency(locatable.typename)]
+                        typeDag.add_edge(navResult.dependency, dependency) # MemberType -> Struct
+            elif isinstance(locatable, Alias):
+                typeDag.add_node(dependency)
                 aliasDependency = dependency
                 while isinstance(locatable, Alias):
                     aliasDependency = dependency
@@ -472,22 +474,9 @@ class ProjectDependencyCollection:
                 if isinstance(locatable, Struct):
                     typeDag.add_edge(dependency, aliasDependency) # Struct -> Alias
 
-        # Now add all struct member lists, connecting them to existing structs or aliases.
-        for dependency in resolvedLocation.dependencies:
-            locatable = dependency.locatable
-            if isinstance(locatable, Struct):
-                for locatable in locatable.locatables:
-                    if isinstance(locatable, MemberList):
-                        navResult = self.links[Dependency(locatable.typename)]
-                        typeDag.add_edge(navResult.dependency, dependency) # MemberType -> Struct
-
-        # Add all function declarations.
-
-        # Add all function instructions, connecting them to existing functions.
-
         # And repeat.
         for subLocationName, subLocation in resolvedLocation.subLocations.items():
-            self._to_graph(typeDag, functionDag, libName, subLocation)
+            self._to_graph(typeDag, subLocation)
 
     def _ast_try_navigate_dependency(self, locatable, isLHSType):
         """
@@ -496,7 +485,7 @@ class ProjectDependencyCollection:
         Args:
             locatable (objects.Locatable): The locatable object to search for.
         Returns:
-            dag.AstNavigationResult or None: The navigation result or None.
+            linker.AstNavigationResult or None: The navigation result or None.
         """
         dependency = Dependency(locatable)
         navResult = self.try_navigate_dependency(dependency)
@@ -524,7 +513,7 @@ class ProjectDependencyCollection:
             locatable (objects.Locatable): The locatable object to search for.
             isLHSType (bool): True, if this is a LHS type.
         Returns:
-            dag.AstNavigationResult: The navigation result.
+            linker.AstNavigationResult: The navigation result.
         """
         navResult = self._ast_try_navigate_dependency(locatable, isLHSType)
         if navResult is None:
@@ -539,10 +528,10 @@ class ProjectDependencyCollection:
         Args:
             container (objects.Locatable): The locatable container (parent) object.
             name (lexer.Symto): The member or property name.
-            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+            lhs (linker.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
             isAssignment (bool): True, if this is an assignment. Otherwise False.
         Returns:
-            dag.AstNavigationResult or None: The location of the resulting type of this AST.
+            linker.AstNavigationResult or None: The location of the resulting type of this AST.
         """
         if lhs is None:
             if not isinstance(container, Property):
@@ -577,7 +566,7 @@ class ProjectDependencyCollection:
             isStatic (bool): True, if this is a static property. Otherwise False.
             isAssignment (bool): True, if this is an assignment. Otherwise False.
         Returns:
-            dag.AstNavigationResult or None: The location of the resulting type of this AST.
+            linker.AstNavigationResult or None: The location of the resulting type of this AST.
         """
         propertyParameters = list(parameters)
 
@@ -604,7 +593,7 @@ class ProjectDependencyCollection:
             struct (objects.Struct): The structure.
             memberName (lexer.Symto): The member name.
         Returns:
-            dag.AstNavigationResult or None: The location of the resulting type of this AST.
+            linker.AstNavigationResult or None: The location of the resulting type of this AST.
         """
         memberTypename = struct.try_find_member_typename(memberName.anchor, memberName)
         if memberTypename is None:
@@ -618,9 +607,9 @@ class ProjectDependencyCollection:
 
         Args:
             atom (objects.ExpressionAtom): The root atom.
-            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+            lhs (linker.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
         Returns:
-            dag.AstNavigationResult or None: The location of the resulting type of this AST.
+            linker.AstNavigationResult or None: The location of the resulting type of this AST.
         """
         if lhs is None:
             return None
@@ -649,10 +638,10 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+            lhs (linker.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
             isAssignment (bool): True, if this is an assignment. Otherwise False.
         Returns:
-            dag.AstNavigationResult: The location of the resulting type of this AST.
+            linker.AstNavigationResult: The location of the resulting type of this AST.
         """
         if lhs is None:
             # Handle boolean values: true, false.
@@ -716,11 +705,10 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+            lhs (linker.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
         Returns:
-            dag.AstNavigationResult: The location of the resulting type of this AST.
+            linker.AstNavigationResult: The location of the resulting type of this AST.
         """
-        # TODO: account for lhs
         return self._ast_try_navigate_any([LocationKind.Type], token, references)
 
     def _verify_ast_number(self, container, atom, children, localVars, newLocalVars, isOptional, lhs, isAssignment):
@@ -734,10 +722,10 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+            lhs (linker.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
             isAssignment (bool): True, if this is an assignment. Otherwise False.
         Returns:
-            dag.AstNavigationResult: The location of the resulting type of this AST.
+            linker.AstNavigationResult: The location of the resulting type of this AST.
         """
         # Navigate to the numeric type (None stands for INFINITY).
         if atom.token is None or atom.token.isInteger:
@@ -763,10 +751,10 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+            lhs (linker.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
             isAssignment (bool): True, if this is an assignment. Otherwise False.
         Returns:
-            dag.AstNavigationResult: The location of the resulting type of this AST.
+            linker.AstNavigationResult: The location of the resulting type of this AST.
         """
         # Extract child information.
         childNRs = [self._verify_expression_ast_recursive(container, localVars, child, newLocalVars) for child in children]
@@ -797,10 +785,10 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+            lhs (linker.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
             isAssignment (bool): True, if this is an assignment. Otherwise False.
         Returns:
-            dag.AstNavigationResult: The location of the resulting type of this AST.
+            linker.AstNavigationResult: The location of the resulting type of this AST.
         """
         # Extract child information.
         isScalar = len(children) > 0
@@ -937,10 +925,10 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+            lhs (linker.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
             isAssignment (bool): True, if this is an assignment. Otherwise False.
         Returns:
-            dag.AstNavigationResult: The location of the resulting type of this AST.
+            linker.AstNavigationResult: The location of the resulting type of this AST.
         """
         # Template function calls are not supported yet.
         assert False
@@ -956,10 +944,10 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+            lhs (linker.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
             isAssignment (bool): True, if this is an assignment. Otherwise False.
         Returns:
-            dag.AstNavigationResult: The location of the resulting type of this AST.
+            linker.AstNavigationResult: The location of the resulting type of this AST.
         """
         assert(len(children) == 1)
 
@@ -994,7 +982,7 @@ class ProjectDependencyCollection:
             kind (objects.FunctionKind): The function kind to look for.
             parameters (list of objects.Parameter): The parameter signature.
         Returns:
-            dag.AstNavigationResult: The location of the resulting type of this AST.
+            linker.AstNavigationResult: The location of the resulting type of this AST.
         """
         locatable = FunctionReference(container.references, container, nameToken, kind, parameters, isExplicitRef)
         navResult = self._ast_try_navigate_dependency(locatable, False)
@@ -1009,7 +997,7 @@ class ProjectDependencyCollection:
             nameToken (lexer.Symto): A token with the name of the function to look for.
             parameters (list of objects.Parameter): The parameter signature.
         Returns:
-            dag.AstNavigationResult: The location of the resulting type of this AST.
+            linker.AstNavigationResult: The location of the resulting type of this AST.
         """
         locatable = PropertyReference(container.references, container, nameToken, parameters, isExplicitRef)
         navResult = self._ast_try_navigate_dependency(locatable, False)
@@ -1026,10 +1014,10 @@ class ProjectDependencyCollection:
             localVars (dict): Lookup table that maps variable names to resolved locations.
             newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
             isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+            lhs (linker.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
             isAssignment (bool): True, if this is an assignment. Otherwise False.
         Returns:
-            dag.AstNavigationResult: The location of the resulting type of this AST.
+            linker.AstNavigationResult: The location of the resulting type of this AST.
         """
         assert(len(children) == 2)
 
@@ -1152,7 +1140,7 @@ class ProjectDependencyCollection:
                 hierarchy until a match is found.
             location (objects.Location): The location.
         Returns:
-            dag.NavigationResult or None: The resolved location or None, if no match was found.
+            linker.NavigationResult or None: The resolved location or None, if no match was found.
         """
         # Lookup from ID cache.
         navQuery = NavigationQuery(references, parent, location)
@@ -1358,7 +1346,7 @@ class ProjectDependencyCollection:
         Args:
             dependencyLocationStr (str): The template instantiation string.
         Returns:
-            dag.ResolvedDependencyLocation: The resolved dependency location.
+            linker.ResolvedDependencyLocation: The resolved dependency location.
         """
         # Use template links to jump to the right location, which is anonymous.
         templateDep = Dependency(self.templateLinks[dependencyLocationStr])
@@ -1377,7 +1365,7 @@ class ProjectDependencyCollection:
             templateParameterValues ([objects.TemplateParameter]): The template parameter values, e.g. "int".
             references ([objects.Reference]): The references for the template.
         Returns:
-            dag.ResolvedDependencyLocation: The resolved dependency location for the instantiated object instance.
+            linker.ResolvedDependencyLocation: The resolved dependency location for the instantiated object instance.
         """
         dependencyLocationStr = self.template_instance_str(templateParameterValues, references, template.location().base())
 
@@ -1430,7 +1418,7 @@ class ProjectDependencyCollection:
                 hierarchy until a match is found.
             location (objects.Location): The location.
         Returns:
-            dag.NavigationResult: The resolved location.
+            linker.NavigationResult: The resolved location.
         """
         navResult = self.try_navigate(errorAnchor, references, parent, location)
         if navResult is None:
@@ -1442,9 +1430,9 @@ class ProjectDependencyCollection:
         Navigate to the parent of a dependency.
 
         Args:
-            dependency (dag.Dependency): The dependency to find the parent of.
+            dependency (linker.Dependency): The dependency to find the parent of.
         Returns:
-            dag.NavigationResult: The navigation result.
+            linker.NavigationResult: The navigation result.
         """
         locatable = dependency.locatable
         location = dependency.baseLocation
@@ -1560,7 +1548,7 @@ class ProjectDependencyCollection:
         Generate the default constructor for an alias.
 
         Args:
-            dependency (dag.Dependency): The alias dependency.
+            dependency (linker.Dependency): The alias dependency.
         """
         nr = self.navigate_dependency(dependency)
         structNR = self.navigate_alias_base(nr)
@@ -1766,9 +1754,9 @@ class ProjectDependencyCollection:
             container (objects.Locatable): The locatable container (parent) object.
             localVars (dict): The local variables.
             instruction (objects.Instruction): The instruction to verify.
-            scopeState (dag.ScopeState): The current scope state.
+            scopeState (linker.ScopeState): The current scope state.
             prevInstruction (objects.Instruction): The previous instruction in the same scope.
-            returnTypeNR (dag.AstNavigationResult): The return type AST navigation result.
+            returnTypeNR (linker.AstNavigationResult): The return type AST navigation result.
         """
         # Verify the AST.
         if instruction.kind == InstructionKind.Expression:
@@ -1830,9 +1818,9 @@ class ProjectDependencyCollection:
             container (objects.Locatable): The locatable container (parent) object.
             localVars (dict): The local variables.
             instructions ([objects.Instruction]): The instructions to verify.
-            scopeState (dag.ScopeState): The current scope state.
+            scopeState (linker.ScopeState): The current scope state.
             prevInstruction (objects.Instruction): The previous instruction in the same scope.
-            returnTypeNR (dag.AstNavigationResult): The return type navigation result.
+            returnTypeNR (linker.AstNavigationResult): The return type navigation result.
         """
         prevInstruction = None
         for instruction in instructions:
@@ -1848,7 +1836,7 @@ class ProjectDependencyCollection:
             localVars (dict): Visible variable declarations.
             ast (objects.ExpressionAST): The expression AST to verify.
         Returns:
-            dag.NavigationResult or None: The navigation result after searching for the type of the expression.
+            linker.NavigationResult or None: The navigation result after searching for the type of the expression.
         """
         newLocalVars = {}
 
@@ -1867,10 +1855,10 @@ class ProjectDependencyCollection:
             ast (objects.ExpressionAST): The expression AST to verify.
             newLocalVars (dict): New local variables.
             isOptional (bool): Indicates whether the result of this function can be optionally None.
-            lhs (dag.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+            lhs (linker.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
             isAssignment (bool): True, if this is an assignment. Otherwise False.
         Returns:
-            dag.NavigationResult or None: The navigation result after searching for the type of the expression.
+            linker.NavigationResult or None: The navigation result after searching for the type of the expression.
         """
         atom = ast.atom
         children = ast.children
@@ -1888,9 +1876,9 @@ class ProjectDependencyCollection:
         This can be used after navigating to a location to find the next target type.
 
         Args:
-            navResult (dag.NavigationResult): The previous navigation result to continue the search from.
+            navResult (linker.NavigationResult): The previous navigation result to continue the search from.
         Returns:
-            dag.NavigationResult or None: The next navigation result or None if there was no resolvable alias.
+            linker.NavigationResult or None: The next navigation result or None if there was no resolvable alias.
         """
         if navResult is None:
             return None
@@ -1912,9 +1900,9 @@ class ProjectDependencyCollection:
         This can be used after navigating to a location to find the last target type.
 
         Args:
-            navResult (dag.NavigationResult): The previous navigation result to continue the search from.
+            navResult (linker.NavigationResult): The previous navigation result to continue the search from.
         Returns:
-            dag.NavigationResult: The next navigation result.
+            linker.NavigationResult: The next navigation result.
         """
         result = navResult
         visitedResults = set()
@@ -1936,9 +1924,9 @@ class ProjectDependencyCollection:
         Navigate using a dependency as the target.
 
         Args:
-            dependency (dag.Dependency): The dependency to lookup.
+            dependency (linker.Dependency): The dependency to lookup.
         Returns:
-            dag.NavigationResult or None: The navigation result.
+            linker.NavigationResult or None: The navigation result.
         """
         navResult = self.links.get(dependency, None)
         if navResult is not None:
@@ -1956,9 +1944,9 @@ class ProjectDependencyCollection:
         Navigate using a dependency as the target.
 
         Args:
-            dependency (dag.Dependency): The dependency to lookup.
+            dependency (linker.Dependency): The dependency to lookup.
         Returns:
-            dag.NavigationResult or None: The navigation result or None, if not match was found.
+            linker.NavigationResult or None: The navigation result or None, if not match was found.
         """
         navResult = self.try_navigate_dependency(dependency)
         if navResult is None:
@@ -1980,5 +1968,24 @@ class ProjectDependencyCollection:
 
         self.locationConflicts = []
 
-class ProjectDependencyGraph:
-    pass
+class LinkedProject:
+    """
+    A project which has been linked.
+
+    Attributes:
+        linkableProject (linker.LinkableProject): The project to link.
+    """
+
+    def __init__(self, linkableProject):
+        """
+        Initialize the object.
+
+        Args:
+            linkableProject (linker.LinkableProject): The project to link.
+        """
+        self.linkableProject = linkableProject
+        self._link()
+
+    def _link(self):
+        """Link the associated project."""
+        pass

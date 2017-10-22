@@ -14,7 +14,6 @@ from symbolic.paths import VirtualPath
 
 def main():
     """The main program entrypoint."""
-
     parser = argparse.ArgumentParser()
     parser.add_argument("path", help="The file path to the project configuration file.")
     parser.add_argument("--output", dest="outputFilePath", default="output.yml", help="The AST output file path.")
@@ -29,13 +28,12 @@ def main():
 
     projConfigFilePath = VirtualPath(args.path)
 
-    # Change the working directory to the project path
     os.chdir(str(projConfigFilePath.directory_path()))
 
     # Load and translate the project
     projectBuildStartTime = datetime.datetime.now()
     project = Project(projConfigFilePath)
-    projectDependencyGraph = project.translate()
+    linkedProject = project.translate()
     #projectDependencyGraph.write_to_file(VirtualPath(args.outputFilePath))
     print()
     print("-" * 80)

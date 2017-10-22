@@ -1,6 +1,6 @@
-DAG
+Linker
 ====================================
 
-.. automodule:: dag
+.. automodule:: linker
     :members:
     :show-inheritance:

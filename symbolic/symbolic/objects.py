@@ -2,7 +2,7 @@
 Contains all source code object types in symbolic.
 
 The types in this package are used to convert the textual representation of the symbolic source code to an in-memory representation.
-This is later passed onto the dependency solver to resolve library dependencies, see symbolic.dag.
+This is later passed onto the dependency solver to resolve library dependencies, see symbolic.linker.
 """
 
 # Built-in

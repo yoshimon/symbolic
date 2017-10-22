@@ -14,9 +14,9 @@ import networkx as nx
 
 # Project
 from symbolic.algorithm import Algorithm
-from symbolic.dag import ProjectDependencyCollection
 from symbolic.exceptions import *
 from symbolic.lexer import SymbolicLexer, Symto
+from symbolic.linker import LinkableProject, LinkedProject
 from symbolic.paths import VirtualPath
 from symbolic.parsers import UnitParser
 from symbolic.preprocessors import PPT, ExternalPreprocessor
@@ -201,7 +201,12 @@ class Project:
         self.projConfig = ProjectConfiguration(filePath)
 
     def translate(self):
-        """Translate the project."""
+        """
+        Translate the project to a linked project.
+        
+        Returns:
+            linker.LinkedProject: The linked project.
+        """
         # Create a dependency graph from the current configuration
         dependencyGraph = LibraryDependencyGraph(self.projConfig)
 
@@ -209,7 +214,7 @@ class Project:
         orderedLibs = dependencyGraph.resolve()
 
         # Create a new dependency collection for this project
-        dependencyCollection = ProjectDependencyCollection(self.projConfig.systemTypes)
+        linkableProject = LinkableProject(self.projConfig.systemTypes)
 
         # Translate each library by going through all *.sym files
         libIndex = 0
@@ -225,7 +230,7 @@ class Project:
             projLibPPT = self.projConfig.ppt.combine(libConfig.ppt)
 
             # Signal the dependency collection that a new library is being processed
-            dependencyCollection.begin_library(libName, libConfig.preImports, libConfig.postImports)
+            linkableProject.begin_library(libName, libConfig.preImports, libConfig.postImports)
 
             print()
             print("-" * 80)
@@ -264,21 +269,21 @@ class Project:
                         raise UnknownLibraryReferenceError(ref.anchor, ref)
 
                 # Create a dependency graph for the unit
-                dependencyCollection.insert_unit(rootNamespace)
+                linkableProject.insert_unit(rootNamespace)
                 
                 numFilesParsed += 1
 
             if numFilesParsed > 0:
                 print("")
                 if numFilesParsed == 1:
-                    print("{0} file successfully parsed. Finalizing library...".format(numFilesParsed))
+                    print("{0} file successfully parsed. Linking library...".format(numFilesParsed))
                 else:
-                    print("{0} files successfully parsed. Finalizing library...".format(numFilesParsed))
+                    print("{0} files successfully parsed. Linking library...".format(numFilesParsed))
 
             # Signal that we are done with this library
-            dependencyCollection.end_library()
+            linkableProject.end_library()
 
             print("Library build successful. {0} elapsed.".format(Algorithm.dt_ms_string(libBuildStartTime)))
 
         # Create a dependency graph from the collection.
-        return dependencyCollection.to_graph()
+        return LinkedProject(linkableProject)
