@@ -18,7 +18,7 @@ class LinkedProjectYamlSerializer:
         LinkedProjectYamlSerializer._serialize_types(typesOutputFilePath, linkedProject)
         LinkedProjectYamlSerializer._serialize_functions(functionsOutputFilePath, linkedProject)
 
-    def _serialize_types(typesOutputFilePath):
+    def _serialize_types(typesOutputFilePath, linkedProject):
         """
         Serialize the types in a linked project to a YAML file.
 
@@ -28,7 +28,7 @@ class LinkedProjectYamlSerializer:
         """
         pass
 
-    def _serialize_functions(functionsOutputFilePath):
+    def _serialize_functions(functionsOutputFilePath, linkedProject):
         """
         Serialize the types in a linked project to a YAML file.
 
