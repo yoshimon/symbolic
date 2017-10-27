@@ -7,7 +7,6 @@ from collections import deque, defaultdict
 import functools
 
 # Library
-import matplotlib.pyplot as plt
 import networkx as nx
 
 # Project
@@ -1936,8 +1935,6 @@ class LinkedProject:
         typeDag = nx.DiGraph()
         for resolvedLocation in self.linkableProject.resolvedObjects.values():
             self._create_type_dag(typeDag, resolvedLocation)
-        nx.draw_networkx(typeDag)
-        plt.show()
 
         # All dependencies have to resolve nicely
         try:
