@@ -756,7 +756,7 @@ class LinkableProject:
                 baseTypeNR = varNR.as_base()
                 return baseTypeNR
 
-        memberNR = self._try_verify_ast_member_or_property(container, atom.token, lhs)
+        memberNR = self._try_verify_ast_member_or_property(container, atom.token, lhs, isAssignment)
         if memberNR:
             return memberNR
 

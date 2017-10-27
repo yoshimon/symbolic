@@ -64,7 +64,7 @@
     <Compile Include="symbolic\project.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="symbolic\serializer.py">
+    <Compile Include="symbolic\serializers.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="symbolic\__init__.py">

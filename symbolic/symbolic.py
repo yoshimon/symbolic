@@ -11,12 +11,15 @@ import os
 from symbolic.algorithm import Algorithm
 from symbolic.project import Project
 from symbolic.paths import VirtualPath
+from symbolic.serializers import LinkedProjectYamlSerializer
 
 def main():
     """The main program entrypoint."""
     parser = argparse.ArgumentParser()
     parser.add_argument("path", help="The file path to the project configuration file.")
-    parser.add_argument("--output", dest="outputFilePath", default="output.yml", help="The AST output file path.")
+    parser.add_argument("--typesoutput", dest="typesOutputFilePath", default="types", help="The output file path for the linked types.")
+    parser.add_argument("--functionsoutput", dest="functionsOutputFilePath", default="functions", help="The output file path for the linked functions.")
+    parser.add_argument("--serializer", dest="serializer", default="yaml", help="The output serializer to use.")
     parser.add_argument("--header", dest="showHeader", help="Print the program header before running the program.")
     args = parser.parse_args()
 
@@ -34,9 +37,13 @@ def main():
     projectBuildStartTime = datetime.datetime.now()
     project = Project(projConfigFilePath)
     linkedProject = project.translate()
-    #projectDependencyGraph.write_to_file(VirtualPath(args.outputFilePath))
     print()
     print("-" * 80)
+    print("(4) Output Generator")
+    print("-" * 80)
+    print("Serializing results...")
+    LinkedProjectYamlSerializer.run(VirtualPath(args.typesOutputFilePath), VirtualPath(args.functionsOutputFilePath), linkedProject)
+    print()
     print("Project build successful. {0} elapsed.".format(Algorithm.dt_ms_string(projectBuildStartTime)))
     print("=" * 80)
 
