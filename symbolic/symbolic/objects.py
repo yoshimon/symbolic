@@ -1856,6 +1856,15 @@ class MemberList(Named):
         """
         return self.typename.location()
 
+    def __iter__(self):
+        """
+        Return an iterator to the members in the list.
+
+        Returns:
+            iter: An iterator to the members.
+        """
+        return iter(self.members)
+
     @staticmethod
     def parse(parser, args):
         """
@@ -1939,7 +1948,7 @@ class Struct(TemplateObject, Namespace):
         for locatable in self.locatables:
             if isinstance(locatable, MemberList):
                 memberList = locatable
-                for member in memberList.members:
+                for member in memberList:
                     if member.token == memberNameStr:
                         return memberList.typename
 

@@ -1573,7 +1573,7 @@ class LinkableProject:
         for memberList in struct.locatables:
             if isinstance(memberList, MemberList):
                 if not Annotation.has("uninitialized", memberList.annotations):
-                    parameters += [Parameter(None, member.token, [], None, memberList.typename, False) for member in memberList.members]
+                    parameters += [Parameter(None, member.token, [], None, memberList.typename, False) for member in memberList]
 
         constructor = Function(locatable.references, locatable.parent, locatable.token, [], None, FunctionKind.Regular, returnTypename, parameters)
         self.insert(constructor)
@@ -1912,20 +1912,24 @@ class LinkedProject:
         linkableProject (linker.LinkableProject): The project to link.
         sortedTypeDependencies ([linker.Dependency]): All type dependencies (dependency-sorted).
         functions ([linker.Dependency]): All function dependencies (unsorted).
+        orderedLibraryNames ([str]): The ordered library name list.
     """
 
-    def __init__(self, linkableProject):
+    def __init__(self, linkableProject, orderedLibraryNames):
         """
         Initialize the object.
 
         Args:
             linkableProject (linker.LinkableProject): The project to link.
+            orderedLibraryNames ([str]): The ordered library name list.
         """
+        self.orderedLibraryNames = orderedLibraryNames
         self.linkableProject = linkableProject
-        self.sortedTypeDependencies = self._sorted_type_dependencies()
+        self.sortedTypeDependencies = []
+        self._sort_type_dependencies()
         self.functions = []
 
-    def _sorted_type_dependencies(self):
+    def _sort_type_dependencies(self):
         """
         Return the sorted type dependencies from the unlinked project.
 
@@ -1938,7 +1942,7 @@ class LinkedProject:
 
         # All dependencies have to resolve nicely
         try:
-            return list(nx.topological_sort(typeDag))
+            sortedTypeDependencies = list(nx.topological_sort(typeDag))
         except nx.exception.NetworkXUnfeasible:
             cycle = nx.find_cycle(typeDag)
 
@@ -1949,6 +1953,8 @@ class LinkedProject:
             dependencyChain.append(p[1].location)
 
             raise CircularDependencyError(dependencyChain)
+
+        self.sortedTypeDependencies = list(sorted(sortedTypeDependencies, key=lambda dependency: self.orderedLibraryNames.index(dependency.libName)))
 
     def _create_type_dag(self, typeDag, resolvedLocation):
         """

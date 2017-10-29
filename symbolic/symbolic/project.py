@@ -6,11 +6,11 @@ import io
 import os
 import glob
 import sys
-import yaml
 
 # Library
 from jinja2 import Environment
 import networkx as nx
+import yaml
 
 # Project
 from symbolic.algorithm import Algorithm
@@ -212,6 +212,7 @@ class Project:
 
         # Resolve the dependencies to an executable graph
         orderedLibs = dependencyGraph.resolve()
+        orderedLibNames = []
 
         # Create a new dependency collection for this project
         linkableProject = LinkableProject(self.projConfig.systemTypes)
@@ -220,6 +221,7 @@ class Project:
         libIndex = 0
         libCount = len(self.projConfig.libraryNames)
         for libName, libConfig in orderedLibs:
+            orderedLibNames.append(libName)
             libIndex += 1
             libBuildStartTime = datetime.datetime.now()
 
@@ -286,4 +288,4 @@ class Project:
             print("Library build successful. {0} elapsed.".format(Algorithm.dt_ms_string(libBuildStartTime)))
 
         # Create a dependency graph from the collection.
-        return LinkedProject(linkableProject)
+        return LinkedProject(linkableProject, orderedLibNames)
