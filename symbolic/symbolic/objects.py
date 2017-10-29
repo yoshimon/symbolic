@@ -1743,7 +1743,7 @@ class Property(Named):
                     parent.locatables.pop()
                     return None
 
-                instruction = prop.instructions[0]
+                instruction = prop.getInstructions[0]
                 if instruction.kind == InstructionKind.Expression:
                     instruction.kind = InstructionKind.Return
             elif not parser.match(';'):
