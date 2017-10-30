@@ -6,6 +6,7 @@
 import argparse
 import datetime
 import os
+import sys
 
 # Project
 from symbolic.algorithm import Algorithm
@@ -20,14 +21,17 @@ def main():
     parser.add_argument("--typesoutput", dest="typesOutputFilePath", default="types", help="The output file path for the linked types.")
     parser.add_argument("--functionsoutput", dest="functionsOutputFilePath", default="functions", help="The output file path for the linked functions.")
     parser.add_argument("--serializer", dest="serializer", default="yaml", help="The output serializer to use.")
-    parser.add_argument("--header", dest="showHeader", help="Print the program header before running the program.")
+    parser.add_argument("-i", "--info", default=False, action="store_true", help="Print the program header before running the program.")
+    parser.add_argument("-d", "--debug", default=False, action="store_true", help="Enable debug mode. This will print a traceback when an error occurs.")
     args = parser.parse_args()
 
     # Info
-    if args.showHeader:
-        print("-" * 80)
+    if args.info:
+        print("=" * 80)
         print("symbolic 0.Xdev")
-        print("-" * 80)
+
+    if not args.debug:
+        sys.excepthook = lambda exctype, value, traceback: print("\n!> {0}: {1}".format(str(exctype.__name__), str(value)))
 
     projConfigFilePath = VirtualPath(args.path)
 
