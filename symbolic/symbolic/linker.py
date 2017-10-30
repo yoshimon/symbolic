@@ -867,7 +867,7 @@ class LinkableProject:
             linker.AstNavigationResult: The location of the resulting type of this AST.
         """
         # Template function calls are not supported yet.
-        assert False
+        assert False, "Template functions are not yet supported."
 
     def _verify_ast_unary_op(self, container, atom, children, localVars, newLocalVars, isOptional, lhs, isAssignment):
         """
