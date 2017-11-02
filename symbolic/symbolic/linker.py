@@ -1328,8 +1328,9 @@ class LinkableProject:
             rootNamespace = parser.parse()
 
             # Lookup the template object
-            templateObj = rootNamespace.locatables[0]
-            templateObj.parent = template.parent
+            templateObj = rootNamespace
+            while type(templateObj) is Namespace:
+                templateObj = templateObj.locatables[0]
 
             # Bind the location to a template.
             self.templateLinks[dependencyLocationStr] = templateObj
