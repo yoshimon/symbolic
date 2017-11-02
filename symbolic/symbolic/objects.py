@@ -1988,7 +1988,7 @@ class Struct(TemplateObject, Namespace):
                 parent.locatables.append(struct)
 
                 if parser.match('{'):
-                    parser.gather_objects([MemberList, Property], args=['}'])
+                    parser.gather_objects([MemberList, Alias, Property], args=['}'])
                     parser.expect('}')
                     parser.match(';')
                 elif not parser.match(';'):
