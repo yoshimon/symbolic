@@ -112,7 +112,12 @@ class UnitParser(BaseParser):
             refString = '.'.join(refStrList)
             token = Symto.from_token(refTokens[0], Token.Token, refString)
             ref = Reference(token, annotations, semantic)
-            self.references.append(ref)
+            
+            # Reference sequences must be collapsed:
+            # using A; using A; is equivalent to using A;
+            if self.references and str(ref) != self.references[-1]:
+                self.references.append(ref)
+            
             self.remove_state()
 
         # Add pre-imports.

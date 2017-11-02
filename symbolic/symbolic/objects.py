@@ -2621,6 +2621,14 @@ class Template(Named):
         if references:
             result += "\n"
 
+        p = self.parent
+        parentCount = 0
+        while p.parent:
+            result += "namespace {0} {{".format(str(p.token))
+            result.indentLevel += 1
+            parentCount += 1
+            p = p.parent
+
         # Emit the annotations
         result += Annotation.collection_to_str(self.annotations)
 
@@ -2641,6 +2649,11 @@ class Template(Named):
         result.indentLevel -= 1
         result += '}'
         result += '\n'
+
+        while parentCount > 0:
+            result.indentLevel -= 1
+            result += "}"
+            parentCount -= 1
 
         return result.value.strip()
 
