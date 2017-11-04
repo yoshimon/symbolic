@@ -2538,7 +2538,13 @@ class TemplateParameter(Named):
             return None
 
         # Partial template specialization using = VALUE syntax
-        partialMatch = parser.expect_kind(Token.String) if parser.match("=") else None
+        if parser.match("="):
+            partialMatch = parser.match_kind(Token.String)
+            if partialMatch is None:
+                partialMatch = parser.consume()
+                partialMatch = Symto.from_token(partialMatch, Token.String, '"{0}"'.format(str(partialMatch)))
+        else:
+            partialMatch = None
 
         semantic = Annotation.parse_semantic(parser)
         return TemplateParameter(parser.references, parser.namespace(), name, annotations, semantic, partialMatch)
