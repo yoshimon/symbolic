@@ -773,6 +773,18 @@ class SetNotSupportedError(SourceError):
         """
         return super().__str__() + "The property does not support write access."
 
+class InvalidAliasDimensionsError(SourceError):
+    """An exception class, that indicates that aliases must be scalar."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + "Aliases must not have array dimensions."
+
 class CircularDependencyError(Exception):
     """
     An exception class, that indicates a circular dependency.

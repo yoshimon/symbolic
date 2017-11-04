@@ -263,7 +263,7 @@ class Location:
         Returns:
             objects.RelativeLocation: The relative location.
         """
-        return self.path.__iter__()
+        return iter(self.path)
 
     def __delitem__(self, key):
         """

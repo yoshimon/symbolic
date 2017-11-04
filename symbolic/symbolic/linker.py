@@ -76,7 +76,7 @@ class Dependency:
         Returns:
             bool: True, if both dependencies point to the same library. Otherwise False.
         """
-        return self.libName == other.libName and self.baseLocation == other.baseLocation and self.references == other.references
+        return self.libName == other.libName and self.location == other.location and self.references == other.references
 
     def __hash__(self):
         """
@@ -98,7 +98,7 @@ class Dependency:
         Returns:
             str: The location string.
         """
-        return "{0} using {1}".format(str(self.baseLocation), NavigationQuery.references_to_string(self.references))
+        return "{0} using {1}".format(str(self.location), NavigationQuery.references_to_string(self.references))
 
     def resolve_parameter_locations(self, linkableProject):
         """
@@ -123,6 +123,21 @@ class Dependency:
                     self._resolvedParameterLocations.append(pResolvedLocation)
                     
         return self._resolvedParameterLocations
+
+    def as_array(self, dims):
+        """
+        Return the navigation result as an array type.
+
+        This function returns a navigation result with the same dependency, but the explicit location
+        will have the array dimensions set.
+
+        Returns:
+            linker.Dependency: The same dependency as an array.
+        """
+        result = Dependency(self.locatable)
+        result.location = Location([RelativeLocation(p.kind, p.name, templateParameters=p.templateParameters, parameters=p.parameters, dims=p.dims) for p in self.location])
+        result.location[-1].dims = dims
+        return result
 
 class LocationConflict:
     """
@@ -296,7 +311,7 @@ class AstNavigationResult:
         arrayNR = AstNavigationResult(navResult, self.isLHSType)
         
         # We need to modify the last relative location so copy the path.
-        copiedPath = Location([RelativeLocation(p.kind, p.name, templateParameters=p.templateParameters, parameters=p.parameters, dims=p.dims) for p in self.dependency.location.path])
+        copiedPath = Location([RelativeLocation(p.kind, p.name, templateParameters=p.templateParameters, parameters=p.parameters, dims=p.dims) for p in self.dependency.location])
         arrayNR.explicitLocation = copiedPath
         arrayNR.explicitLocation[-1].dims = dims
         
@@ -434,9 +449,12 @@ class LinkableProject:
         if astNavResult.explicitLocation.path[-1].kind == LocationKind.Type:
             navResult = self.navigate_alias_base(navResult)
             astNavResult = AstNavigationResult(navResult, isLHSType)
-
+            
         # Copy array dimensions.
-        if isinstance(locatable, Typename):
+        if locatable.dims and isinstance(locatable, Typename):
+            if astNavResult.explicitLocation.path[-1].dims:
+                raise InvalidAliasDimensionsError(locatable.anchor)
+            
             astNavResult = astNavResult.as_array(locatable.dims)
         
         return astNavResult
@@ -1220,7 +1238,7 @@ class LinkableProject:
                             # But only do that if this is not the last relative location
                             # since we are actually looking for the Alias in that case.
                             if i != len(location.pathWithoutRef) - 1:
-                                aliasNavResult = NavigationResult(resolvedDependencyLocation, resolvedDependencyLocation.dependencies[0])
+                                aliasNavResult = NavigationResult(resolvedDependencyLocation, dependency)
                                 aliasNavResult = self.navigate_alias_base(aliasNavResult)
                                 libName = aliasNavResult.dependency.libName
                                 matchedDependency = aliasNavResult.dependency
@@ -1827,13 +1845,11 @@ class LinkableProject:
 
         # Navigate to the target type.
         targetTypenameDependency = Dependency(dependency.locatable.targetTypename)
-        navResult = self.navigate_dependency(targetTypenameDependency)
+        baseNavResult = self.navigate_dependency(targetTypenameDependency)
 
-        # We need an exact match to this type, not the base type.
-        resolvedTypename = Typename.from_location(navResult.dependency.references, navResult.dependency.location)
-        resolvedTypename.dims = dependency.locatable.targetTypename.dims
-        resolvedTargetTypenameDependency = Dependency(resolvedTypename)
-        return NavigationResult(navResult.resolvedDependencyLocation, resolvedTargetTypenameDependency)
+        # Promote base type to array type.
+        dimNavResult = baseNavResult.dependency.as_array(dependency.locatable.targetTypename.dims)
+        return NavigationResult(baseNavResult.resolvedDependencyLocation, dimNavResult)
 
     def navigate_alias_base(self, navResult):
         """
