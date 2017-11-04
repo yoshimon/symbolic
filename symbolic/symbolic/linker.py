@@ -504,7 +504,8 @@ class LinkableProject:
 
             isLHSType = lhs.isLHSType
 
-        result = self._try_verify_ast_member(struct, name) if not isLHSType else None
+        result = self._try_verify_ast_member(struct, name)
+        result = None if isLHSType and not Annotation.has("static", struct.annotations) else result
         result = self._try_verify_ast_property(struct, name, [], isLHSType, isAssignment) if result is None else result
         
         return result
@@ -1580,7 +1581,7 @@ class LinkableProject:
             locatable (objects.Locatable): The locatable to generate the constructor for.
             struct (objects.Struct): The type to generate the constructor for.
         """
-        if Annotation.has("no_constructor", locatable.annotations):
+        if Annotation.has("no_constructor", locatable.annotations) or Annotation.has("static", locatable.annotations):
             return
 
         # The return type is the struct.

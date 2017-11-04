@@ -1845,7 +1845,7 @@ class MemberList(Named):
 
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations('private', 'deprecate', 'implicit')
+        self.validate_system_annotations("private", "deprecate", "implicit", "static")
 
     def location(self):
         """
@@ -1923,7 +1923,7 @@ class Struct(TemplateObject, Namespace):
 
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations('private', 'deprecate')
+        self.validate_system_annotations("private", "deprecate", "static")
 
     def location(self):
         """
@@ -1997,8 +1997,9 @@ class Struct(TemplateObject, Namespace):
         finally:
             parser.namespaceStack.pop()
 
-        # Verify unique names.
+        # Verify unique names and propagate class annotations if necessary.
         memberNames = {}
+        staticAnnotation = Annotation.extract("static", annotations)
         for loc in struct.locatables:
             if isinstance(loc, MemberList):
                 for member in loc.members:
@@ -2009,6 +2010,10 @@ class Struct(TemplateObject, Namespace):
                         raise DuplicateNameError(memberToken.anchor, t.anchor)
 
                     memberNames[s] = memberToken
+
+            if staticAnnotation is not None and isinstance(loc, (MemberList, Property)):
+                loc.annotations.insert(0, staticAnnotation)
+                loc.validate()
 
         return struct
 
@@ -2236,6 +2241,19 @@ class Annotation:
         return annotations
 
     @staticmethod
+    def extract(name, collection):
+        """
+        Extract an annotation from a collection.
+        
+        Args:
+            name (str): The name to search for.
+            collection ([objects.Annotation]): The annotation collection.
+        Returns:
+            bool: True, if an annotation with the specified name exists in the collection. Otherwise False.
+        """
+        return next((e for e in collection if len(e.expression.tokens) == 1 and e.token == name), None)
+
+    @staticmethod
     def has(name, collection):
         """
         Test whether a annotation collection contains an annotation with a given name.
@@ -2246,7 +2264,7 @@ class Annotation:
         Returns:
             bool: True, if an annotation with the specified name exists in the collection. Otherwise False.
         """
-        return any(len(e.expression.tokens) == 1 and e.token == name for e in collection)
+        return Annotation.extract(name, collection) is not None
 
     def __str__(self):
         """
