@@ -451,7 +451,7 @@ class LinkableProject:
             astNavResult = AstNavigationResult(navResult, isLHSType)
             
         # Copy array dimensions, if not scalar.
-        if locatable.dims and isinstance(locatable, Typename):
+        if isinstance(locatable, Typename) and locatable.dims:
             if astNavResult.explicitLocation.path[-1].dims:
                 raise InvalidAliasDimensionsError(locatable.anchor)
             
