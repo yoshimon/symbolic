@@ -783,7 +783,7 @@ class InvalidAliasDimensionsError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + "Aliases with underlying array types may only be referenced as scalars."
+        return super().__str__() + "Aliases with an underlying array type may not be referenced as an array."
 
 class CircularDependencyError(Exception):
     """
