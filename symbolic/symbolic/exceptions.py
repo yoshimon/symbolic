@@ -242,7 +242,7 @@ class MissingArrayTypeError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + "Missing array accessor type."
+        return super().__str__() + "The type is not an array."
 
 class ExpectedEOFError(SourceError):
     """An exception class, that indicates an expected EOF."""
