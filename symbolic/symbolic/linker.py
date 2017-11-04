@@ -256,7 +256,7 @@ class NavigationResult:
         Returns:
             bool: True, if both results point to the same location. Otherwise False.
         """
-        return id(self.resolvedDependencyLocation) == id(other.resolvedDependencyLocation)
+        return id(self.resolvedDependencyLocation) == id(other.resolvedDependencyLocation) and self.dependency == other.dependency
 
 class AstNavigationResult:
     """
@@ -1223,13 +1223,14 @@ class LinkableProject:
                                 aliasNavResult = NavigationResult(resolvedDependencyLocation, resolvedDependencyLocation.dependencies[0])
                                 aliasNavResult = self.navigate_alias_base(aliasNavResult)
                                 libName = aliasNavResult.dependency.libName
+                                matchedDependency = aliasNavResult.dependency
                                 resolvedDependencyLocation = aliasNavResult.resolvedDependencyLocation
-                                matchedDependency = resolvedDependencyLocation.dependencies[0]
                             else:
                                 matchedDependency = dependency
                         elif isinstance(dependencyLocatable, Template):
-                            resolvedDependencyLocation = self.instantiate_template(dependencyLocatable, dependencyRL.templateParameters, rl.templateParameters, references)
-                            matchedDependency = resolvedDependencyLocation.dependencies[0]
+                            navResult = self.instantiate_template(dependencyLocatable, dependencyRL.templateParameters, rl.templateParameters, references)
+                            resolvedDependencyLocation = navResult.resolvedDependencyLocation
+                            matchedDependency = navResult.dependency
                         else:
                             matchedDependency = dependency
 
@@ -1282,14 +1283,13 @@ class LinkableProject:
         Args:
             dependencyLocationStr (str): The template instantiation string.
         Returns:
-            linker.ResolvedDependencyLocation: The resolved dependency location.
+            linker.NavigationResult: The navigation result.
         """
         # Use template links to jump to the right location, which is anonymous.
         templateDep = Dependency(self.templateLinks[dependencyLocationStr])
         templateNavResult = self.navigate_dependency(templateDep)
         templateAliasNavResult = self.navigate_alias_base(templateNavResult)
-        resolvedDependencyLocation = templateAliasNavResult.resolvedDependencyLocation
-        return resolvedDependencyLocation
+        return templateAliasNavResult
 
     def instantiate_template(self, template, templateParameterNames, templateParameterValues, references):
         """
@@ -1301,7 +1301,7 @@ class LinkableProject:
             templateParameterValues ([objects.TemplateParameter]): The template parameter values, e.g. "int".
             references ([objects.Reference]): The references for the template.
         Returns:
-            linker.ResolvedDependencyLocation: The resolved dependency location for the instantiated object instance.
+            linker.NavigationResult: The navigation result.
         """
         dependencyLocationStr = self.template_instance_str(templateParameterValues, references, template.location().base())
 
@@ -1340,8 +1340,7 @@ class LinkableProject:
             rootNamespace.references = references
             self.insert_unit(rootNamespace)
         
-        resolvedDependencyLocation = self.navigate_to_template_object(dependencyLocationStr)
-        return resolvedDependencyLocation
+        return self.navigate_to_template_object(dependencyLocationStr)
 
     def navigate(self, errorAnchor, references, parent, location):
         """
@@ -1489,7 +1488,7 @@ class LinkableProject:
         """
         nr = self.navigate_dependency(dependency)
         structNR = self.navigate_alias_base(nr)
-        struct = structNR.resolvedDependencyLocation.dependencies[0].locatable
+        struct = structNR.dependency.locatable
         self._generate_type_constructor(dependency.locatable, struct)
 
     def insert_unit(self, rootNamespace):
@@ -1828,7 +1827,13 @@ class LinkableProject:
 
         # Navigate to the target type.
         targetTypenameDependency = Dependency(dependency.locatable.targetTypename)
-        return self.navigate_dependency(targetTypenameDependency)
+        navResult = self.navigate_dependency(targetTypenameDependency)
+
+        # We need an exact match to this type, not the base type.
+        resolvedTypename = Typename.from_location(navResult.dependency.references, navResult.dependency.location)
+        resolvedTypename.dims = dependency.locatable.targetTypename.dims
+        resolvedTargetTypenameDependency = Dependency(resolvedTypename)
+        return NavigationResult(navResult.resolvedDependencyLocation, resolvedTargetTypenameDependency)
 
     def navigate_alias_base(self, navResult):
         """

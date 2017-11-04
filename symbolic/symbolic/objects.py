@@ -2480,7 +2480,7 @@ class Typename(Locatable):
             objects.Typename: The corresponding typename.
         """
         scope = [Symto(Token.String, "", "", rl.name, 0, 0) for rl in location]
-        templateParams = [[Symto(Token.String, "", "", p.name, 0, 0) for p in rl.templateParameters] for rl in location]
+        templateParams = [[Symto(Token.String, "", "", str(p), 0, 0) for p in rl.templateParameters] for rl in location]
         return Typename(references, None, scope, templateParameters=templateParams, dims=location[-1].dims)
 
 class TemplateParameter(Named):
