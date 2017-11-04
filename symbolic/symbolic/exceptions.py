@@ -810,4 +810,4 @@ class CircularDependencyError(Exception):
         Returns:
             str: The string representation.
         """
-        return "Circular dependency detected: [{0}].".format(Algorithm.join(" -> ", self.dependencyChain))
+        return "Circular dependency detected:\n[\n{0}\n].".format(Algorithm.join(" -> \n", self.dependencyChain))
