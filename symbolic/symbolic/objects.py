@@ -2011,9 +2011,15 @@ class Struct(TemplateObject, Namespace):
 
                     memberNames[s] = memberToken
 
-            if staticAnnotation is not None and isinstance(loc, (MemberList, Property)):
-                loc.annotations.insert(0, staticAnnotation)
-                loc.validate()
+            if staticAnnotation is not None and not Annotation.has("static", loc.annotations):
+                # Remove implicit this pointer.
+                if isinstance(loc, Property):
+                    loc.parameters = loc.parameters[1:]
+
+                # Insert static property.
+                if isinstance(loc, (MemberList, Property)):
+                    loc.annotations.insert(0, staticAnnotation)
+                    loc.validate()
 
         return struct
 
