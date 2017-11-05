@@ -740,15 +740,16 @@ class LinkableProject:
         parameters = [Parameter(container, child.atom.token, [], None, childTypenames[i], child.isRef) for i, child in enumerate(children)]
         
         isExplicitRef = lhs is not None
+        parent = lhs.dependency.locatable if isExplicitRef else container
         if isExplicitRef and isinstance(lhs.dependency.locatable, Struct):
-            result = self._try_verify_ast_property(lhs.dependency.locatable, atom.token, parameters, lhs.isLHSType, isAssignment)
+            result = self._try_verify_ast_property(parent, atom.token, parameters, lhs.isLHSType, isAssignment)
             if result is not None:
                 return result
         else:
-            possibleMatchNR = self._try_find_function(container, atom.token, FunctionKind.Regular, parameters, isExplicitRef=isExplicitRef)
+            possibleMatchNR = self._try_find_function(parent, atom.token, FunctionKind.Operator if atom.token.isOp else FunctionKind.Regular, parameters, isExplicitRef=isExplicitRef)
             if possibleMatchNR is not None:
-                funcRetTypenameNR = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename, False)
-                return funcRetTypenameNR
+                result = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename, False)
+                return result
 
         raise FunctionOverloadNotFoundError(atom.token, parameters)
 

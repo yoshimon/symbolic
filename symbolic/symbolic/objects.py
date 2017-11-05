@@ -1024,17 +1024,23 @@ class Expression(Named):
         result = []
 
         openCount = 0
+        prev = None
         for t in tokens:
-            if t == "?":
-                result.append(t)
-                result.append(Symto.after_token(result[-1], Token.Punctuation, "("))
-                openCount += 1
-            elif t == ":":
-                result.append(Symto.after_token(result[-1], Token.Punctuation, ")"))
-                result.append(t)
-                openCount -= 1
+            if prev != ".":
+                if t == "?":
+                    result.append(t)
+                    result.append(Symto.after_token(result[-1], Token.Punctuation, "("))
+                    openCount += 1
+                elif t == ":":
+                    result.append(Symto.after_token(result[-1], Token.Punctuation, ")"))
+                    result.append(t)
+                    openCount -= 1
+                else:
+                    result.append(t)
             else:
                 result.append(t)
+
+            prev = t
 
         if openCount != 0:
             raise InvalidExpressionError(tokens[0].anchor)
@@ -1077,6 +1083,14 @@ class Expression(Named):
             prev = tokens[i-1] if i > 0 else None
             t1 = tokens[i+1] if i < len(tokens) - 1 else None
             t2 = tokens[i+2] if i < len(tokens) - 2 else None
+
+            if prev is not None and prev == "." and t.isOp and t1 == "(":
+                kind = ExpressionAtomKind.FunctionBegin
+                states.append(State.Function)
+                stack.append(ExpressionAtom(t, ExpressionAtomKind.FunctionEnd))
+                isNextOpenParenFunction = True
+                out.append(ExpressionAtom(t, kind))
+                continue
 
             if t.isTerminal:
                 if wasLastTerminal:
