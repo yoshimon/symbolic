@@ -161,6 +161,7 @@ class Symto:
         self.isNumber = self.kind in [Token.Number.Float, Token.Number.Integer, Token.Number.Hex]
         self.isInteger = self.kind in [Token.Number.Integer, Token.Number.Hex]
         self.isFloat = self.kind == Token.Number.Float
+        self.isString = self.kind == Token.Literal.String
         self.bracketLevel = -1 # Filled in by special instructions to indicate the bracket nesting level.
         
         # Op (for convenience)

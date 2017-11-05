@@ -841,15 +841,16 @@ class ExpressionAtomKind(Enum):
 
     Var = 0
     Number = 1
-    FunctionBegin = 2
-    FunctionEnd = 3
-    ArrayBegin = 4
-    ArrayEnd = 5
-    TemplateBegin = 6
-    TemplateEnd = 7
-    UnaryOp = 8
-    BinaryOp = 9
-    Delimiter = 10
+    String = 2
+    FunctionBegin = 3
+    FunctionEnd = 4
+    ArrayBegin = 5
+    ArrayEnd = 6
+    TemplateBegin = 7
+    TemplateEnd = 8
+    UnaryOp = 9
+    BinaryOp = 10
+    Delimiter = 11
 
 class ExpressionAtom:
     """
@@ -1084,7 +1085,7 @@ class Expression(Named):
                 # Set state for next cycle
                 wasLastTerminal = True
 
-                kind = ExpressionAtomKind.Number if t.isNumber else ExpressionAtomKind.Var
+                kind = ExpressionAtomKind.Number if t.isNumber else ExpressionAtomKind.String if t.isString else ExpressionAtomKind.Var
                 # K=1 lookahead
                 if t1 is not None:
                     isVar = True
@@ -1221,7 +1222,7 @@ class Expression(Named):
         for atom in postfixAtoms:
             root = ExpressionAST(atom, parent)
 
-            if atom.kind in [ExpressionAtomKind.Var, ExpressionAtomKind.Number]:
+            if atom.kind in [ExpressionAtomKind.Var, ExpressionAtomKind.Number, ExpressionAtomKind.String]:
                 argCount += 1 if argCount == 0 else 0
                 argStack.append(root)
             elif atom.kind in [ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.ArrayBegin, ExpressionAtomKind.TemplateBegin]:

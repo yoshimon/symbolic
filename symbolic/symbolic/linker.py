@@ -421,6 +421,7 @@ class LinkableProject:
         self._astVerifiers = {
             ExpressionAtomKind.Var: self._verify_ast_var,
             ExpressionAtomKind.Number: self._verify_ast_number,
+            ExpressionAtomKind.String: self._verify_ast_string,
             ExpressionAtomKind.FunctionBegin: self._verify_ast_function,
             ExpressionAtomKind.ArrayBegin: self._verify_ast_array,
             ExpressionAtomKind.TemplateBegin: self._verify_ast_template,
@@ -691,6 +692,29 @@ class LinkableProject:
         else:
             assert(False)
 
+        result = self._ast_navigate_dependency(typename, False)
+        return result
+
+    def _verify_ast_string(self, container, atom, children, localVars, newLocalVars, isOptional, lhs, isAssignment):
+        """
+        Verify an AST with a string atom type.
+
+        Args:
+            container (objects.Locatable): The locatable container (parent) object.
+            atom (objects.ExpressionAtom): The root atom.
+            children (objects.ExpressionAST): The child nodes.
+            localVars (dict): Lookup table that maps variable names to resolved locations.
+            newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
+            isOptional (bool): State flag which indicates that the query should not throw an error on failure.
+            lhs (linker.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+            isAssignment (bool): True, if this is an assignment. Otherwise False.
+        Returns:
+            linker.AstNavigationResult: The location of the resulting type of this AST.
+        """
+        if atom.token is None or atom.token.isString:
+            # String
+            typename = self.native_string_typename(container.references)
+        
         result = self._ast_navigate_dependency(typename, False)
         return result
 
