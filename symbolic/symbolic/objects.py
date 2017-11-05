@@ -1463,11 +1463,12 @@ class FunctionReference(Named):
     Attributes:
         kind (objects.FunctionKind): The function kind.
         returnTypename (objects.Typename): The return typename.
+        templateParameters ([objects.TemplateParameter]): The template parameters.
         parameters ([objects.Parameter]): The parameters.
         hasExplicitRef (bool): Indicates, whether references should be stripped from the location.
     """
 
-    def __init__(self, references, parent, token, kind, parameters, hasExplicitRef):
+    def __init__(self, references, parent, token, kind, templateParameters, parameters, hasExplicitRef):
         """
         Initialize the object.
 
@@ -1476,10 +1477,12 @@ class FunctionReference(Named):
             parent (objects.Locatable): The parent object.
             token (lexer.Symto): A token which holds the name.
             kind (objects.FunctionKind): The function kind.
+            templateParameters ([objects.TemplateParameter]): The template parameters.
             parameters ([objects.Parameter]): The parameters.
             hasExplicitRef (bool): Indicates, whether references should be stripped from the location.
         """
         self.kind = kind
+        self.templateParameters = templateParameters
         self.parameters = parameters
         self.hasExplicitRef = hasExplicitRef
         Named.__init__(self, references, parent, token, [], None)
@@ -1491,7 +1494,7 @@ class FunctionReference(Named):
         Returns:
             objects.Location: A location within the library.
         """
-        loc = self.default_location(LocationKind.Function, parameters=self.parameters, isExplicitRef=self.hasExplicitRef)
+        loc = self.default_location(LocationKind.Function, templateParameters=self.templateParameters, parameters=self.parameters, isExplicitRef=self.hasExplicitRef)
         return loc if self.hasExplicitRef else loc[-1].location()
 
 class Function(Named):

@@ -962,7 +962,7 @@ class LinkableProject:
 
         raise UnaryOperatorOverloadNotFoundError(atom.token, childTypename)
 
-    def _try_find_function(self, container, nameToken, kind, parameters, *, isExplicitRef=False):
+    def _try_find_function(self, container, nameToken, kind, parameters, *, templateParameters=None, isExplicitRef=False):
         """
         Try to find a function matching a given signature.
 
@@ -974,7 +974,7 @@ class LinkableProject:
         Returns:
             linker.AstNavigationResult: The location of the resulting type of this AST.
         """
-        locatable = FunctionReference(container.references, container, nameToken, kind, parameters, isExplicitRef)
+        locatable = FunctionReference(container.references, container, nameToken, kind, templateParameters, parameters, isExplicitRef)
         navResult = self._ast_try_navigate_dependency(locatable, False)
         return navResult
 
