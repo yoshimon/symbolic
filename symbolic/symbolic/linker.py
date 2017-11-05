@@ -380,9 +380,8 @@ class LinkableProject:
         lexer = SymbolicLexer(libName=None, fileName=None)
 
         # Maps native types to user-specified typename locations
-        nativeTypenames = ["int", "float", "bool", "void"]
-        validUserTypeLocationStrings = { k: str(v) for k, v in userTypeLocationStrings.items() if k in nativeTypenames }
-        self.nativeTypenameLocations = { k: None for k in nativeTypenames }
+        validUserTypeLocationStrings = { k: str(v) for k, v in userTypeLocationStrings.items() if k in Language.systemTypenames }
+        self.nativeTypenameLocations = { k: None for k in Language.systemTypenames }
 
         for nativeTypename, userLocationString in validUserTypeLocationStrings.items():
             lexer.fileName = "$SystemTypes/{0}".format(nativeTypename)
@@ -868,6 +867,17 @@ class LinkableProject:
             Typename: The typename.
         """
         return self.native_typename(references, "bool")
+
+    def native_string_typename(self, references):
+        """
+        Return the native string typename.
+
+        Args:
+            references (list): The references to associate with the typename.
+        Returns:
+            Typename: The typename.
+        """
+        return self.native_typename(references, "string")
 
     def _verify_ast_template(self, container, atom, children, localVars, newLocalVars, isOptional, lhs, isAssignment):
         """

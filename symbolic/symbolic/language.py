@@ -17,7 +17,7 @@ class Language:
     this = "this"
     value = "value"
     keywords = { "if", "elif", "else", "return", "for", "while", "do", "break", "continue", value, this, ref }
-    systemTypenames = { "void", "int", "float", "string" }
+    systemTypenames = { "void", "int", "float", "bool", "string" }
     invalidNames = systemTypenames.union(keywords)
     tokenConcatenation = r"><" # As agreed upon by the committee (reviewed by eppo). 
     annotations = { "static", "private", "no_constructor", "no_assignment", "deprecate", "implicit" }
