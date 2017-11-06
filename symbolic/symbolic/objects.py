@@ -1919,7 +1919,7 @@ class MemberList(Named):
         
         # Fix member names to be unique.
         for i, member in enumerate(memberList.members):
-            member.token = Symto.from_token(member.token, Token.Text, "@{0}_{1}".format(id(member), i)) if member.token == "" else name
+            member.token = Symto.from_token(member.token, Token.Text, "@{0}_{1}".format(id(member), i)) if member.token == "" else member.token
         
         parent = parser.namespace()
         parent.locatables.append(memberList)

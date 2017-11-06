@@ -69,16 +69,16 @@ class LinkedProjectYamlSerializer:
             for memberList in locatable.locatables:
                 if isinstance(memberList, MemberList):
                     structMembers = list(str(member.token) for member in memberList)
-                    typename = LinkedProjectYamlSerializer._navigation_result_to_type(links[Dependency(memberList.typename)])
+                    typename = LinkedProjectYamlSerializer._navigation_result_to_type(links[Dependency(memberList.typename)], memberList.typename.dims)
                     structMemberLists.append({ "type": typename, "members": structMembers })
 
             structData = { "kind": "struct", "member lists": structMemberLists }
             libData.append({ str(locatable.token): structData })
 
-    def _navigation_result_to_type(navResult):
+    def _navigation_result_to_type(navResult, dims):
         dependency = navResult.dependency
         path = Algorithm.join("_", dependency.baseLocationWithoutRef)
-        result = { "library": str(dependency.location[0]), "name": path }
+        result = { "library": str(dependency.location[0]), "name": path, "dims": dims }
         return result
 
     def _serialize_functions(functionsOutputFilePath, linkedProject):
