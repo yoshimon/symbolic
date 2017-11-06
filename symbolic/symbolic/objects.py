@@ -1915,11 +1915,12 @@ class MemberList(Named):
             name = Symto.from_token(parser.token, Token.Text, '') if name is None else name
             members.append(Member(parser.references, parser.namespace(), name, annotations, semantic, typename))
         
+        memberList = MemberList(parser.references, parser.namespace(), name, annotations, semantic, members, typename)
+        
         # Fix member names to be unique.
         for i, member in enumerate(memberList.members):
             member.token = Symto.from_token(member.token, Token.Text, "@{0}_{1}".format(id(member), i)) if member.token == "" else name
-
-        memberList = MemberList(parser.references, parser.namespace(), name, annotations, semantic, members, typename)
+        
         parent = parser.namespace()
         parent.locatables.append(memberList)
         return memberList
