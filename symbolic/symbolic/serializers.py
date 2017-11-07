@@ -70,15 +70,41 @@ class LinkedProjectYamlSerializer:
                 if isinstance(memberList, MemberList):
                     structMembers = list(str(member.token) for member in memberList)
                     typename = LinkedProjectYamlSerializer._navigation_result_to_type(links[Dependency(memberList.typename)], memberList.typename.dims)
-                    structMemberLists.append({ "type": typename, "members": structMembers })
+                    structMemberLists.append(
+                        { \
+                            "type": typename,
+                            "members": structMembers,
+                            "annotations": LinkedProjectYamlSerializer._annotations(memberList.annotations),
+                            "semantic": LinkedProjectYamlSerializer._expression_ast_to_dict(memberList.semantic.expression.ast) if memberList.semantic is not None else None
+                        })
 
-            structData = { "kind": "struct", "member lists": structMemberLists }
+            structData = \
+                { \
+                    "member lists": structMemberLists,
+                    "annotations": LinkedProjectYamlSerializer._annotations(locatable.annotations),
+                    "semantic": LinkedProjectYamlSerializer._expression_ast_to_dict(locatable.semantic.expression.ast) if locatable.semantic is not None else None
+                }
             libData.append({ str(locatable.token): structData })
+
+    def _annotations(annotations):
+        return [LinkedProjectYamlSerializer._expression_ast_to_dict(annotation.expression.ast) for annotation in annotations]
 
     def _navigation_result_to_type(navResult, dims):
         dependency = navResult.dependency
         path = Algorithm.join("_", dependency.baseLocationWithoutRef)
         result = { "library": str(dependency.location[0]), "name": path, "dims": dims }
+        return result
+
+    def _expression_ast_to_dict(ast):
+        result = \
+            { \
+                str(ast.atom.token):
+                {
+                    "kind": str(ast.atom.kind),
+                    "is ref": ast.isRef,
+                    "children": [LinkedProjectYamlSerializer._expression_ast_to_dict(child) for child in ast.children]
+                }
+            }
         return result
 
     def _serialize_functions(functionsOutputFilePath, linkedProject):
