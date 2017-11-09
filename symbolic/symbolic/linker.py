@@ -351,7 +351,6 @@ class LinkableProject:
         resolvedObjects (defaultdict): Maps each library to a list of resolved objects
         links (dict): Maps unresolved dependencies to their resolved counterparts
         locationConflicts ([objects.LocationConflict]): A list of location conflicts.
-        templateDepth (int): The current template recursion depth.
     """
 
     def __init__(self, userTypeLocationStrings):
@@ -376,7 +375,6 @@ class LinkableProject:
         self.preImports = [] # The pre-imports to use.
         self.postImports = [] # The post-imports to use.
         self._libLocationNavResults = {} # Maps navigation queries to their resolved navigation result.
-        self.templateDepth = 0
 
         # Cache the user-specified locations for numeric types.
         lexer = SymbolicLexer(libName=None, fileName=None)
@@ -1282,7 +1280,11 @@ class LinkableProject:
                             else:
                                 matchedDependency = dependency
                         elif isinstance(dependencyLocatable, Template):
-                            navResult = self.instantiate_template(dependencyLocatable, dependencyRL.templateParameters, rl.templateParameters, references)
+                            try:
+                                navResult = self.instantiate_template(dependencyLocatable, dependencyRL.templateParameters, rl.templateParameters, references)
+                            except RecursionError:
+                                raise MaxTemplateRecursionError(dependencyLocatable.token.anchor)
+
                             resolvedDependencyLocation = navResult.resolvedDependencyLocation
                             matchedDependency = navResult.dependency
                         else:
@@ -1357,11 +1359,6 @@ class LinkableProject:
         Returns:
             linker.NavigationResult: The navigation result.
         """
-        self.templateDepth += 1
-
-        if self.templateDepth > 65536:
-            raise MaxTemplateRecursionError(template.token.anchor)
-
         dependencyLocationStr = self.template_instance_str(templateParameterValues, references, template.location().base())
 
         if dependencyLocationStr not in self.templateLinks:
