@@ -507,15 +507,16 @@ class SymbolicLexer(RegexLexer):
 
                         if ts == Language.tokenAdd:
                             newValue = lhs + rhs
-                        elif ts == Language.tokenSub:
-                            newValue = lhs - rhs
-                        elif ts == Language.tokenMul:
-                            newValue = lhs * rhs
-                        elif ts == Language.tokenDiv:
-                            try:
-                                newValue = lhs / rhs
-                            except:
-                                raise ZeroDivError(t.anchor)
+                        elif kind != Token.String:
+                            if ts == Language.tokenSub:
+                                newValue = lhs - rhs
+                            elif ts == Language.tokenMul:
+                                newValue = lhs * rhs
+                            elif ts == Language.tokenDiv:
+                                try:
+                                    newValue = lhs / rhs
+                                except:
+                                    raise ZeroDivError(t.anchor)
 
                     newTokens[-1] = Symto.from_token(prevT, kind, str(newValue))
                     skipNext = True
