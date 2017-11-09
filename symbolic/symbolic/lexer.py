@@ -10,7 +10,7 @@ from pygments.token import Token, Text, Operator, Name, String, Number, Punctuat
 from pygments.filter import simplefilter
 
 # Project
-from symbolic.exceptions import ZeroDivError
+from symbolic.exceptions import ZeroDivError, UnsupportedTemplateStringOpError
 from symbolic.language import Language
 
 class Anchor:
@@ -487,8 +487,9 @@ class SymbolicLexer(RegexLexer):
             if skipNext:
                 skipNext = False
                 continue
-
-            if str(t) in [Language.tokenConcatenation, Language.tokenAdd, Language.tokenSub, Language.tokenMul, Language.tokenDiv]:
+            
+            ts = str(t)
+            if ts in [Language.tokenConcatenation, Language.tokenAdd, Language.tokenSub, Language.tokenMul, Language.tokenDiv]:
                 # Concat if possible.
                 if (i > 0) and (i < len(tokens) - 1):
                     prevT = tokens[i-1]
@@ -496,8 +497,6 @@ class SymbolicLexer(RegexLexer):
 
                     prevStr = str(prevT)
                     nextStr = str(nextT)
-
-                    ts = str(t)
 
                     if ts == Language.tokenConcatenation:
                         newValue = prevStr + nextStr
@@ -517,6 +516,10 @@ class SymbolicLexer(RegexLexer):
                                     newValue = lhs / rhs
                                 except:
                                     raise ZeroDivError(t.anchor)
+                            else:
+                                assert(False)
+                        else:
+                             raise UnsupportedTemplateStringOpError(t.anchor)
 
                     newTokens[-1] = Symto.from_token(prevT, kind, str(newValue))
                     skipNext = True

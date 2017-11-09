@@ -809,6 +809,18 @@ class MaxTemplateRecursionError(SourceError):
         """
         return super().__str__() + "The maximum number of recursive template invocations was reached. Aborting."
 
+class UnsupportedTemplateStringOpError(SourceError):
+    """An exception class, that an unsupported template string operator was used."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + "Unsupported template string operator."
+
 class CircularDependencyError(Exception):
     """
     An exception class, that indicates a circular dependency.
