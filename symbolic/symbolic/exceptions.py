@@ -785,6 +785,30 @@ class InvalidAliasDimensionsError(SourceError):
         """
         return super().__str__() + "Aliases with an underlying array type may not be referenced as an array."
 
+class ZeroDivError(SourceError):
+    """An exception class, that indicates an illegal division by zero."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + "Division by zero is not allowed."
+
+class MaxTemplateRecursionError(SourceError):
+    """An exception class, that the maximum number of template recursions was reached."""
+
+    def __str__(self):
+        """
+        Return a string representation of the object.
+
+        Returns:
+            str: The string representation.
+        """
+        return super().__str__() + "The maximum number of recursive template invocations was reached. Aborting."
+
 class CircularDependencyError(Exception):
     """
     An exception class, that indicates a circular dependency.

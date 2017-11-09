@@ -10,6 +10,7 @@ from pygments.token import Token, Text, Operator, Name, String, Number, Punctuat
 from pygments.filter import simplefilter
 
 # Project
+from symbolic.exceptions import ZeroDivError
 from symbolic.language import Language
 
 class Anchor:
@@ -286,7 +287,11 @@ class SymbolicLexer(RegexLexer):
 
     tokens = {
         'root': [
-            (Language.tokenConcatenation, Punctuation),
+            (re.escape(Language.tokenAdd), Punctuation),
+            (re.escape(Language.tokenMul), Punctuation),
+            (re.escape(Language.tokenSub), Punctuation),
+            (re.escape(Language.tokenDiv), Punctuation),
+            (re.escape(Language.tokenConcatenation), Punctuation),
             (r'[a-zA-Z_]\w*', Name),
             (r'(\d+\.\d*|\.\d+|\d+)[eE][+-]?\d+', Number.Float),
             (r'(\d+\.\d*|\.\d+|\d+[fF])[fF]?', Number.Float),
@@ -444,6 +449,29 @@ class SymbolicLexer(RegexLexer):
         return tokens
 
     @staticmethod
+    def promoted_template_op_type(lhs, rhs):
+        """
+        Deduce the promoted template operator token types from two tokens.
+
+        Args:
+            lhs (str): The left-hand side.
+            right (str): The right-hand side.
+        Returns:
+            The converted LHS and RHS and the promoted token type.
+        """
+        try:
+            ret0 = int(lhs)
+            ret1 = int(rhs)
+            return ret0, ret1, Token.Number.Integer
+        except:
+            try:
+                ret0 = float(lhs)
+                ret1 = float(rhs)
+                return ret0, ret1, Token.Number.Float
+            except:
+                return lhs, rhs, Token.String
+
+    @staticmethod
     def concatenate_tokens(tokens):
         """
         Concatenate two tokens if separated by the concatenation operator.
@@ -460,10 +488,36 @@ class SymbolicLexer(RegexLexer):
                 skipNext = False
                 continue
 
-            if str(t) == Language.tokenConcatenation:
+            if str(t) in [Language.tokenConcatenation, Language.tokenAdd, Language.tokenSub, Language.tokenMul, Language.tokenDiv]:
                 # Concat if possible.
                 if (i > 0) and (i < len(tokens) - 1):
-                    newTokens[-1] = Symto.from_token(tokens[i-1], Token.Name, str(tokens[i-1]) + str(tokens[i+1]))
+                    prevT = tokens[i-1]
+                    nextT = tokens[i+1]
+
+                    prevStr = str(prevT)
+                    nextStr = str(nextT)
+
+                    ts = str(t)
+
+                    if ts == Language.tokenConcatenation:
+                        newValue = prevStr + nextStr
+                        kind = prevT.kind
+                    else:
+                        lhs, rhs, kind = SymbolicLexer.promoted_template_op_type(prevStr, nextStr)
+
+                        if ts == Language.tokenAdd:
+                            newValue = lhs + rhs
+                        elif ts == Language.tokenSub:
+                            newValue = lhs - rhs
+                        elif ts == Language.tokenMul:
+                            newValue = lhs * rhs
+                        elif ts == Language.tokenDiv:
+                            try:
+                                newValue = lhs / rhs
+                            except:
+                                raise ZeroDivError(t.anchor)
+
+                    newTokens[-1] = Symto.from_token(prevT, kind, str(newValue))
                     skipNext = True
             else:
                 newTokens.append(t)

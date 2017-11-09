@@ -92,6 +92,10 @@ class RelativeLocation:
         self.parameters = parameters if parameters is not None else []
         self.dims = [] if dims is None else dims
 
+        self.numPartialMatches = 0 
+        for p in self.templateParameters:
+            self.numPartialMatches += 1 if p.partialMatch is not None else 0
+
     def is_plain(self):
         """
         Return whether the relative location is plain.
@@ -103,9 +107,11 @@ class RelativeLocation:
         """
         return (not self.templateParameters) and (not self.parameters)
 
-    def might_be_equal_to(self, other):
+    def can_be_resolved_to(self, other):
         """
-        Return whether two relative locations could be potentially equal.
+        Return whether the relative location can be resolved to the other location.
+
+        This can indicate a location conflict or a template match.
 
         This function compares the signatures of both relative locations without
         looking at the parameter types.
@@ -116,14 +122,12 @@ class RelativeLocation:
         return (
             (self.kind == other.kind or self.kind == LocationKind.Unresolved or other.kind == LocationKind.Unresolved) and
             self.name == other.name and
-            len(self.parameters) == len(other.parameters) and
             Algorithm.zip_all(self.parameters, other.parameters,
                               lambda p0, p1: p0.typename.dims == p1.typename.dims) and
             all(p0.isRef == p1.isRef for p0, p1 in zip(self.parameters, other.parameters)) and
-            len(self.dims) == len(other.dims) and
             self.dims == other.dims and
             Algorithm.zip_all(self.templateParameters, other.templateParameters,
-                              lambda p0, p1: p0.partialMatch is None or p1.partialMatch is None or p0.partialMatch == p1.partialMatch)
+                              lambda p0, p1: p0.partialMatch is None or p0.partialMatch == p1.partialMatch)
         )
 
     def __str__(self):
@@ -2123,7 +2127,7 @@ class Alias(TemplateObject):
 
         token = parser.match_name()
         if token is None:
-            return None
+            token = Symto.from_token(parser.token, Token.Text, "")
 
         semantic = Annotation.parse_semantic(parser)
         targetTypename = None
@@ -2141,6 +2145,9 @@ class Alias(TemplateObject):
         alias = Alias(parser.references, parent, token, annotations, semantic, body, targetTypename)
         if not isTemplate:
             parent.locatables.append(alias)
+
+        if not str(alias.token):
+            alias.token = Symto.from_token(alias.token, Token.Text, "@{0}".format(id(alias)))
 
         return alias
 
@@ -2683,7 +2690,7 @@ class Template(Named):
             p = p.parent
 
         # Emit the annotations
-        result += Annotation.collection_to_str(self.annotations)
+        result += Annotation.collection_to_str(self.obj.annotations)
 
         # Emit object header
         self.obj.generate_from_template(result)

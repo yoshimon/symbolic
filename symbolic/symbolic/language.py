@@ -20,5 +20,9 @@ class Language:
     systemTypenames = { "void", "int", "float", "bool", "string" }
     invalidNames = systemTypenames.union(keywords)
     tokenConcatenation = r"><" # As agreed upon by the committee (reviewed by eppo). 
+    tokenAdd = r">+<" # As agreed upon by the committee (reviewed by eppo). 
+    tokenSub = r">-<" # As agreed upon by the committee (reviewed by eppo). 
+    tokenMul = r">*<" # As agreed upon by the committee (reviewed by eppo). 
+    tokenDiv = r">/<" # As agreed upon by the committee (reviewed by eppo). 
     annotations = { "static", "private", "no_constructor", "no_assignment", "deprecate", "implicit" }
     minArrayDim = 1

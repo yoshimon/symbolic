@@ -351,6 +351,7 @@ class LinkableProject:
         resolvedObjects (defaultdict): Maps each library to a list of resolved objects
         links (dict): Maps unresolved dependencies to their resolved counterparts
         locationConflicts ([objects.LocationConflict]): A list of location conflicts.
+        templateDepth (int): The current template recursion depth.
     """
 
     def __init__(self, userTypeLocationStrings):
@@ -375,6 +376,7 @@ class LinkableProject:
         self.preImports = [] # The pre-imports to use.
         self.postImports = [] # The post-imports to use.
         self._libLocationNavResults = {} # Maps navigation queries to their resolved navigation result.
+        self.templateDepth = 0
 
         # Cache the user-specified locations for numeric types.
         lexer = SymbolicLexer(libName=None, fileName=None)
@@ -1217,16 +1219,14 @@ class LinkableProject:
                     resolvedDependencyLocation = lookup.subLocations[rl.name]
                     dependencies = resolvedDependencyLocation.dependencies
 
-                    # Perform ADL to filter out potential matches.
-                    possibleMatches = filter(lambda dependency: i < len(dependency.baseLocationWithoutRef) and rl.might_be_equal_to(dependency.baseLocationWithoutRef[i]), dependencies)
+                    # Determine possible matches.
+                    possibleMatches = filter(lambda dependency: i < len(dependency.baseLocationWithoutRef) and dependency.baseLocationWithoutRef[i].can_be_resolved_to(rl), dependencies)
                     if not possibleMatches:
                         continue
 
                     # Find the best match out of the possible matches by counting the number of
                     # partial matches. The highest match count wins.
-                    countPartialMatches = lambda templateParameters: functools.reduce(lambda numMatches, p: numMatches + 1 if p.partialMatch is not None else 0, templateParameters, 0) 
-                    dependencyCmp = lambda a, b: countPartialMatches(b.baseLocationWithoutRef[i].templateParameters) - countPartialMatches(a.baseLocationWithoutRef[i].templateParameters)
-                    bestMatches = sorted(possibleMatches, key=functools.cmp_to_key(dependencyCmp))
+                    bestMatches = sorted(possibleMatches, reverse=True, key=lambda e: e.baseLocationWithoutRef[i].numPartialMatches)
 
                     for dependency in bestMatches:
                         dependencyRL = dependency.baseLocationWithoutRef[i]
@@ -1357,6 +1357,11 @@ class LinkableProject:
         Returns:
             linker.NavigationResult: The navigation result.
         """
+        self.templateDepth += 1
+
+        if self.templateDepth > 65536:
+            raise MaxTemplateRecursionError(template.token.anchor)
+
         dependencyLocationStr = self.template_instance_str(templateParameterValues, references, template.location().base())
 
         if dependencyLocationStr not in self.templateLinks:
@@ -1394,7 +1399,8 @@ class LinkableProject:
             rootNamespace.references = references
             self.insert_unit(rootNamespace)
         
-        return self.navigate_to_template_object(dependencyLocationStr)
+        result = self.navigate_to_template_object(dependencyLocationStr)
+        return result
 
     def navigate(self, errorAnchor, references, parent, location):
         """
@@ -1513,7 +1519,7 @@ class LinkableProject:
                     otherDependencyRL = otherDependency.baseLocation[-1]
 
                     # If the template and signature matches then it might be a conflict
-                    if rl.might_be_equal_to(otherDependencyRL):
+                    if rl.can_be_resolved_to(otherDependencyRL):
                         # Partial matches must match exactly.
                         isExactPartialMatch = Algorithm.zip_all(rl.templateParameters, otherDependencyRL.templateParameters,
                                                                 lambda p0, p1: p0.partialMatch == p1.partialMatch)
