@@ -65,7 +65,13 @@ class UnitParser(BaseParser):
             o = self.try_parse_any(classes, args)
             if o is None:
                 break
-            result.append(o)
+
+            if isinstance(o, list):
+                for e in o:
+                    result.append(e)
+            else:
+                result.append(o)
+
             if matchAfterSuccess is not None:
                 if not self.match(matchAfterSuccess):
                     break

@@ -529,21 +529,27 @@ class Namespace(Named):
             return None
 
         # Name token
-        token = parser.match_name()
-        if token is None:
-            return None
-        
+        token = parser.expect_kind(Token.Name)
+
+        # Fetch nested namespaces as 1 object.
+        result = []
+        parent = parser.namespace()
+        while parser.match("."):
+            actualParent = Namespace(parser.references, parent, token, [], None)
+            parent.locatables.append(actualParent)
+            parent = actualParent
+            token = parser.expect_kind(Token.Name)
+            result.append(parent)
+
         # NOTE(gokhan.ozdogan): namespaces do not have semantics.
-        # This is to allow merging to work.
+        # This allows us to merge two namespaces.
         
         parser.expect('{')
 
-        # Grab the current parent
-        parent = parser.namespace()
-        
         # Create the namespace object
         namespace = Namespace(parser.references, parent, token, annotations, None)
-        
+        result.append(namespace)
+
         # Register it with the parent
         parent.locatables.append(namespace)
 
@@ -557,7 +563,7 @@ class Namespace(Named):
         # Restore the parent namespace
         parser.namespaceStack.pop()
 
-        return namespace
+        return result
 
     def merge(self, other):
         """
