@@ -59,8 +59,8 @@ class Dependency:
         self.references = locatable.references
         
         # Two system annotations are valid for all dependencies: private, deprecate
-        self.isPrivate = Annotation.has('private', locatable.annotations) if locatable is isinstance(locatable, Named) else False
-        self.isDeprecated = Annotation.has('deprecated', locatable.annotations) if locatable is isinstance(locatable, Named) else False
+        self.isPrivate = Annotation.has(Language.private, locatable.annotations) if locatable is isinstance(locatable, Named) else False
+        self.isDeprecated = Annotation.has(Language.deprecated, locatable.annotations) if locatable is isinstance(locatable, Named) else False
 
         # Internal caches.
         self._hash = None
@@ -505,7 +505,7 @@ class LinkableProject:
             isLHSType = lhs.isLHSType
 
         result = self._try_verify_ast_member(struct, name)
-        result = None if isLHSType and not Annotation.has("static", struct.annotations) else result
+        result = None if isLHSType and not Annotation.has(Language.static, struct.annotations) else result
         result = self._try_verify_ast_property(struct, name, [], isLHSType, isAssignment) if result is None else result
         
         return result
@@ -1619,7 +1619,7 @@ class LinkableProject:
             locatable (objects.Locatable): The locatable to generate the constructor for.
             struct (objects.Struct): The type to generate the constructor for.
         """
-        if Annotation.has("no_constructor", locatable.annotations) or Annotation.has("static", locatable.annotations):
+        if Annotation.has(Language.noConstructor, locatable.annotations) or Annotation.has(Language.static, locatable.annotations):
             return
 
         # The return type is the struct.
@@ -1642,7 +1642,7 @@ class LinkableProject:
         Args:
             struct (objects.Struct): The struct to generate the operator for.
         """
-        if Annotation.has("no_assignment", struct.annotations):
+        if Annotation.has(Language.noAssignment, struct.annotations):
             return
 
         typename = Typename.from_location(struct.references, struct.location())

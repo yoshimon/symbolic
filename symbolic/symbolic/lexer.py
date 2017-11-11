@@ -499,6 +499,12 @@ class SymbolicLexer(RegexLexer):
                     nextStr = str(nextT)
 
                     if ts == Language.tokenConcatenation:
+                        if prevT.kind == Token.String:
+                            prevStr = prevStr[1:-1]
+
+                        if nextT.kind == Token.String:
+                            nextStr = nextStr[1:-1]
+
                         newValue = prevStr + nextStr
                         kind = prevT.kind
                     else:
@@ -557,11 +563,15 @@ class Ops:
             '.': [1, True],
 
             '*': [3, True],
+            Language.tokenMul: [3, True],
             '/': [3, True],
+            Language.tokenDiv: [3, True],
             '%': [3, True],
 
             '+': [4, True],
+            Language.tokenAdd: [4, True],
             '-': [4, True],
+            Language.tokenSub: [4, True],
 
             '<<': [5, True],
             '>>': [5, True],

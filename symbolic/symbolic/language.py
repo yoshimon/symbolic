@@ -24,5 +24,11 @@ class Language:
     tokenSub = r">-<" # As agreed upon by the committee (reviewed by eppo). 
     tokenMul = r">*<" # As agreed upon by the committee (reviewed by eppo). 
     tokenDiv = r">/<" # As agreed upon by the committee (reviewed by eppo). 
-    annotations = { "static", "private", "no_constructor", "no_assignment", "deprecate", "implicit" }
+    noConstructor = "no_constructor"
+    noAssignment = "no_assignment"
+    static = "static"
+    private = "private"
+    deprecated = "deprecated"
+    implicit = "implicit"
+    annotations = { static, private, noConstructor, noAssignment, deprecated, implicit }
     minArrayDim = 1

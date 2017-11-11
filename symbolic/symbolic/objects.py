@@ -501,7 +501,7 @@ class Namespace(Named):
 
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations('private', 'deprecate')
+        self.validate_system_annotations(Language.private, Language.deprecated)
 
     def location(self):
         """
@@ -1536,7 +1536,7 @@ class Function(Named):
 
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations('private', 'deprecate', 'static')
+        self.validate_system_annotations(Language.private, Language.deprecated, Language.static)
 
     def location(self):
         """
@@ -1681,7 +1681,7 @@ class Property(Named):
 
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations('private', 'deprecate', 'static')
+        self.validate_system_annotations(Language.private, Language.deprecated, Language.static)
 
     def location(self):
         """
@@ -1726,7 +1726,7 @@ class Property(Named):
             parser.expect(')')
 
         # Add implicit "this" ref.
-        if not Annotation.has("static", annotations):
+        if not Annotation.has(Language.static, annotations):
             thisParameter = Parameter.this_parameter(parent.references, parent.location())
             parameters.insert(0, thisParameter)
 
@@ -1802,7 +1802,7 @@ class Member(Named):
 
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations('private', 'deprecate', 'implicit')
+        self.validate_system_annotations(Language.private, Language.deprecated, Language.implicit)
 
     def location(self):
         """
@@ -1867,7 +1867,7 @@ class MemberList(Named):
 
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations("private", "deprecate", "implicit", "static")
+        self.validate_system_annotations(Language.private, Language.deprecated, Language.implicit, Language.static)
 
     def location(self):
         """
@@ -1950,7 +1950,7 @@ class Struct(TemplateObject, Namespace):
 
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations("private", "deprecate", "static")
+        self.validate_system_annotations(Language.private, Language.deprecated, Language.static, Language.noConstructor)
 
     def location(self):
         """
@@ -2026,7 +2026,7 @@ class Struct(TemplateObject, Namespace):
 
         # Verify unique names and propagate class annotations if necessary.
         memberNames = {}
-        staticAnnotation = Annotation.extract("static", annotations)
+        staticAnnotation = Annotation.extract(Language.static, annotations)
         for loc in struct.locatables:
             if isinstance(loc, MemberList):
                 for member in loc.members:
@@ -2038,7 +2038,7 @@ class Struct(TemplateObject, Namespace):
 
                     memberNames[s] = memberToken
 
-            if staticAnnotation is not None and not Annotation.has("static", loc.annotations):
+            if staticAnnotation is not None and not Annotation.has(Language.static, loc.annotations):
                 # Remove implicit this pointer.
                 if isinstance(loc, Property):
                     loc.parameters = loc.parameters[1:]
@@ -2099,7 +2099,7 @@ class Alias(TemplateObject):
     
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations('private', 'deprecate')
+        self.validate_system_annotations(Language.private, Language.deprecated)
 
     def location(self):
         """
@@ -2646,7 +2646,7 @@ class Template(Named):
 
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations('private', 'deprecate')
+        self.validate_system_annotations(Language.private, Language.deprecated)
 
     def location(self):
         """
