@@ -1,18 +1,15 @@
 ﻿"""Contains classes to manage symbolic projects."""
 
-# Built-in
 import datetime
 import io
 import os
 import glob
 import sys
 
-# Library
 from jinja2 import Environment
 import networkx as nx
 import yaml
 
-# Project
 from symbolic.algorithm import Algorithm
 from symbolic.exceptions import *
 from symbolic.lexer import SymbolicLexer, Symto

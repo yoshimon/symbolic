@@ -521,7 +521,7 @@ class MissingArrayDimensionsError(SourceError):
 class BinaryOperatorOverloadNotFoundError(SourceError):
     """
     An exception class, that indicates that a binary operator overload was not found.
-    
+
     Attributes:
         token (lexer.Symto): The binary operator token.
         lhs (objects.Typename): The left-hand side typename.
@@ -638,7 +638,7 @@ class InvalidArrayDimensionsError(SourceError):
 class InvalidArrayIndexDimensionsError(SourceError):
     """
     An exception class, that indicates that an invalid array index was provided.
-    
+
     Attributes:
         expectedDims (list): The expected array dimensions.
     """
@@ -666,7 +666,7 @@ class InvalidArrayIndexDimensionsError(SourceError):
 class NativeTypenameArrayError(Exception):
     """
     An exception class, that indicates that a native typename was specified as an array.
-    
+
     Attributes:
         typename (str): The native typename string.
     """
@@ -678,6 +678,7 @@ class NativeTypenameArrayError(Exception):
         Args:
             typename (str): The native typename string.
         """
+        super().__init__()
         self.typename = typename
 
     def __str__(self):

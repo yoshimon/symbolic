@@ -1,12 +1,9 @@
 """Contains classes that can be used to parse source code."""
 
-# Built-in
 import re
 
-# Library
 from pygments.token import Token, Name
 
-# Project
 from symbolic.exceptions import *
 from symbolic.lexer import Symto, SymbolicLexer
 
@@ -487,7 +484,7 @@ class BaseParser:
                 else:
                     # Push the next token.
                     t = Symto.with_bracket_level(self.consume(), bracketLevel)
-                    
+
                 tokens.append(t)
 
             # Missing brackets or not fetching the end delimiter will result in failure.

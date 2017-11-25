@@ -1,9 +1,9 @@
-﻿import datetime
+﻿"""Contains common algorithms."""
 
-"""Contains common algorithms."""
+import datetime
 
 class Algorithm:
-    """Custom algorithms on Python data structures."""
+    """Common algorithms on Python data structures."""
 
     @staticmethod
     def dt_ms_string(start):

@@ -1,15 +1,12 @@
 ﻿"""Contains lexing-related classes."""
 
-# Built-in
 import re
 from collections import deque
 
-# Library
 from pygments.lexer import RegexLexer, include, bygroups, using, this, default, words
 from pygments.token import Token, Text, Operator, Name, String, Number, Punctuation, Error
 from pygments.filter import simplefilter
 
-# Project
 from symbolic.exceptions import ZeroDivError, UnsupportedTemplateStringOpError
 from symbolic.language import Language
 
@@ -323,6 +320,7 @@ class SymbolicLexer(RegexLexer):
         self.libName = libName
         self.fileName = fileName
         self.subs = None # Template / Substitution table
+        self._unmodifiedText = None
 
         # Register custom filter
         self.add_filter(_symbolic_filter())
@@ -523,9 +521,9 @@ class SymbolicLexer(RegexLexer):
                                 except:
                                     raise ZeroDivError(t.anchor)
                             else:
-                                assert(False)
+                                assert False
                         else:
-                             raise UnsupportedTemplateStringOpError(t.anchor)
+                            raise UnsupportedTemplateStringOpError(t.anchor)
 
                     newTokens[-1] = Symto.from_token(prevT, kind, str(newValue))
                     skipNext = True

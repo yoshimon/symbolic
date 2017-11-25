@@ -1,15 +1,12 @@
 ﻿"""Contains classes to resolve dependencies in symbolic."""
 
-# Built-in
 from enum import Enum
 from itertools import chain
 from collections import deque, defaultdict
 import functools
 
-# Library
 import networkx as nx
 
-# Project
 from symbolic.exceptions import *
 from symbolic.language import *
 from symbolic.objects import *

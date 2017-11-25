@@ -5,15 +5,12 @@ The types in this package are used to convert the textual representation of the 
 This is later passed onto the dependency solver to resolve library dependencies, see symbolic.linker.
 """
 
-# Built-in
 import io
 from enum import Enum
 from functools import wraps
 
-# Library
 from pygments.token import Token, Text, Operator, Name, String, Number, Punctuation, Error
 
-# Project
 from symbolic.exceptions import *
 from symbolic.lexer import SymbolicLexer, Symto
 from symbolic.formatter import PrettyString

@@ -2,13 +2,11 @@
 
 """The root namespace, containing the symbolic executable."""
 
-# Built-in
 import argparse
 import datetime
 import os
 import sys
 
-# Project
 from symbolic.algorithm import Algorithm
 from symbolic.project import Project
 from symbolic.paths import VirtualPath

@@ -1,6 +1,5 @@
 ﻿"""Contains classes to access system environment data."""
 
-# Built-in
 import re
 import os
 import glob

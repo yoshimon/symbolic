@@ -1,9 +1,7 @@
 ﻿"""Contains classes that can be used to parse symbolic source code."""
 
-# Library
 from pygments.token import Token, Name
 
-# Project
 from symbolic.base_parser import BaseParser
 from symbolic.exceptions import ExpectedEOFError
 from symbolic.lexer import Symto

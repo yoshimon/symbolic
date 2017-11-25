@@ -1,9 +1,7 @@
 """Contains classes to serialize a linked symbolic project."""
 
-# Library
 import yaml
 
-# Project
 from symbolic.linker import *
 from symbolic.objects import *
 
@@ -25,6 +23,7 @@ class LinkedProjectYamlSerializer:
         LinkedProjectYamlSerializer._serialize_types(typesOutputFilePath, linkedProject)
         LinkedProjectYamlSerializer._serialize_functions(functionsOutputFilePath, linkedProject)
 
+    @staticmethod
     def _serialize_types(typesOutputFilePath, linkedProject):
         """
         Serialize the types in a linked project to a YAML file.
@@ -55,6 +54,7 @@ class LinkedProjectYamlSerializer:
         with typesOutputFilePath.open("w") as yamlFile:
             yaml.dump(allData, yamlFile, default_flow_style=False)
 
+    @staticmethod
     def _serialize_type_dependency(links, dependency, libData):
         """
         Serialize a type dependency to a library chunk.
@@ -89,12 +89,14 @@ class LinkedProjectYamlSerializer:
     def _annotations(annotations):
         return [LinkedProjectYamlSerializer._expression_ast_to_dict(annotation.expression.ast) for annotation in annotations]
 
+    @staticmethod
     def _navigation_result_to_type(navResult, dims):
         dependency = navResult.dependency
         path = Algorithm.join("_", dependency.baseLocationWithoutRef)
         result = { "library": str(dependency.location[0]), "name": path, "dims": dims }
         return result
 
+    @staticmethod
     def _expression_ast_to_dict(ast):
         result = \
             { \
@@ -107,6 +109,7 @@ class LinkedProjectYamlSerializer:
             }
         return result
 
+    @staticmethod
     def _serialize_functions(functionsOutputFilePath, linkedProject):
         """
         Serialize the types in a linked project to a YAML file.
