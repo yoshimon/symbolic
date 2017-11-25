@@ -2,6 +2,7 @@
 
 import yaml
 
+from symbolic.algorithm import Algorithm
 from symbolic.linker import Dependency
 from symbolic.objects import MemberList, Struct
 
