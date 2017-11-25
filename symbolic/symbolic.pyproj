@@ -81,6 +81,9 @@
   <ItemGroup>
     <InterpreterReference Include="Global|PythonCore|3.6" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="symbolic.bat" />
+  </ItemGroup>
   <PropertyGroup>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>
   </PropertyGroup>
