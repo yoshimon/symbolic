@@ -5,7 +5,7 @@ from symbolic.algorithm import Algorithm
 class MissingLibraryReference(Exception):
     """
     An exception class, that indicates that a project library was not found.
-    
+
     Attributes:
         name (str): The library name.
         libName (str): The library which is asking for the reference.
@@ -35,7 +35,7 @@ class MissingLibraryReference(Exception):
 class UnmappedNativeTypename(Exception):
     """
     An exception class, that indicates that a system typename was not mapped but referenced.
-    
+
     Attributes:
         name (str): The typename.
     """
@@ -62,7 +62,7 @@ class UnmappedNativeTypename(Exception):
 class LibraryDependencyError(Exception):
     """
     An exception class, that indicates that there is a circular dependency between libraries.
-    
+
     Attributes:
         dependencyChain (str): The dependency chain that caused the error.
     """
@@ -89,7 +89,7 @@ class LibraryDependencyError(Exception):
 class SourceError(Exception):
     """
     An exception base class, that indicates an error that can be located in the source.
-    
+
     Attributes:
         anchor (lexer.Anchor): The source code anchor.
     """
@@ -117,12 +117,12 @@ class SourceError(Exception):
 class UnexpectedTokenError(SourceError):
     """
     An exception class, that indicates a mismatch between an expected token and the current token in the token stream.
-    
+
     Attributes:
         expected (lexer.Symto): The expected token.
         found (lexer.Symto): The current token in the token stream.
     """
-    
+
     def __init__(self, anchor, expected, found):
         """
         Initialize the object.
@@ -160,7 +160,7 @@ class UnexpectedEOFError(SourceError):
 class UnsupportedAnnotationError(SourceError):
     """
     An exception class, that indicates an unsupported annotation.
-    
+
     Attributes:
         annotation (objects.Annotation): The annotation.
     """
@@ -319,7 +319,7 @@ class OverloadNotFoundError(SourceError):
 class DuplicateNameError(SourceError):
     """
     An exception class, that indicates a duplicate name.
-    
+
     Attributes:
         secondAnchor (lexer.Anchor): The anchor that triggered the error.
     """
@@ -415,7 +415,7 @@ class UnknownLibraryReferenceError(SourceError):
 class DuplicateParameterSignatureError(SourceError):
     """
     An exception class, that indicates an ambiguous parameter signature.
-    
+
     Attributes:
         otherAnchor (lexer.Anchor): The other source code anchor.
     """
@@ -443,7 +443,7 @@ class DuplicateParameterSignatureError(SourceError):
 class VariableAlreadyExistsError(SourceError):
     """
     An exception class, that indicates that a variable with a given name already exists.
-    
+
     Attributes:
         token (lexer.Symto): The variable token.
     """
@@ -470,7 +470,7 @@ class VariableAlreadyExistsError(SourceError):
 class UnresolvedSymbolError(SourceError):
     """
     An exception class, that indicates that a symbol could not be resolved.
-    
+
     Attributes:
         token (lexer.Symto): The symbol token.
     """
@@ -554,7 +554,7 @@ class BinaryOperatorOverloadNotFoundError(SourceError):
 class UnaryOperatorOverloadNotFoundError(SourceError):
     """
     An exception class, that indicates that a unary operator overload was not found.
-    
+
     Attributes:
         token (lexer.Symto): The unary operator token.
         typename (objects.Typename): The parameter typename.
@@ -584,7 +584,7 @@ class UnaryOperatorOverloadNotFoundError(SourceError):
 class FunctionOverloadNotFoundError(SourceError):
     """
     An exception class, that indicates that a function overload was not found.
-    
+
     Attributes:
         token (lexer.Symto): The function token.
         parameters ([objects.Parameters]): The parameters of the function.

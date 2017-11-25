@@ -52,7 +52,7 @@ class Anchor:
 class Symto:
     """
     A symbolic token.
-    
+
     Args:
         isOp (bool): Indicates whether the token is an operator.
         isBinaryOp (bool): Indicates whether the token is a binary operator.
@@ -161,13 +161,13 @@ class Symto:
         self.isFloat = self.kind == Token.Number.Float
         self.isString = self.kind == Token.Literal.String
         self.bracketLevel = -1 # Filled in by special instructions to indicate the bracket nesting level.
-        
+
         # Op (for convenience)
         self.isBinaryOp = False
         self.isBinaryLeftAssociative = False
         self.isBinaryRightAssociative = False
         self.binaryPrecedence = 0
-        
+
         self.isUnaryOp = False
         self.isUnaryLeftAssociative = False
         self.isUnaryRightAssociative = False
@@ -181,7 +181,7 @@ class Symto:
                 self.isBinaryLeftAssociative = op[1]
                 self.isBinaryRightAssociative = not self.isBinaryLeftAssociative
                 self.binaryPrecedence = op[0]
-            
+
             self.isUnaryOp = text in Ops.unary
             if self.isUnaryOp:
                 op = Ops.unary[text]
@@ -221,7 +221,7 @@ class Symto:
         """
         s = str(self)
         return s[1:-1] if self.kind == Token.Literal.String else s
-    
+
     def __str__(self):
         """
         Return a string representation of the object.
@@ -259,7 +259,7 @@ def _symbolic_filter(self, lexer, stream, options):
 class SymbolicLexer(RegexLexer):
     """
     A lexer for Symbolic tokens.
-    
+
     Attributes:
         name (str): The name of the lexer.
         aliases ([str]): The lexer aliases.
@@ -336,7 +336,7 @@ class SymbolicLexer(RegexLexer):
         class _TokenValue:
             """
             An intermediate representation of a token value.
-            
+
             Attributes:
                 text (str): The text.
                 line (int): The line.
@@ -385,7 +385,7 @@ class SymbolicLexer(RegexLexer):
                 elif kind == Token.String:
                     unpackedValue = value[1:-1]
                     wasSubstituted = unpackedValue in self.subs
-                    if wasSubstituted:    
+                    if wasSubstituted:
                         # Repack the new value.
                         newValue = '"{0}"'.format(self.subs[unpackedValue])
 
@@ -405,7 +405,7 @@ class SymbolicLexer(RegexLexer):
                 # Return the unpacked token.
                 # NOTE: packing / unpacking is required to work nicely with pygments.
                 yield 0, t.kind, _TokenValue(str(t), line, column)
-            
+
                 # Adjust line and column counters
                 ts = str(t)
                 if ts == '\n':
@@ -443,7 +443,7 @@ class SymbolicLexer(RegexLexer):
         tokens = [Symto(t[0], self.libName, self.fileName, str(t[1]), t[1].line, t[1].column) for t in tokens]
         self._unmodifiedText = None
         self.subs = None
-        
+
         return tokens
 
     @staticmethod
@@ -485,7 +485,7 @@ class SymbolicLexer(RegexLexer):
             if skipNext:
                 skipNext = False
                 continue
-            
+
             ts = str(t)
             if ts in [Language.tokenConcatenation, Language.tokenAdd, Language.tokenSub, Language.tokenMul, Language.tokenDiv]:
                 # Concat if possible.
@@ -535,7 +535,7 @@ class SymbolicLexer(RegexLexer):
 class Ops:
     """
     Symbolic operators.
-    
+
     Attributes:
         unary ({str, [int, bool]}): The unary operators.
             The dictionary maps unary operators to a precendence value and a left-associativity flag.
@@ -583,18 +583,18 @@ class Ops:
             '!=': [7, True],
 
             '&': [8, True],
-            
+
             '^': [9, True],
-            
+
             '|': [10, True],
-            
+
             '&&': [11, True],
-            
+
             '||': [12, True],
 
             '?': [13, False],
             ':': [13, False],
-            
+
             ':=': [14, False],
             '=': [14, False],
             '+=': [14, False],

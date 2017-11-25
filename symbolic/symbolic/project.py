@@ -21,7 +21,7 @@ from symbolic.preprocessors import PPT, ExternalPreprocessor
 class ProjectConfiguration:
     """
     A configuration for a symbolic project.
-    
+
     Attributes:
         projectPPT (preprocessors.PPT): The project-wide pre-processor table.
     """
@@ -55,7 +55,7 @@ class ProjectConfiguration:
 
             # Load all system type mappings
             self.systemTypes = yamlProject.get("system types", {})
-            
+
             self.libraryConfiguration = yamlProject.get("library configuration", "manifest.yaml")
 
 class LibraryConfiguration:
@@ -143,7 +143,7 @@ class LibraryDependencyGraph:
                     raise MissingLibraryReference(libConfig.libName, ref)
 
             self.graph.add_node(libConfig.libName, libConfig=libConfig)
-            
+
             # Connect the dependencies as defined by the library
             for ref in libConfig.references:
                 self.graph.add_edge(ref, libConfig.libName)
@@ -153,7 +153,7 @@ class LibraryDependencyGraph:
     def resolve(self):
         """
         Resolve all dependencies between libraries.
-        
+
         Returns:
             iterable: A linearized sequence of library names.
         """
@@ -182,7 +182,7 @@ class LibraryDependencyGraph:
 class Project:
     """
     A symbolic project.
-    
+
     Attributes:
         projConfig (project.ProjectConfiguration): The project configuration to use.
     """
@@ -200,7 +200,7 @@ class Project:
     def translate(self):
         """
         Translate the project to a linked project.
-        
+
         Returns:
             linker.LinkedProject: The linked project.
         """
@@ -224,7 +224,7 @@ class Project:
 
             # Load the pre-processor
             preprocessor = ExternalPreprocessor(libConfig.preprocessorModuleFilePath, libConfig.preprocessorClass)
-            
+
             # Combine the project PPT with the library PPT
             projLibPPT = self.projConfig.ppt.combine(libConfig.ppt)
 
@@ -269,7 +269,7 @@ class Project:
 
                 # Create a dependency graph for the unit
                 linkableProject.insert_unit(rootNamespace)
-                
+
                 numFilesParsed += 1
 
             if numFilesParsed > 0:

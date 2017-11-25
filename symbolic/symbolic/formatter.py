@@ -5,7 +5,7 @@ from symbolic.lexer import SymbolicLexer
 class PrettyString:
     """
     A pretty-formatted string.
-    
+
     Attributes:
         indentLevel (int): The indentation level.
         indentSize (int): The indentation size in spaces.
@@ -42,7 +42,7 @@ class PrettyString:
     def indent_str(self):
         """
         Return the string that is used for indenting at the current level.
-        
+
         Returns:
             str: The indentation string.
         """
@@ -51,7 +51,7 @@ class PrettyString:
     def append(self, text):
         """
         Append a textblock to the string, using pretty-formatting rules.
-        
+
         Args:
             text (str): The text to append.
         Returns:
@@ -71,7 +71,7 @@ class PrettyString:
                 # Insert space if matching style
                 if (str.isalnum(lastChar) and str.isalnum(firstChar)) or (lastChar == ',' and str.isalnum(firstChar)):
                     self.value += ' '
-        
+
         # Replace mid-string newlines
         newText = ''
         for i in range(0, len(text)-1):

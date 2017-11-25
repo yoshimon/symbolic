@@ -7,7 +7,7 @@ import glob
 class VirtualPath:
     """
     A virtual file or directory path.
-    
+
     Attributes:
         text (str): The underlying path string.
         vars ({str, str}): The variable mappings.
@@ -16,7 +16,7 @@ class VirtualPath:
     def __init__(self, text=None):
         """
         Initialize the object.
-        
+
         Args:
             text (str): The initial path value.
         """
@@ -35,7 +35,7 @@ class VirtualPath:
     def __iadd__(self, other):
         """
         Append another path to the current path.
-        
+
         Args:
             other (paths.VirtualPath): The virtual path.
         Returns:
@@ -108,7 +108,7 @@ class VirtualPath:
     def with_extension(self, newExtension):
         """
         Return the same path string with a different file extension.
-        
+
         Args:
             newExtension (str): The new extension.
         Returns:
@@ -172,7 +172,7 @@ class VirtualPath:
         # Expand user and system variables
         text = os.path.expanduser(text)
         text = os.path.expandvars(text)
-        
+
         # Normalize it
         text = os.path.realpath(text)
 

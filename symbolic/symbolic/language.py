@@ -3,7 +3,7 @@
 class Language:
     """
     A collection of symbolic language features.
-    
+
     Attributes:
         keywords ({str}): All language-reserved keywords.
         systemTypenames ({str}): All built-in typenames in symbolic.
@@ -19,11 +19,11 @@ class Language:
     keywords = { "if", "elif", "else", "return", "for", "while", "do", "break", "continue", value, this, ref }
     systemTypenames = { "void", "int", "float", "bool", "string" }
     invalidNames = systemTypenames.union(keywords)
-    tokenConcatenation = r"><" # As agreed upon by the committee (reviewed by eppo). 
-    tokenAdd = r">+<" # As agreed upon by the committee (reviewed by eppo). 
-    tokenSub = r">-<" # As agreed upon by the committee (reviewed by eppo). 
-    tokenMul = r">*<" # As agreed upon by the committee (reviewed by eppo). 
-    tokenDiv = r">/<" # As agreed upon by the committee (reviewed by eppo). 
+    tokenConcatenation = r"><" # As agreed upon by the committee (reviewed by eppo).
+    tokenAdd = r">+<" # As agreed upon by the committee (reviewed by eppo).
+    tokenSub = r">-<" # As agreed upon by the committee (reviewed by eppo).
+    tokenMul = r">*<" # As agreed upon by the committee (reviewed by eppo).
+    tokenDiv = r">/<" # As agreed upon by the committee (reviewed by eppo).
     noConstructor = "no_constructor"
     noAssignment = "no_assignment"
     static = "static"

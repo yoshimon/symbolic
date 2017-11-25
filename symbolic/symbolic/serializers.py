@@ -43,7 +43,7 @@ class LinkedProjectYamlSerializer:
             for dependency in linkedProject.sortedTypeDependencies[libDataOffset:]:
                 if dependency.libName != libName:
                     break
-                
+
                 LinkedProjectYamlSerializer._serialize_type_dependency(linkableProject.links, dependency, libData)
 
                 libDataOffset += 1

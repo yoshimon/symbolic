@@ -25,7 +25,7 @@ class Decorators:
     def validated(f):
         """
         Validate the object after initialization.
-        
+
         Args:
             f (function): The functor to invoke.
         """
@@ -39,7 +39,7 @@ class Decorators:
 class LocationKind(Enum):
     """
     Enumeration of possible Location kinds.
-    
+
     Attributes:
         Unresolved (int): The location kind has not been resolved yet.
         Function (int): The location is occupied by a Function.
@@ -63,7 +63,7 @@ class LocationKind(Enum):
 class RelativeLocation:
     """
     A relative location specifier.
-    
+
     Multiple RelativeLocation objects can represent an absolute path (see Location).
 
     Attributes:
@@ -89,14 +89,14 @@ class RelativeLocation:
         self.parameters = parameters if parameters is not None else []
         self.dims = [] if dims is None else dims
 
-        self.numPartialMatches = 0 
+        self.numPartialMatches = 0
         for p in self.templateParameters:
             self.numPartialMatches += 1 if p.partialMatch is not None else 0
 
     def is_plain(self):
         """
         Return whether the relative location is plain.
-        
+
         A location is considered to be plain when it does not have any (template) parameters.
 
         Returns:
@@ -142,7 +142,7 @@ class RelativeLocation:
     def __eq__(self, other):
         """
         Compare for equality with another relative location.
-        
+
         Args:
             other (objects.Location): The other relative location.
         Returns:
@@ -166,7 +166,7 @@ class RelativeLocation:
 class Location:
     """
     An (absolute) location within a library.
-    
+
     Attributes:
         path ([objects.RelativeLocation]): A list of relative location specifiers.
     """
@@ -226,7 +226,7 @@ class Location:
     def __eq__(self, other):
         """
         Compare for equality with another location.
-        
+
         Args:
             other (objects.Location): The other location.
         Returns:
@@ -291,14 +291,14 @@ class Locatable:
     Attributes:
         references ([objects.Reference]): The references visible to this locatable.
         parent (objects.Locatable): The parent object.
-        anchor (Token): The anchor in the source code.        
+        anchor (Token): The anchor in the source code.
         annotations ([objects.Annotation]): The system annotations.
     """
 
     def __init__(self, references, parent, anchor, annotations):
         """
         Initialize the object.
-        
+
         Args:
             references ([objects.Reference]): The references visible to this locatable.
             parent (objects.Locatable): The parent object.
@@ -371,7 +371,7 @@ class Locatable:
 class Named(Locatable):
     """
     A named object within a library.
-    
+
     Attributes:
         token (lexer.Symto): A token which holds the name.
         semantic (objects.Annotation): The semantic annotation.
@@ -392,14 +392,14 @@ class Named(Locatable):
         super().__init__(references, parent, token.anchor, annotations)
         self.semantic = semantic
         self.token = token
-        
+
         if not allowKeywordName and str(token) in Language.keywords:
             raise InvalidNameError(token.anchor)
 
     def default_location(self, kind, *, templateParameters=None, parameters=None, isExplicitRef=False):
         """
         Return the default location within the library.
-        
+
         Args:
             kind (objects.LocationKind): The location kind of the final RelativeLocation.
             templateParameters ([objects.TemplateParameter]): The template parameters at the final RelativeLocation.
@@ -465,7 +465,7 @@ class Reference(Named):
     def __eq__(self, other):
         """
         Return whether two references point to the same library.
-        
+
         Args:
             other (objects.Reference): The reference to compare with.
         Returns:
@@ -476,7 +476,7 @@ class Reference(Named):
 class Namespace(Named):
     """
     A namespace within a library.
-    
+
     Attributes:
         locatables ([objects.Locatable]): The locatable object instances within the namespace.
     """
@@ -540,7 +540,7 @@ class Namespace(Named):
 
         # NOTE(gokhan.ozdogan): namespaces do not have semantics.
         # This allows us to merge two namespaces.
-        
+
         parser.expect('{')
 
         # Create the namespace object
@@ -552,7 +552,7 @@ class Namespace(Named):
 
         # Set it as the active namespace
         parser.namespaceStack.append(namespace)
-        
+
         # Parse all objects within it
         parser.gather_namespace_objects()
         parser.expect('}')
@@ -575,13 +575,13 @@ class Namespace(Named):
         # Re-parent children.
         for locatable in other.locatables:
             locatable.parent = self
-        
+
         self.validate()
 
 class TemplateObject(Named):
     """
     A templatable object.
-    
+
     Attributes:
         templateCount (int): The number of instantiated template instances. This is used
             to generate a unique template name for each new instantiated template object.
@@ -618,7 +618,7 @@ class TemplateObject(Named):
 class InstructionKind(Enum):
     """
     Enumeration of possible Instruction kinds.
-    
+
     Attributes:
         Expression (int): The Instruction is an Expression.
         Break (int): The Instruction is a break statement.
@@ -647,7 +647,7 @@ class InstructionKind(Enum):
 class Instruction(Locatable):
     """
     An instruction within a function.
-    
+
     Attributes:
         kind (objects.InstructionKind): The instruction type specifier.
         expression (objects.Expression): The expression within the instruction.
@@ -699,7 +699,7 @@ class Instruction(Locatable):
     def expect_expression(parser, endDelim):
         """
         Parse the next expression.
-        
+
         Args:
             parser (parsers.UnitParser): The parser to use.
             endDelim (str): The end delimiter.
@@ -712,7 +712,7 @@ class Instruction(Locatable):
         # Throw an error if no expression was parsed or if it is the empty expression
         if (expression is None) or (not expression.postfixAtoms):
             raise MissingExpressionError(parser.token.anchor)
-        
+
         # Consume the end delimiter
         parser.consume()
 
@@ -722,7 +722,7 @@ class Instruction(Locatable):
     def parse_parenthesized_expression(parser):
         """
         Parse the next parenthesized expression.
-        
+
         Args:
             parser (parsers.UnitParser): The parser to use.
         Returns:
@@ -735,7 +735,7 @@ class Instruction(Locatable):
     def parse_instruction_body(parser):
         """
         Parse all instructions in the body.
-        
+
         Args:
             parser (parsers.UnitParser): The parser to use.
         Returns:
@@ -763,7 +763,7 @@ class Instruction(Locatable):
 
         # Grab the current parent
         parent = parser.namespace()
-        
+
         # Control flow statements
         # Convert the keywords to lower-case representation and pair with its kind
         ikMap = [(e.name.lower(), e) for e in InstructionKind][InstructionKind.If.value:]
@@ -826,7 +826,7 @@ class Instruction(Locatable):
 
             parser.expect(';')
 
-            return Instruction(parser.references, parent, anchor, [], kind, expression=expression) 
+            return Instruction(parser.references, parent, anchor, [], kind, expression=expression)
 
 class ExpressionAtomKind(Enum):
     """
@@ -862,7 +862,7 @@ class ExpressionAtomKind(Enum):
 class ExpressionAtom:
     """
     An atom within an Expression.
-    
+
     Attributes:
         token (lexer.Symto): The atom token.
         kind (objects.ExpressionAtomKind): The atom kind.
@@ -882,7 +882,7 @@ class ExpressionAtom:
 class ExpressionAST:
     """
     An AST within an Expression.
-    
+
     Args:
         atom (objects.ExpressionAtom): The expression atom.
         parent (objects.ExpressionAST): The parent expression AST.
@@ -907,7 +907,7 @@ class ExpressionAST:
 class Expression(Named):
     """
     An expression.
-    
+
     Args:
         tokens ([lexer.Symto]): The expression token list.
         postfixAtoms ([objects.ExpressionAtom]): The expression atoms.
@@ -1146,7 +1146,7 @@ class Expression(Named):
                     # Keep track of how many ops were added
                     if Algorithm.pop_while(stack, lambda atom: not atom.token.isOpenBracket, lambda atom: out.append(atom)):
                         raise MissingBracketsError(t.anchor)
-                
+
                     # If there were no ops added, the comma might be invalid if this is not an unbounded array
                     if states[-1] != State.Array:
                         if out[-1].kind in [ExpressionAtomKind.Delimiter, ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.TemplateBegin]:
@@ -1210,11 +1210,11 @@ class Expression(Named):
                     # Assume this is a unary op
                     kind = ExpressionAtomKind.UnaryOp if (t.isUnaryOp and prev is None) or (prev is not None and str(prev) not in [")", "]"] and not prev.isTerminal) else ExpressionAtomKind.BinaryOp
                     o1 = t
-                
+
                     # Binary operator
                     if kind == ExpressionAtomKind.BinaryOp:
                         Algorithm.pop_while(stack, lambda o2: (o2.token.isBinaryOp) and ((o1.isBinaryLeftAssociative and o1.binaryPrecedence > o2.token.binaryPrecedence) or (o1.isBinaryRightAssociative and o1.binaryPrecedence >= o2.token.binaryPrecedence)), lambda o2: out.append(o2))
-                
+
                     stack.append(ExpressionAtom(o1, kind))
                 else:
                     raise InvalidExpressionError(t.anchor)
@@ -1354,7 +1354,7 @@ class Expression(Named):
 class FunctionKind(Enum):
     """
     Enumeration of possible Function kinds.
-    
+
     Regular (int): The Function is a regular function.
     Operator (int): The Function is an operator.
     """
@@ -1365,7 +1365,7 @@ class FunctionKind(Enum):
 class Parameter(Named):
     """
     A parameter in a Function signature.
-    
+
     Args:
         typename (objects.Typename): The typename.
         isRef (bool): True, if the parameter is a reference. Otherwise False.
@@ -1404,7 +1404,7 @@ class Parameter(Named):
     def __eq__(self, other):
         """
         Compare for equality with another parameter.
-        
+
         Args:
             other (objects.Parameter): The other parameter.
         Returns:
@@ -1507,7 +1507,7 @@ class FunctionReference(Named):
 class Function(Named):
     """
     A function.
-    
+
     Attributes:
         kind (objects.FunctionKind): The function kind.
         returnTypename (objects.Typename): The return typename.
@@ -1562,7 +1562,7 @@ class Function(Named):
             objects.Function: The function or None, if no function was parsed.
         """
         annotations = Annotation.parse_annotations(parser)
-        
+
         kind = FunctionKind.Regular
         parent = parser.namespace()
         parameters = []
@@ -1651,7 +1651,7 @@ class PropertyReference(Named):
 class Property(Named):
     """
     A property.
-    
+
     Attributes:
         returnTypename (objects.Typename): The return typename.
         parameters ([objects.Parameter]): The parameters.
@@ -1707,7 +1707,7 @@ class Property(Named):
             objects.Function: The function or None, if no function was parsed.
         """
         annotations = Annotation.parse_annotations(parser)
-        
+
         parent = parser.namespace()
         parameters = []
 
@@ -1782,7 +1782,7 @@ class Property(Named):
 class Member(Named):
     """
     A member inside a Structure object.
-    
+
     Attributes:
         typename (objects.Typename): The member typename.
     """
@@ -1844,7 +1844,7 @@ class Member(Named):
 class MemberList(Named):
     """
     A collection of Member objects that share the same Typename.
-    
+
     Attributes:
         members ([objects.Member]): A list of members.
         typename (objects.Typename): The member typename.
@@ -1916,18 +1916,18 @@ class MemberList(Named):
         semantic = Annotation.parse_semantic(parser)
         if not parser.match(';'):
             return None
-        
+
         members = []
         for name in names:
             name = Symto.from_token(parser.token, Token.Text, '') if name is None else name
             members.append(Member(parser.references, parser.namespace(), name, annotations, semantic, typename))
-        
+
         memberList = MemberList(parser.references, parser.namespace(), name, annotations, semantic, members, typename)
-        
+
         # Fix member names to be unique.
         for i, member in enumerate(memberList.members):
             member.token = Symto.from_token(member.token, Token.Text, "@{0}_{1}".format(id(member), i)) if member.token == "" else member.token
-        
+
         parent = parser.namespace()
         parent.locatables.append(memberList)
         return memberList
@@ -2078,7 +2078,7 @@ class Struct(TemplateObject, Namespace):
 class Alias(TemplateObject):
     """
     A type alias.
-    
+
     Attributes:
         targetTypename (objects.Typename): The target typename.
     """
@@ -2099,7 +2099,7 @@ class Alias(TemplateObject):
         """
         TemplateObject.__init__(self, references, parent, token, annotations, semantic, body)
         self.targetTypename = targetTypename
-    
+
     def validate(self):
         """Validate the object."""
         self.validate_system_annotations(Language.private, Language.deprecated)
@@ -2179,7 +2179,7 @@ class Alias(TemplateObject):
 class Annotation:
     """
     An object annotation.
-    
+
     Attributes:
         expression (objects.Expression): The annotation expression.
     """
@@ -2198,7 +2198,7 @@ class Annotation:
     def collection_to_str(collection):
         """
         Convert an annotation list to a string.
-        
+
         Args:
             collection ([objects.Annotation]): The annotation list.
         Returns:
@@ -2215,7 +2215,7 @@ class Annotation:
             parser (UnitParser): The parser to use.
             open (str): The opening delimiter.
             endDelims ([str]): The closing delimiters.
-            consumeEnd (bool): True, if the matched end delimiter should be consumed. Otherwise False. 
+            consumeEnd (bool): True, if the matched end delimiter should be consumed. Otherwise False.
         Returns:
             objects.Annotation: The annotation.
         """
@@ -2228,7 +2228,7 @@ class Annotation:
         # Throw an error if no expression was parsed or if it is the empty expression
         if (expression is None) or (not expression.postfixAtoms):
             raise MissingExpressionError(parser.token.anchor)
-        
+
         # Consume the end delimiter
         if consumeEnd:
             parser.consume()
@@ -2239,7 +2239,7 @@ class Annotation:
     def try_parse(parser):
         """
         Parse the next user annotation.
-        
+
         Args:
             parser (parsers.UnitParser): The parser to use.
         Returns:
@@ -2251,7 +2251,7 @@ class Annotation:
     def parse_semantic(parser):
         """
         Parse the next semantic.
-        
+
         Args:
             parser (parsers.UnitParser): The parser to use.
         Returns:
@@ -2264,7 +2264,7 @@ class Annotation:
     def parse_annotations(parser):
         """
         Parse the next user and system annotations.
-        
+
         Args:
             parser (parsers.UnitParser): The parser to use.
         Returns:
@@ -2283,7 +2283,7 @@ class Annotation:
     def extract(name, collection):
         """
         Extract an annotation from a collection.
-        
+
         Args:
             name (str): The name to search for.
             collection ([objects.Annotation]): The annotation collection.
@@ -2317,7 +2317,7 @@ class Annotation:
 class Typename(Locatable):
     """
     A typename.
-    
+
     Attributes:
         dims ([int]): The array dimensions.
         scope ([lexer.Symto]): The name scope.
@@ -2341,7 +2341,7 @@ class Typename(Locatable):
 
         super().__init__(references, parent, scope[-1].anchor, [])
         self.scope = scope
-        
+
         # Overwrite the scope strings
         self.scopeStrings = [str(token) for token in scope]
 
@@ -2446,7 +2446,7 @@ class Typename(Locatable):
             [int] or None: The array dimensions.
         """
         dims = []
-        
+
         if not parser.match("["):
             return dims
 
@@ -2529,7 +2529,7 @@ class Typename(Locatable):
     def from_location(references, location):
         """
         Create a typename from a location.
-        
+
         Args:
             references ([objects.Reference]): The references at the specified location.
             location (objects.Location): The location.
@@ -2671,7 +2671,7 @@ class Template(Named):
     def generate_translation_unit(self, references):
         """
         Generate a translation unit from the template.
-        
+
         Args:
             references (list): The references of the unit which instantiates the template.
         Returns:

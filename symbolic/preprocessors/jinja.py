@@ -7,7 +7,7 @@ from symbolic.preprocessors import DefaultPreprocessor
 class JinjaPreprocessor(DefaultPreprocessor):
     """
     A jinja-based pre-processor.
-    
+
     Attributes:
         jinjaEnv (jinja2.Environment): The jinja2 environment to use.
     """

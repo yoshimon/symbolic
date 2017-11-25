@@ -8,7 +8,7 @@ from symbolic.paths import VirtualPath
 class PPT:
     """
     A pre-processor table.
-    
+
     Attributes:
         contents ({str, str}): The underlying table.
     """
@@ -16,7 +16,7 @@ class PPT:
     def __init__(self, *, optFilePath=None):
         """
         Initialize the object.
-        
+
         Args:
             optFilePath (paths.VirtualPath): The file path to load the table from, if it exists.
         """

@@ -28,7 +28,7 @@ class UnitParser(BaseParser):
     def try_parse_any(self, classes, args):
         """
         Parse all object types in the supplied list.
-        
+
         Args:
             classes ([class]): A list of classes to try to parse.
             args: A list of arguments to forward to the object parsers.
@@ -80,7 +80,7 @@ class UnitParser(BaseParser):
     def gather_namespace_objects(self):
         """
         Gather all objects in a namespace.
-        
+
         Returns:
             [object]: The gathered objects.
         """
@@ -94,7 +94,7 @@ class UnitParser(BaseParser):
 
         # Add post-imports.
         self.references += [Reference(Symto(Token.Text, self.libName, self.fileName, postImport, 1, 1), [], None) for postImport in self.postImports] if self.postImports is not None else []
-        
+
         while True:
             self.push_state()
             annotations = Annotation.parse_annotations(self)
@@ -116,12 +116,12 @@ class UnitParser(BaseParser):
             refString = '.'.join(refStrList)
             token = Symto.from_token(refTokens[0], Token.Token, refString)
             ref = Reference(token, annotations, semantic)
-            
+
             # Reference sequences must be collapsed:
             # using A; using A; is equivalent to using A;
             if self.references and str(ref) != self.references[-1]:
                 self.references.append(ref)
-            
+
             self.remove_state()
 
         # Add pre-imports.
@@ -158,7 +158,7 @@ class UnitParser(BaseParser):
         Parse the active token stream.
 
         The root does not have to manually parsed.
-        
+
         Returns:
             objects.Namespace: The global (root) namespace object.
         """

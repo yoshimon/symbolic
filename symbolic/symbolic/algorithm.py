@@ -9,7 +9,7 @@ class Algorithm:
     def dt_ms_string(start):
         """
         Return a pretty string for a time delta with a given start value.
-        
+
         Args:
             start: The start date time.
         """
@@ -21,7 +21,7 @@ class Algorithm:
     def pop_while(stack, predicate, action=None):
         """
         Pop all elements from a stack until the specified predicate returns False.
-        
+
         An optional action is invoked after each iteration.
 
         Args:
@@ -60,7 +60,7 @@ class Algorithm:
         for i, e0 in enumerate(a):
             if not predicate(e0, b[i]):
                 return False
-        
+
         return True
 
     @staticmethod

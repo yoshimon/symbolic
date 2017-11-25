@@ -10,7 +10,7 @@ from symbolic.lexer import Symto, SymbolicLexer
 class BaseParser:
     """
     A base class for all parsers.
-    
+
     Attributes:
         libName (str): The library name.
         fileName (str): The file name.
@@ -96,7 +96,7 @@ class BaseParser:
     def back(self):
         """
         Step the parser back by one token.
-        
+
         Returns:
             lexer.Symto: The new token.
         """
@@ -127,7 +127,7 @@ class BaseParser:
     def match(self, value):
         """
         Match the current token to a value.
-        
+
         Args:
             value (str): The value to match.
         Returns:
@@ -144,7 +144,7 @@ class BaseParser:
     def match_any(self, sequence):
         """
         Match any value in a given list of values.
-        
+
         Args:
             sequence ([str]): A sequence of string values to match.
         Returns:
@@ -286,7 +286,7 @@ class BaseParser:
     def remove_state(self):
         """
         Remove the last pushed state without entering it.
-        
+
         Returns:
             int: The token index that would have been restored.
         """
@@ -419,7 +419,7 @@ class BaseParser:
         wasPreviousString = self.was_previous_match_kind(Token.Literal.String)
 
         val = self.match_any(SymbolicLexer.closeBrackets)
-        
+
         if val is None:
             return False
 

@@ -54,7 +54,7 @@ class Dependency:
         self.baseLocation = self.location.base()
         self.baseLocationWithoutRef = Location(self.baseLocation.pathWithoutRef)
         self.references = locatable.references
-        
+
         # Two system annotations are valid for all dependencies: private, deprecate
         self.isPrivate = Annotation.has(Language.private, locatable.annotations) if locatable is isinstance(locatable, Named) else False
         self.isDeprecated = Annotation.has(Language.deprecated, locatable.annotations) if locatable is isinstance(locatable, Named) else False
@@ -67,7 +67,7 @@ class Dependency:
     def __eq__(self, other):
         """
         Return whether two dependencies are identical.
-        
+
         Args:
             other (objects.Dependency): The dependency to compare with.
         Returns:
@@ -100,7 +100,7 @@ class Dependency:
     def resolve_parameter_locations(self, linkableProject):
         """
         Return a generator sequence for the resolved parameter types.
-        
+
         Args:
             linkableProject (linker.LinkableProject): The dependency collection to resolve the parameter with.
         Returns:
@@ -118,7 +118,7 @@ class Dependency:
                     pResolvedBase = linkableProject.navigate_alias_base(pResolved)
                     pResolvedLocation = pResolvedBase.resolvedDependencyLocation
                     self._resolvedParameterLocations.append(pResolvedLocation)
-                    
+
         return self._resolvedParameterLocations
 
     def as_array(self, dims):
@@ -139,7 +139,7 @@ class Dependency:
 class LocationConflict:
     """
     A conflict between two locations.
-    
+
     Attributes:
         firstDependency (linker.Dependency): The first dependency.
         secondDependency (linker.Dependency): The second dependency.
@@ -148,7 +148,7 @@ class LocationConflict:
     def __init__(self, firstDependency, secondDependency):
         """
         Initialize the object.
-        
+
         Args:
             firstDependency (linker.Dependency): The first dependency.
             secondDependency (linker.Dependency): The second dependency.
@@ -159,12 +159,12 @@ class LocationConflict:
 class ResolvedDependencyLocation:
     """
     A resolved location for a dependency.
-    
+
     The location might be shared by other dependencies and it may contain sub-locations.
 
     Attributes:
         dependencies ([linker.Dependency]): The dependencies at this location.
-        subLocations ({str, linker.ResolvedDependencyLocation}): The sub-locations.    
+        subLocations ({str, linker.ResolvedDependencyLocation}): The sub-locations.
     """
 
     def __init__(self, dependencies=None, subLocations=None):
@@ -222,7 +222,7 @@ class NavigationQuery:
     def __eq__(self, other):
         """
         Return whether two queries are identical.
-        
+
         Args:
             other (objects.NavigationQuery): The query to compare with.
         Returns:
@@ -262,7 +262,7 @@ class NavigationResult:
     def __eq__(self, other):
         """
         Return whether two navigation results point to the same location.
-        
+
         Args:
             other (linker.NavigationResult): The navigation result to compare with.
         Returns:
@@ -306,12 +306,12 @@ class AstNavigationResult:
         resolvedDependencyLocation = ResolvedDependencyLocation([self.dependency])
         navResult = NavigationResult(resolvedDependencyLocation, self.dependency)
         arrayNR = AstNavigationResult(navResult, self.isLHSType)
-        
+
         # We need to modify the last relative location so copy the path.
         copiedPath = Location([RelativeLocation(p.kind, p.name, templateParameters=p.templateParameters, parameters=p.parameters, dims=p.dims) for p in self.dependency.location])
         arrayNR.explicitLocation = copiedPath
         arrayNR.explicitLocation[-1].dims = dims
-        
+
         return arrayNR
 
     def as_base(self):
@@ -329,7 +329,7 @@ class AstNavigationResult:
     def __eq__(self, other):
         """
         Return whether two navigation results point to the same location.
-        
+
         Args:
             other (linker.NavigationResult): The navigation result to compare with.
         Returns:
@@ -353,7 +353,7 @@ class LinkableProject:
     def __init__(self, userTypeLocationStrings):
         """
         Initialize the object.
-        
+
         Args:
             userTypeLocationStrings (dict): The user-defined system type location strings from the project configuration.
         """
@@ -446,14 +446,14 @@ class LinkableProject:
         if astNavResult.explicitLocation.path[-1].kind == LocationKind.Type:
             navResult = self.navigate_alias_base(navResult)
             astNavResult = AstNavigationResult(navResult, isLHSType)
-            
+
         # Copy array dimensions, if not scalar.
         if isinstance(locatable, Typename) and locatable.dims:
             if astNavResult.explicitLocation.path[-1].dims:
                 raise InvalidAliasDimensionsError(locatable.anchor)
-            
+
             astNavResult = astNavResult.as_array(locatable.dims)
-        
+
         return astNavResult
 
     def _ast_navigate_dependency(self, locatable, isLHSType):
@@ -504,7 +504,7 @@ class LinkableProject:
         result = self._try_verify_ast_member(struct, name)
         result = None if isLHSType and not Annotation.has(Language.static, struct.annotations) else result
         result = self._try_verify_ast_property(struct, name, [], isLHSType, isAssignment) if result is None else result
-        
+
         return result
 
     def _try_verify_ast_property(self, struct, name, parameters, isStatic, isAssignment):
@@ -711,7 +711,7 @@ class LinkableProject:
         if atom.token is None or atom.token.isString:
             # String
             typename = self.native_string_typename(container.references)
-        
+
         result = self._ast_navigate_dependency(typename, False)
         return result
 
@@ -735,7 +735,7 @@ class LinkableProject:
         childNRs = [self._verify_expression_ast_recursive(container, localVars, child, newLocalVars) for child in children]
         childTypenames = [Typename.from_location(container.references, childNR.explicitLocation) for childNR in childNRs]
         parameters = [Parameter(container, child.atom.token, [], None, childTypenames[i], child.isRef) for i, child in enumerate(children)]
-        
+
         isExplicitRef = lhs is not None
         parent = lhs.dependency.locatable if isExplicitRef else container
         if isExplicitRef and isinstance(lhs.dependency.locatable, Struct):
@@ -771,7 +771,7 @@ class LinkableProject:
         for child in children:
             childNR = self._verify_expression_ast_recursive(container, localVars, child, newLocalVars)
             childTypename = Typename.from_location(container.references, childNR.explicitLocation)
-        
+
             # Make sure the child (here: array index) resolves to an integer.
             intTypename = self.native_int_typename(container.references)
             intNR = self._ast_navigate_dependency(intTypename, False)
@@ -1051,7 +1051,7 @@ class LinkableProject:
                 # Update LHS using library root.
                 libRoot = self.libRoots[matchedLibName]
                 lhs = self._ast_navigate_dependency(libRoot, True)
-                
+
                 if len(inOrderTokens) == 1:
                     leftNR = lhs
 
@@ -1079,7 +1079,7 @@ class LinkableProject:
 
             if varName in localVars:
                 # The types have to match.
-                # As agreed upon by the committee (reviewed by NightCreature). 
+                # As agreed upon by the committee (reviewed by NightCreature).
                 existingVarTypeNR = localVars[varName]
                 if existingVarTypeNR != rightNR:
                     raise VariableTypeMismatchError(varToken.anchor)
@@ -1094,7 +1094,7 @@ class LinkableProject:
             # Turn them into parameters.
             pLeft = Parameter(container, left.atom.token, [], None, leftTypename, isAssignOp)
             pRight = Parameter(container, right.atom.token, [], None, rightTypename, False)
-               
+
             # Try to find a match for the signature.
             possibleMatchNR = self._try_find_function(container.parent, atom.token, FunctionKind.Operator, [pLeft, pRight])
             if possibleMatchNR is None:
@@ -1151,7 +1151,7 @@ class LinkableProject:
 
             lookup = lookup[rl.name]
             offset = i + 1
-        
+
         # Implicit or explicit lookup
         isImplicitRef = offset == 0
         libNameGen = chain([self.libName], (str(ref) for ref in references)) if isImplicitRef else ['.'.join(rl.name for rl in location[:offset])]
@@ -1251,7 +1251,7 @@ class LinkableProject:
                                 # Both typenames must resolve to the same location.
                                 paramANR = self.navigate_dependency(paramDepA)
                                 paramBNR = self.navigate_dependency(paramDepB)
-                                
+
                                 paramANR = self.navigate_alias_base(paramANR)
                                 paramBNR = self.navigate_alias_base(paramBNR)
 
@@ -1392,7 +1392,7 @@ class LinkableProject:
             # Update the references to match the call site.
             rootNamespace.references = references
             self.insert_unit(rootNamespace)
-        
+
         result = self.navigate_to_template_object(dependencyLocationStr)
         return result
 
@@ -1445,7 +1445,7 @@ class LinkableProject:
         if namespace is None:
             self.libNamespaces[namespaceLoc] = locatable
             return False
-        
+
         # Re-parent children.
         namespace.merge(locatable)
 
@@ -1560,16 +1560,16 @@ class LinkableProject:
         locatables.append(rootNamespace)
         while locatables:
             locatable = locatables.popleft()
-            
+
             self.insert(locatable)
-            
+
             if isinstance(locatable, Namespace):
                 locatables += locatable.locatables
 
     def begin_library(self, libName, preImports, postImports):
         """
         Begin collecting dependencies for a new library.
-        
+
         Args:
             libName (str): The name of the library.
             preImports (list): The pre-imports to use.
@@ -1621,7 +1621,7 @@ class LinkableProject:
 
         # The return type is the struct.
         returnTypename = Typename.from_location(locatable.references, struct.location())
-        
+
         # The parameters are deduced from the member lists.
         parameters = []
         for memberList in struct.locatables:
@@ -1644,8 +1644,8 @@ class LinkableProject:
 
         typename = Typename.from_location(struct.references, struct.location())
         unnamed = Symto.from_token(struct.token, Token.Name, "")
-        lhs = Parameter(None, unnamed, [], None, typename, True) 
-        rhs = Parameter(None, unnamed, [], None, typename, False) 
+        lhs = Parameter(None, unnamed, [], None, typename, True)
+        rhs = Parameter(None, unnamed, [], None, typename, False)
         parameters = [lhs, rhs]
         opName = Symto.from_token(struct.token, Token.Operator, "=")
         op = Function(struct.references, struct.parent, opName, [], None, FunctionKind.Operator, typename, parameters)
@@ -1658,7 +1658,7 @@ class LinkableProject:
 
         # Clear the unresolved dependencies, they are in the queue
         unresolvedDependencies.clear()
-            
+
         while localUnresolvedDependencies:
             dependency = localUnresolvedDependencies.popleft()
 
@@ -1713,7 +1713,7 @@ class LinkableProject:
     def _verify_function(self, func):
         """
         Verify the contents of a given function body.
-        
+
         Args:
             func (objects.Function): The function object.
         """
@@ -1724,7 +1724,7 @@ class LinkableProject:
     def _verify_property(self, prop):
         """
         Verify the contents of a given property body.
-        
+
         Args:
             prop (objects.Property): The property object.
         """
@@ -1762,7 +1762,7 @@ class LinkableProject:
                 exprTypeNR = self._ast_navigate_dependency(exprType, False)
             else:
                 exprTypeNR = self._verify_expression_ast(container, localVars, instruction.expression.ast)
-            
+
             # Make sure the expression type matches the return type.
             if returnTypeNR != exprTypeNR:
                 raise ReturnTypeMismatchError(instruction.anchor)
@@ -1862,7 +1862,7 @@ class LinkableProject:
     def navigate_alias_target(self, navResult):
         """
         Navigate to the next target type of an alias.
-        
+
         This can be used after navigating to a location to find the next target type.
 
         Args:
@@ -1909,7 +1909,7 @@ class LinkableProject:
             nextResult = self.navigate_alias_target(result)
             if nextResult is None:
                 return result
-            
+
             dependencyChain.append(nextResult.dependency.location)
             result = nextResult
 
