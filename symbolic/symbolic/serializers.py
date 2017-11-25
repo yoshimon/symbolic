@@ -2,8 +2,8 @@
 
 import yaml
 
-from symbolic.linker import *
-from symbolic.objects import *
+from symbolic.linker import Dependency
+from symbolic.objects import MemberList, Struct
 
 class LinkedProjectYamlSerializer:
     """A helper class to serialize a linked project to YAML."""

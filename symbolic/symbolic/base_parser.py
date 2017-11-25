@@ -4,7 +4,7 @@ import re
 
 from pygments.token import Token, Name
 
-from symbolic.exceptions import *
+from symbolic.exceptions import UnexpectedEOFError, UnexpectedTokenError
 from symbolic.lexer import Symto, SymbolicLexer
 
 class BaseParser:

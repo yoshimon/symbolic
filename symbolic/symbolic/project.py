@@ -11,7 +11,7 @@ import networkx as nx
 import yaml
 
 from symbolic.algorithm import Algorithm
-from symbolic.exceptions import *
+from symbolic.exceptions import LibraryDependencyError, MissingLibraryReference, UnknownLibraryReferenceError
 from symbolic.lexer import SymbolicLexer, Symto
 from symbolic.linker import LinkableProject, LinkedProject
 from symbolic.paths import VirtualPath
