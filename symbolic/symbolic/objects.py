@@ -833,7 +833,7 @@ class ExpressionAtomKindCategory(Enum):
     Enumeration of all expression atom kind categories.
 
     Attributes:
-        Var (int): The ExpressionAtom is a variable.
+        Identifier (int): The ExpressionAtom is an identifier.
         Number (int): The ExpressionAtom is a number.
         Function (int): The ExpressionAtom is a function invocation.
         Array (int): The ExpressionAtom is an array.
@@ -843,7 +843,7 @@ class ExpressionAtomKindCategory(Enum):
         Delimiter (int): The ExpressionAtom is a delimiter.
     """
 
-    Var = 0
+    Identifier = 0
     Number = 1
     String = 2
     Function = 3
@@ -893,7 +893,7 @@ class ExpressionAtomKindToCategory:
     """
 
     _categoryMap = [ \
-            ExpressionAtomKindCategory.Var, # Var
+            ExpressionAtomKindCategory.Identifier, # Var
             ExpressionAtomKindCategory.Number, # Number
             ExpressionAtomKindCategory.String, # String
             ExpressionAtomKindCategory.Function, # FunctionBegin
