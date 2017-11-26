@@ -4,7 +4,7 @@ import yaml
 
 from symbolic.algorithm import Algorithm
 from symbolic.linker import Dependency
-from symbolic.objects import ExpressionAtomKindToCategory, MemberList, Struct
+from symbolic.objects import Alias, ExpressionAtomKindToCategory, MemberList, Struct
 
 class LinkedProjectYamlSerializer:
     """A helper class to serialize a linked project to YAML."""
@@ -58,7 +58,7 @@ class LinkedProjectYamlSerializer:
                 if dependency.libName != libName:
                     break
 
-                LinkedProjectYamlSerializer._serialize_type_dependency(linkableProject.links, dependency, libData)
+                LinkedProjectYamlSerializer._serialize_type_dependency(linkableProject, linkableProject.links, dependency, libData)
 
                 libDataOffset += 1
 
@@ -69,7 +69,7 @@ class LinkedProjectYamlSerializer:
             yaml.dump(allData, yamlFile, default_flow_style=False)
 
     @staticmethod
-    def _serialize_type_dependency(links, dependency, libData):
+    def _serialize_type_dependency(linkableProject, links, dependency, libData):
         """
         Serialize a type dependency to a library chunk.
 
@@ -83,7 +83,9 @@ class LinkedProjectYamlSerializer:
             for memberList in locatable.locatables:
                 if isinstance(memberList, MemberList):
                     structMembers = list(str(member.token) for member in memberList)
-                    typename = LinkedProjectYamlSerializer._navigation_result_to_type(links[Dependency(memberList.typename)], memberList.typename.dims)
+                    memberTypenameNR = links[Dependency(memberList.typename)]
+                    memberBaseTypenameNR = linkableProject.navigate_alias_base(memberTypenameNR)
+                    typename = LinkedProjectYamlSerializer._navigation_result_to_type(memberBaseTypenameNR, memberList.typename.dims)
 
                     data = { "type": typename }
 
@@ -98,7 +100,9 @@ class LinkedProjectYamlSerializer:
             LinkedProjectYamlSerializer._add_opt(structData, "annotations", LinkedProjectYamlSerializer._annotations(locatable.annotations))
             LinkedProjectYamlSerializer._add_opt(structData, "semantic", LinkedProjectYamlSerializer._expression_ast_to_dict(locatable.semantic.expression.ast) if locatable.semantic is not None else None)
 
-            libData.append({ str(locatable.token): structData })
+            mangledName = Algorithm.left_join_parent(locatable, ".", lambda l: str(l.token))
+
+            libData.append({ mangledName: structData })
 
     def _annotations(annotations):
         """
@@ -121,7 +125,7 @@ class LinkedProjectYamlSerializer:
             dict: The serialized dictionary.
         """
         dependency = navResult.dependency
-        path = Algorithm.join("_", dependency.baseLocationWithoutRef)
+        path = Algorithm.join(".", dependency.baseLocationWithoutRef)
         result = { "library": str(dependency.location[0]), "name": path }
         LinkedProjectYamlSerializer._add_opt(result, "dims", dims)
         return result

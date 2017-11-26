@@ -64,6 +64,28 @@ class Algorithm:
         return True
 
     @staticmethod
+    def left_join_parent(p, delimiter, f):
+        """
+        Join a string using a delimiter and a functor by walking up the parent hierarchy.
+
+        Args:
+            p: The hierarchy to walk. Must have a parent member.
+            delimiter (str): The delimiter.
+            f: A function, which returns the string for the current element.
+        """
+        result = ""
+        c = p
+        if c is not None:
+            result = f(c)
+            while c.parent is not None:
+                c = c.parent
+                s = f(c)
+                if s:
+                    result = s + delimiter + result
+
+        return result
+
+    @staticmethod
     def join(delimiter, sequence):
         """
         Return a joined string from an input sequence and a delimiter.
