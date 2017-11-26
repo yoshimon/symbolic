@@ -4,7 +4,7 @@ import yaml
 
 from symbolic.algorithm import Algorithm
 from symbolic.linker import Dependency
-from symbolic.objects import MemberList, Struct
+from symbolic.objects import ExpressionAtomKindToCategory, MemberList, Struct
 
 class LinkedProjectYamlSerializer:
     """A helper class to serialize a linked project to YAML."""
@@ -23,6 +23,19 @@ class LinkedProjectYamlSerializer:
         functionsOutputFilePath.change_extension(".yaml")
         LinkedProjectYamlSerializer._serialize_types(typesOutputFilePath, linkedProject)
         LinkedProjectYamlSerializer._serialize_functions(functionsOutputFilePath, linkedProject)
+
+    @staticmethod
+    def _add_opt(d, key, value):
+        """
+        Add something to a dictionary, if the value evaluates to True.
+
+        Args:
+            d (dict): The dictionary.
+            key (str): The key name.
+            value: The value to test and associate with the key.
+        """
+        if value:
+            d[key] = value
 
     @staticmethod
     def _serialize_types(typesOutputFilePath, linkedProject):
@@ -74,56 +87,59 @@ class LinkedProjectYamlSerializer:
 
                     data = { "type": typename }
 
-                    if structMembers:
-                        data["members"] = structMembers
-
-                    annotations = LinkedProjectYamlSerializer._annotations(memberList.annotations)
-                    if annotations:
-                        data["annotations"] = annotations
-
-                    semantic = LinkedProjectYamlSerializer._expression_ast_to_dict(memberList.semantic.expression.ast) if memberList.semantic is not None else None
-                    if semantic is not None:
-                        data["semantic"] = semantic
+                    LinkedProjectYamlSerializer._add_opt(data, "members", structMembers)
+                    LinkedProjectYamlSerializer._add_opt(data, "annotations", LinkedProjectYamlSerializer._annotations(memberList.annotations))
+                    LinkedProjectYamlSerializer._add_opt(data, "semantic", LinkedProjectYamlSerializer._expression_ast_to_dict(memberList.semantic.expression.ast) if memberList.semantic is not None else None)
 
                     structMemberLists.append(data)
 
             structData = dict()
-            if structMemberLists:
-                structData["member lists"] = structMemberLists
-
-            annotations = LinkedProjectYamlSerializer._annotations(locatable.annotations)
-            if annotations:
-                structData["annotations"] = annotations
-
-            semantic = LinkedProjectYamlSerializer._expression_ast_to_dict(locatable.semantic.expression.ast) if locatable.semantic is not None else None
-            if semantic is not None:
-                structData["semantic"] = semantic
+            LinkedProjectYamlSerializer._add_opt(structData, "member list", structMemberLists)
+            LinkedProjectYamlSerializer._add_opt(structData, "annotations", LinkedProjectYamlSerializer._annotations(locatable.annotations))
+            LinkedProjectYamlSerializer._add_opt(structData, "semantic", LinkedProjectYamlSerializer._expression_ast_to_dict(locatable.semantic.expression.ast) if locatable.semantic is not None else None)
 
             libData.append({ str(locatable.token): structData })
 
     def _annotations(annotations):
+        """
+        Return a YAML representation of the annotation list.
+
+        Returns:
+            list: The annotations.
+        """
         return [LinkedProjectYamlSerializer._expression_ast_to_dict(annotation.expression.ast) for annotation in annotations]
 
     @staticmethod
     def _navigation_result_to_type(navResult, dims):
+        """
+        Convert a navigation result to a serialized type.
+
+        Args:
+            navResult (linker.NavigationResult): The navigation result.
+            dims ([int]): The type dimensions.
+        Returns:
+            dict: The serialized dictionary.
+        """
         dependency = navResult.dependency
         path = Algorithm.join("_", dependency.baseLocationWithoutRef)
         result = { "library": str(dependency.location[0]), "name": path }
-        if dims:
-            result["dims"] = dims
-
+        LinkedProjectYamlSerializer._add_opt(result, "dims", dims)
         return result
 
     @staticmethod
     def _expression_ast_to_dict(ast):
-        subDict = { "kind": str(ast.atom.kind) }
+        """
+        Serialize an AST to a dictionary.
 
-        if ast.isRef:
-            subDict["ref"] = True
+        Args:
+            ast: The AST to serialize.
+        Returns:
+            dict: The serialized dictionary.
+        """
+        subDict = { "kind": str(ExpressionAtomKindToCategory.get(ast.atom.kind)).split(".")[1] }
 
-        children = [LinkedProjectYamlSerializer._expression_ast_to_dict(child) for child in ast.children]
-        if children:
-            subDict["children"] = children
+        LinkedProjectYamlSerializer._add_opt(subDict, "ref", ast.isRef)
+        LinkedProjectYamlSerializer._add_opt(subDict, "children", [LinkedProjectYamlSerializer._expression_ast_to_dict(child) for child in ast.children])
 
         return { str(ast.atom.token): subDict }
 

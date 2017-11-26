@@ -828,6 +828,31 @@ class Instruction(Locatable):
 
             return Instruction(parser.references, parent, anchor, [], kind, expression=expression)
 
+class ExpressionAtomKindCategory(Enum):
+    """
+    Enumeration of all expression atom kind categories.
+
+    Attributes:
+        Var (int): The ExpressionAtom is a variable.
+        Number (int): The ExpressionAtom is a number.
+        Function (int): The ExpressionAtom is a function invocation.
+        Array (int): The ExpressionAtom is an array.
+        Template (int): The ExpressionAtom is a template.
+        UnaryOp (int): The ExpressionAtom is a unary operator.
+        BinaryOp (int): The ExpressionAtom is a binary operator.
+        Delimiter (int): The ExpressionAtom is a delimiter.
+    """
+
+    Var = 0
+    Number = 1
+    String = 2
+    Function = 3
+    Array = 4
+    Template = 5
+    UnaryOp = 6
+    BinaryOp = 7
+    Delimiter = 8
+
 class ExpressionAtomKind(Enum):
     """
     Enumeration of all ExpressionAtom kinds.
@@ -858,6 +883,41 @@ class ExpressionAtomKind(Enum):
     UnaryOp = 9
     BinaryOp = 10
     Delimiter = 11
+
+class ExpressionAtomKindToCategory:
+    """
+    A helper class to map atom kinds to their category values.
+
+    Attributes:
+        _categoryMap ([objects.ExpressionAtomKindCategory]): Maps atom kinds to categories.
+    """
+
+    _categoryMap = [ \
+            ExpressionAtomKindCategory.Var, # Var
+            ExpressionAtomKindCategory.Number, # Number
+            ExpressionAtomKindCategory.String, # String
+            ExpressionAtomKindCategory.Function, # FunctionBegin
+            ExpressionAtomKindCategory.Function, # FunctionEnd
+            ExpressionAtomKindCategory.Array, # ArrayBegin
+            ExpressionAtomKindCategory.Array, # ArrayEnd
+            ExpressionAtomKindCategory.Template, # TemplateBegin
+            ExpressionAtomKindCategory.Template, # TemplateEnd
+            ExpressionAtomKindCategory.UnaryOp, # UnaryOp
+            ExpressionAtomKindCategory.BinaryOp, # BinaryOp
+            ExpressionAtomKindCategory.Delimiter # Delimiter
+        ]
+
+    @staticmethod
+    def get(value):
+        """
+        Returns the expression atom category from an enum value.
+
+        Args:
+            value (ExpressionAtomKind): The atom kind.
+        Returns:
+            ExpressionAtomKindCategory: The expression atom kind category.
+        """
+        return ExpressionAtomKindToCategory._categoryMap[value.value]
 
 class ExpressionAtom:
     """
