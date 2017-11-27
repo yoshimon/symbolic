@@ -324,13 +324,12 @@ class Locatable:
         """
         Return whether a reference with a given name exists.
 
-        Args
+        Args:
             name (str): The reference name.
         Returns:
             bool: True, if the reference exists. Otherwise False.
         """
         return any(str(ref) == name for ref in self.references)
-
 
     def validate_no_system_annotations(self):
         """Ensure that there are no system annotation associated to this object."""
