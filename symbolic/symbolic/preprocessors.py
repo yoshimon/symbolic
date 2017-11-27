@@ -54,10 +54,10 @@ class PPT:
 
     def combine(self, other):
         """
-        Combine another PPT on top of the current table.
+        Combine this PPT with another PPT.
 
         Args:
-            other (preprocessors.PPT): The other pre-processor table.
+            other (preprocessors.PPT): The other pre-processor table to merge on top.
         Returns:
             preprocessors.PPT: The new pre-processor table.
         """

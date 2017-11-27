@@ -88,7 +88,7 @@ class LibraryDependencyError(Exception):
 
 class SourceError(Exception):
     """
-    An exception base class, that indicates an error that can be located in the source.
+    An exception base class, that indicates an error which can be located in the source.
 
     Attributes:
         anchor (lexer.Anchor): The source code anchor.

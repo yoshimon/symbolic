@@ -23,7 +23,10 @@ class ProjectConfiguration:
     A configuration for a symbolic project.
 
     Attributes:
-        projectPPT (preprocessors.PPT): The project-wide pre-processor table.
+        libraryDirectoryPaths (list): A list of library directory paths.
+        systemmTypes (dict): Maps system typenames (void, float, etc.) to user typename strings.
+        ppt (preprocessors.PPT): The project-wide pre-processor table.
+        libraryNames (set): The library names within this project.
     """
 
     def __init__(self, filePath):
@@ -33,7 +36,6 @@ class ProjectConfiguration:
         Args:
             filePath (paths.VirtualPath): The file path to the configuration.
         """
-        self.projectPPT = None
         self.libraryDirectoryPaths = []
         self.systemTypes = {}
         self.ppt = PPT(optFilePath=filePath.with_extension(".pp"))
@@ -87,8 +89,6 @@ class LibraryConfiguration:
         self.preprocessorModuleFilePath = None
         self.preprocessorClass = ""
         self.ppt = PPT(optFilePath=filePath.with_extension(".pp"))
-
-        # Extract the library name from the path
         self.libName = filePath.expanded().folder_name().text
 
         if filePath:
@@ -115,7 +115,13 @@ class LibraryConfiguration:
                 self.preprocessorClass = yamlLibFilePP.get("class", "")
 
 class LibraryDependencyGraph:
-    """A dependency graph for libraries in a project."""
+    """
+    A dependency graph for libraries in a project.
+
+    Attributes:
+        projConfig (project.ProjectConfiguration): The project configuration.
+        graph (nx.DiGraph): The library dependency graph.
+    """
 
     def __init__(self, projConfig):
         """

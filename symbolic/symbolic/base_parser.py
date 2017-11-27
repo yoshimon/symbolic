@@ -12,8 +12,8 @@ class BaseParser:
     A base class for all parsers.
 
     Attributes:
-        libName (str): The library name.
-        fileName (str): The file name.
+        libName (str): The library name. This will be associated with the default EOF token.
+        fileName (str): The file name. This will be associated with the default EOF token.
         tokens ([lexer.Symto]): The token list.
         tokenIdx (int): The token index.
         token (lexer.Symto): The symbolic token.
@@ -21,13 +21,13 @@ class BaseParser:
         namespaceStack ([objects.Namespace]): The namespace stack.
     """
 
-    def __init__(self, libName, fileName, tokens):
+    def __init__(self, tokens):
         """
         Initialize the object.
 
         Args:
-            libName (str): The library name.
-            fileName (str): The file name.
+            libName (str): The library name. This will be associated with the default EOF token.
+            fileName (str): The file name. This will be associated with the default EOF token.
             tokens ([lexer.Symto]): The token list.
         """
         self.reset(libName, fileName, tokens)
@@ -46,8 +46,8 @@ class BaseParser:
         Reset the parser.
 
         Args:
-            libName (str): The library name.
-            fileName (str): The file name.
+            libName (str): The library name. This will be associated with the default EOF token.
+            fileName (str): The file name. This will be associated with the default EOF token.
             tokens ([lexer.Symto]): The token stream.
         """
         self.libName = libName
@@ -67,7 +67,7 @@ class BaseParser:
         Advance the parser by one token.
 
         Returns:
-            lexer.Symto: The new token.
+            lexer.Symto: The next token.
         """
         if self.is_eof():
             raise UnexpectedEOFError(self.token.anchor)
@@ -98,7 +98,7 @@ class BaseParser:
         Step the parser back by one token.
 
         Returns:
-            lexer.Symto: The new token.
+            lexer.Symto: The previous token.
         """
         if self.tokenIdx == 0:
             raise UnexpectedEOFError(self.token.anchor)
@@ -460,7 +460,7 @@ class BaseParser:
         """
         Fetch everything between two delimiters.
 
-        Respects nested brackets.
+        Nested brackets will be ignored.
 
         Args:
             startDelim (str): The starting delimiter.

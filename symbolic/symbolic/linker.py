@@ -23,7 +23,7 @@ class ScopeState(Enum):
     """
 
     Default = 0
-    Loop = 2
+    Loop = 1
 
 class Dependency:
     """
@@ -2029,8 +2029,9 @@ class LinkedProject:
 
                 for locatable in locatable.locatables:
                     if isinstance(locatable, MemberList):
-                        navResult = self.linkableProject.links[Dependency(locatable.typename)]
-                        typeDag.add_edge(navResult.dependency, dependency) # MemberType -> Struct
+                        if not locatable.typename.dims:
+                            navResult = self.linkableProject.links[Dependency(locatable.typename)]
+                            typeDag.add_edge(navResult.dependency, dependency) # MemberType -> Struct
             elif isinstance(locatable, Alias):
                 typeDag.add_node(dependency)
                 aliasDependency = dependency

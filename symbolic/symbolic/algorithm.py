@@ -8,7 +8,7 @@ class Algorithm:
     @staticmethod
     def dt_ms_string(start):
         """
-        Return a pretty string for a time delta with a given start value.
+        Return a pretty "mm:ss" string for a time delta with a given start value.
 
         Args:
             start: The start date time.
@@ -46,6 +46,8 @@ class Algorithm:
     def zip_all(a, b, predicate):
         """
         Compare two sequences for equality using a specified predicate.
+
+        Assuming both sequences have the same length, this is equivalent to a zip(all(...)) call.
 
         Args:
             a: The first sequence.
