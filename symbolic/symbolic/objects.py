@@ -2411,6 +2411,7 @@ class Typename(Locatable):
 
         self.templateParameters = templateParameters
         self.dims = [] if dims is None else dims
+        self.dims = [] if all(d == 1 for d in self.dims) else self.dims
 
     def validate(self):
         """Validate the object."""
