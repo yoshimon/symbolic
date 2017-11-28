@@ -14,7 +14,7 @@
     <RootNamespace>symbolic</RootNamespace>
     <InterpreterId>Global|PythonCore|3.6</InterpreterId>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <CommandLineArguments>"D:\Projects\Symbolic\UnitTest\project.yaml"</CommandLineArguments>
+    <CommandLineArguments>"D:\Projects\Symbolic\UnitTest\project.yaml" -d</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <IsWindowsApplication>False</IsWindowsApplication>
   </PropertyGroup>

@@ -169,6 +169,7 @@ class Location:
 
     Attributes:
         path ([objects.RelativeLocation]): A list of relative location specifiers.
+        pathWithoutRef ([objects.RelativeLocation]): A list of relative location specifiers without relative locations marked as a reference.
     """
 
     def __init__(self, path):

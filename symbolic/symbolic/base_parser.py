@@ -21,7 +21,7 @@ class BaseParser:
         namespaceStack ([objects.Namespace]): The namespace stack.
     """
 
-    def __init__(self, tokens):
+    def __init__(self, libName, fileName, tokens):
         """
         Initialize the object.
 
