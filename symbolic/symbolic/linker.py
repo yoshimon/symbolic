@@ -1059,6 +1059,10 @@ class LinkableProject:
             leftNR = self._verify_expression_ast_recursive(container, localVars, left, newLocalVars, isOptional=isNewVarOp, lhs=lhs, isAssignment=isAssignOp)
         leftResolved = leftNR if isStructOp else None
         if leftResolved is not None and leftResolved.explicitLocation[-1].dims:
+            # Built-in array intrinsic functions (size, type, etc.)
+            if isStructOp:
+                pass
+
             raise MissingArrayDimensionsError(left.atom.token.anchor)
 
         rightNR = self._verify_expression_ast_recursive(container, localVars, right, newLocalVars, lhs=leftResolved, isAssignment=(isAssignment and not isAssignOp))

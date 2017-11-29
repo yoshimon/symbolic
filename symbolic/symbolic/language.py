@@ -32,11 +32,12 @@ class Language:
     keywords = { "if", "elif", "else", "return", "for", "while", "do", "break", "continue", value, this, ref }
     systemTypenames = { "void", "int", "float", "bool", "string" }
     invalidNames = systemTypenames.union(keywords)
-    tokenConcatenation = r"><" # As agreed upon by the committee (reviewed by eppo).
-    tokenAdd = r">+<" # As agreed upon by the committee (reviewed by eppo).
-    tokenSub = r">-<" # As agreed upon by the committee (reviewed by eppo).
-    tokenMul = r">*<" # As agreed upon by the committee (reviewed by eppo).
-    tokenDiv = r">/<" # As agreed upon by the committee (reviewed by eppo).
+    tokenConcatenation = r"><" # eppo
+    tokenAdd = r">+<"
+    tokenSub = r">-<"
+    tokenMul = r">*<"
+    tokenDiv = r">/<"
+    countTemplateArgs = "#"
     noConstructor = "no_constructor"
     noAssignment = "no_assignment"
     static = "static"

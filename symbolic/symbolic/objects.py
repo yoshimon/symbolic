@@ -1250,11 +1250,8 @@ class Expression(Named):
                             out.append(stackTop)
                             stack.pop()
 
-                            # Combine template <>() or <>[] with dummy None op.
-                            if stackTop.token is None:
-                                out.append(ExpressionAtom(None, ExpressionAtomKind.BinaryOp))
-
-                            # If this is a template function call switch to that state.
+                            # Unnamed functions and array indexing, for example f()[0] or f<>().
+                            # We just pretend these are part of the function call.
                             if t1 == "(":
                                 out.append(ExpressionAtom(None, ExpressionAtomKind.FunctionBegin))
                                 states.append(State.Function)

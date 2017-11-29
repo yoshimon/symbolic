@@ -481,15 +481,25 @@ class SymbolicLexer(RegexLexer):
         """
         newTokens = []
         skipNext = False
+        lastTokenIdx = len(tokens) - 1
         for i, t in enumerate(tokens):
             if skipNext:
                 skipNext = False
                 continue
 
             ts = str(t)
-            if ts in [Language.tokenConcatenation, Language.tokenAdd, Language.tokenSub, Language.tokenMul, Language.tokenDiv]:
+            if ts == Language.countTemplateArgs and i < lastTokenIdx:
+                nextT = tokens[i+1]
+                nextStr = str(nextT)
+
+                argCount = str(nextStr.count(",") + 1)
+
+                argCountT = Symto.from_token(t, Token.Number.Integer, argCount)
+                newTokens.append(argCountT)
+                skipNext = True
+            elif ts in [Language.tokenConcatenation, Language.tokenAdd, Language.tokenSub, Language.tokenMul, Language.tokenDiv]:
                 # Concat if possible.
-                if (i > 0) and (i < len(tokens) - 1):
+                if i > 0 and i < lastTokenIdx:
                     prevT = tokens[i-1]
                     nextT = tokens[i+1]
 
