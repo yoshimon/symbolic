@@ -585,8 +585,13 @@ class LinkableProject:
             if not isinstance(namespace, Namespace):
                 return None
 
+            if locationKind == LocationKind.Type:
+                validLocatables = (Namespace, Alias)
+            else:
+                validLocatables = (Namespace)
+
             for loc in namespace.locatables:
-                if isinstance(loc, Namespace) and loc.token == token:
+                if isinstance(loc, validLocatables) and loc.token == token:
                     objNR = self._ast_try_navigate_dependency(loc, True)
                     return objNR
 
