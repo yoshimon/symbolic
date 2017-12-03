@@ -8,6 +8,9 @@ class Language:
         ref (str): The 'ref' keyword.
         this (str): The 'this' keyword.
         value (str): The 'value' keyword.
+        true (str): The 'true' keyword.
+        false (str): The 'false' keyword.
+        bools ({str}): All boolean keywords.
         keywords ({str}): All keywords.
         systemTypenames ({str}): All built-in typenames.
         invalidNames ({str}): All invalid object names.
@@ -29,8 +32,16 @@ class Language:
     ref = "ref"
     this = "this"
     value = "value"
-    keywords = { "if", "elif", "else", "return", "for", "while", "do", "break", "continue", value, this, ref }
-    systemTypenames = { "void", "int", "float", "bool", "string" }
+    true = "true"
+    false = "false"
+    bools = { true, false }
+    keywords = { "if", "elif", "else", "return", "for", "while", "do", "break", "continue", value, this, ref, true, false }
+    void = "void"
+    int = "int"
+    float = "float"
+    bool = "bool"
+    string = "string"
+    systemTypenames = { void, int, float, bool, string }
     invalidNames = systemTypenames.union(keywords)
     tokenConcatenation = r"><" # eppo
     tokenAdd = r">+<"

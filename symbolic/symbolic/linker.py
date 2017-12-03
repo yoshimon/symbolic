@@ -275,6 +275,12 @@ class AstNavigationResult:
     A navigation result used during the AST validation phase.
 
     This is a convenience class to extract from a navigation result with an expected dependency match count of exactly one.
+
+    Attributes:
+        dependency (linker.Dependency): The navigation result dependency object.
+        explicitLocation (objects.Location): The explicit location.
+        isLHSType (bool): True, if this is a LHS type. Otherwise False.
+        isVar (bool): A hackish way to encode if this is a variable from a variable navigation query.
     """
 
     def __init__(self, navResult, isLHSType):
@@ -292,6 +298,7 @@ class AstNavigationResult:
 
         self.explicitLocation = Location(explicitLoc)
         self.isLHSType = isLHSType
+        self.isVar = False
 
     def as_array(self, dims):
         """
@@ -366,6 +373,7 @@ class LinkableProject:
         self.links = {} # Maps unresolved dependencies to their resolved counterparts.
         self.locationConflicts = [] # Locations that point to the same endpoint (conflicts).
         self.libName = None # The name of the library that is being monitored.
+        self.fileName = None # The name of the file that is being monitored.
         self.templateLinks = {} # Maps locations to template instantiation results.
         self.functions = [] # An internal cache of function objects inside the current library.
         self.properties = [] # An internal cache of properties objects inside the current library.
@@ -523,7 +531,7 @@ class LinkableProject:
         propertyParameters = list(parameters)
 
         if not isStatic:
-            propertyParameters.insert(0, Parameter.this_parameter(struct.references, struct.location()))
+            propertyParameters.insert(0, Parameter.this_parameter(struct.token.anchor.libName, struct.token.anchor.fileName, struct.references, struct.location()))
 
         propertyNR = self._try_find_property(struct, name, propertyParameters)
         if propertyNR is not None:
@@ -553,29 +561,34 @@ class LinkableProject:
 
         return self._ast_try_navigate_dependency(memberTypename, False)
 
-    def _try_verify_ast_namespace_object(self, atom, lhs):
+    def _try_verify_ast_namespace_object(self, locationKind, lhs, token, references):
         """
         Verify a namespace object in an AST.
 
         Args:
-            atom (objects.ExpressionAtom): The root atom.
+            locationKind (objects.LocationKind): Either LocationKind.Namespace or LocationKind.Type.
             lhs (linker.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
+            token (lexer.Symto): The namespace name token.
+            references (list or None): The references to use for lookups.
         Returns:
             linker.AstNavigationResult or None: The location of the resulting type of this AST.
         """
         if lhs is None:
-            return None
+            # Non-dependent lookup.
+            location = RelativeLocation(locationKind, token).location()
+            typename = Typename.from_location(token.anchor.libName, token.anchor.fileName, references, location)
+            navResult = self._ast_try_navigate_dependency(typename, True)
+            if navResult is not None and navResult.explicitLocation[-1].kind == locationKind:
+                return navResult
+        else:
+            namespace = lhs.dependency.locatable
+            if not isinstance(namespace, Namespace):
+                return None
 
-        namespace = lhs.dependency.locatable
-        if not isinstance(namespace, Namespace):
-            return None
-
-        for loc in namespace.locatables:
-            if isinstance(loc, Namespace) and loc.token == atom.token:
-                libName = str(lhs.explicitLocation[0])
-                loc.token.anchor.libName = libName
-                objNR = self._ast_try_navigate_dependency(loc, True)
-                return objNR
+            for loc in namespace.locatables:
+                if isinstance(loc, Namespace) and loc.token == token:
+                    objNR = self._ast_try_navigate_dependency(loc, True)
+                    return objNR
 
         return None
 
@@ -597,71 +610,33 @@ class LinkableProject:
         """
         if lhs is None:
             # Handle boolean values: true, false.
-            if atom.token in ["true", "false"]:
+            if str(atom.token) in Language.bools:
                 boolTypename = self.native_bool_typename(container.references)
                 navResult = self._ast_navigate_dependency(boolTypename, False)
+                navResult.isVar = True
                 return navResult
 
             # Try local variables next.
             varNR = localVars.get(str(atom.token), None)
             if varNR is not None:
+                varNR.isVar = True
                 return varNR
+        else:
+            # Try dependent lookup as struct member.
+            memberNR = self._try_verify_ast_member_or_property(container, atom.token, lhs, isAssignment)
+            if memberNR is not None:
+                memberNR.isVar = True
+                return memberNR
 
-        # Try dependent lookup as struct member.
-        memberNR = self._try_verify_ast_member_or_property(container, atom.token, lhs, isAssignment)
-        if memberNR is not None:
-            return memberNR
-
-        # Try dependent lookup as namespace object.
-        namespaceObjNR = self._try_verify_ast_namespace_object(atom, lhs)
+        # Try lookup as namespace object.
+        namespaceObjNR = self._try_verify_ast_namespace_object(LocationKind.Namespace, lhs, atom.token, container.references)
         if namespaceObjNR is not None:
             return namespaceObjNR
-
-        # Try as object lookup, climbing up the hierarchy.
-        # Could be a namespace, struct or alias.
-        navResult = self._ast_try_navigate_any([LocationKind.Namespace, LocationKind.Type], atom.token, container.references)
-        if navResult is not None:
-            return navResult
 
         if not isOptional:
             raise UnresolvedSymbolError(atom.token)
 
         return None
-
-    def _ast_try_navigate_any(self, locationKinds, token, references):
-        """
-        Try to navigate any of the specified location types.
-
-        Args:
-            locationKinds ([objects.LocationKind]): The location kinds to navigate.
-            token (lexer.Symto): The name to navigate.
-            references ([objects.Reference]): The references.
-        """
-        for locationKind in locationKinds:
-            location = RelativeLocation(locationKind, token).location()
-            typename = Typename.from_location(references, location)
-            navResult = self._ast_try_navigate_dependency(typename, True)
-            if navResult is not None and navResult.explicitLocation[-1].kind == locationKind:
-                return navResult
-
-        return None
-
-    def _try_verify_ast_typename(self, references, token, children, lhs):
-        """
-        Verify an AST with a typename.
-
-        Args:
-            container (objects.Locatable): The locatable container (parent) object.
-            atom (objects.ExpressionAtom): The root atom.
-            children (objects.ExpressionAST): The child nodes.
-            localVars (dict): Lookup table that maps variable names to resolved locations.
-            newLocalVars (dict): Lookup table that maps new variable names to resolved locations.
-            isOptional (bool): State flag which indicates that the query should not throw an error on failure.
-            lhs (linker.AstNavigationResult or None): The LHS in the AST. This can be a struct or namespace for example.
-        Returns:
-            linker.AstNavigationResult: The location of the resulting type of this AST.
-        """
-        return self._ast_try_navigate_any([LocationKind.Type], token, references)
 
     def _verify_ast_number(self, container, atom, children, localVars, newLocalVars, isOptional, lhs, isAssignment):
         """
@@ -733,7 +708,7 @@ class LinkableProject:
         """
         # Extract child information.
         childNRs = [self._verify_expression_ast_recursive(container, localVars, child, newLocalVars) for child in children]
-        childTypenames = [Typename.from_location(container.references, childNR.explicitLocation) for childNR in childNRs]
+        childTypenames = [Typename.from_location(atom.token.anchor.libName, atom.token.anchor.fileName, container.references, childNR.explicitLocation) for childNR in childNRs]
         parameters = [Parameter(container, child.atom.token, [], None, childTypenames[i], child.isRef) for i, child in enumerate(children)]
 
         isExplicitRef = lhs is not None
@@ -768,28 +743,33 @@ class LinkableProject:
         """
         # Extract child information.
         isScalar = len(children) > 0
-        for child in children:
-            childNR = self._verify_expression_ast_recursive(container, localVars, child, newLocalVars)
-            childTypename = Typename.from_location(container.references, childNR.explicitLocation)
-
-            # Make sure the child (here: array index) resolves to an integer.
+        if isScalar:
             intTypename = self.native_int_typename(container.references)
             intNR = self._ast_navigate_dependency(intTypename, False)
 
-            if childNR != intNR:
-                raise InvalidArrayIndexTypeError(atom.token.anchor)
+            # Make sure the child (here: array index) resolves to an integer.
+            for child in children:
+                childNR = self._verify_expression_ast_recursive(container, localVars, child, newLocalVars)
+                childTypename = Typename.from_location(atom.token.anchor.libName, atom.token.anchor.fileName, container.references, childNR.explicitLocation)
 
-            if child.atom.token != "1":
-                isScalar = False
+                if childNR != intNR:
+                    raise InvalidArrayIndexTypeError(atom.token.anchor)
 
+                if child.atom.token != "1":
+                    isScalar = False
+
+        # Variable access by index.
         varNR = self._verify_ast_var(container, atom, children, localVars, newLocalVars, True, lhs, isAssignment)
         if varNR:
             # Make sure the indexing matches the type dimensions.
-            varTypeDims = varNR.explicitLocation[-1].dims
-            if len(varTypeDims) > 0: # False positive
-                expectedDims = max(1, len(varTypeDims))
-                if len(children) != expectedDims:
-                    raise InvalidArrayIndexDimensionsError(atom.token.anchor, expectedDims)
+            if varNR.isVar:
+                varTypeDims = varNR.explicitLocation[-1].dims
+                expectedDims = len(varTypeDims)
+                if len(children) != expectedDims or (expectedDims == 1 and children[0].atom.token is None):
+                    if expectedDims == 0:
+                        raise MissingArrayTypeError(atom.token.anchor)
+                    else:
+                        raise InvalidArrayIndexDimensionsError(atom.token.anchor, expectedDims)
 
                 # Remove array bounds.
                 baseTypeNR = varNR.as_base()
@@ -799,7 +779,8 @@ class LinkableProject:
         if memberNR:
             return memberNR
 
-        baseTypeNR = self._try_verify_ast_typename(container.references, atom.token, children, lhs)
+        # Array creation.
+        baseTypeNR = self._try_verify_ast_namespace_object(LocationKind.Type, lhs, atom.token, container.references)
         if baseTypeNR is not None:
             # int[1,1,1...] == int
             if isScalar:
@@ -828,7 +809,7 @@ class LinkableProject:
         if lhs is None:
             raise MissingArrayTypeError(atom.token.anchor)
 
-        assert(False)
+        assert False
 
     def native_typename(self, references, name):
         """
@@ -844,7 +825,7 @@ class LinkableProject:
         if loc is None:
             raise UnmappedNativeTypename(name)
 
-        return Typename.from_location(references, loc)
+        return Typename.from_location(self.libName, self.fileName, references, loc)
 
     def native_int_typename(self, references):
         """
@@ -855,7 +836,7 @@ class LinkableProject:
         Returns:
             Typename: The typename.
         """
-        return self.native_typename(references, "int")
+        return self.native_typename(references, Language.int)
 
     def native_void_typename(self, references):
         """
@@ -866,7 +847,7 @@ class LinkableProject:
         Returns:
             Typename: The typename.
         """
-        return self.native_typename(references, "void")
+        return self.native_typename(references, Language.void)
 
     def native_float_typename(self, references):
         """
@@ -877,7 +858,7 @@ class LinkableProject:
         Returns:
             Typename: The typename.
         """
-        return self.native_typename(references, "float")
+        return self.native_typename(references, Language.float)
 
     def native_bool_typename(self, references):
         """
@@ -888,7 +869,7 @@ class LinkableProject:
         Returns:
             Typename: The typename.
         """
-        return self.native_typename(references, "bool")
+        return self.native_typename(references, Language.bool)
 
     def native_string_typename(self, references):
         """
@@ -899,7 +880,7 @@ class LinkableProject:
         Returns:
             Typename: The typename.
         """
-        return self.native_typename(references, "string")
+        return self.native_typename(references, Language.string)
 
     def _verify_ast_template(self, container, atom, children, localVars, newLocalVars, isOptional, lhs, isAssignment):
         """
@@ -941,7 +922,7 @@ class LinkableProject:
         # Extract child information.
         child = children[0]
         childNR = self._verify_expression_ast_recursive(container, localVars, child, newLocalVars)
-        childTypename = Typename.from_location(container.references, childNR.explicitLocation)
+        childTypename = Typename.from_location(atom.token.anchor.libName, atom.token.anchor.fileName, container.references, childNR.explicitLocation)
 
         # Lookup the operator.
         childParameter = Parameter(container, child.atom.token, [], None, childTypename, True)
@@ -1092,8 +1073,8 @@ class LinkableProject:
             return rightNR
         else:
             # Build typenames for the resolved locations.
-            leftTypename = Typename.from_location(container.references, leftNR.explicitLocation)
-            rightTypename = Typename.from_location(container.references, rightNR.explicitLocation)
+            leftTypename = Typename.from_location(left.atom.token.anchor.libName, left.atom.token.anchor.fileName, container.references, leftNR.explicitLocation)
+            rightTypename = Typename.from_location(right.atom.token.anchor.libName, right.atom.token.anchor.fileName, container.references, rightNR.explicitLocation)
 
             # Turn them into parameters.
             pLeft = Parameter(container, left.atom.token, [], None, leftTypename, isAssignOp)
@@ -1395,7 +1376,7 @@ class LinkableProject:
             # Insert it into the collection so we can look it up.
             # Update the references to match the call site.
             rootNamespace.references = references
-            self.insert_unit(rootNamespace)
+            self.insert_unit(lexer.fileName, rootNamespace)
 
         result = self.navigate_to_template_object(dependencyLocationStr)
         return result
@@ -1549,13 +1530,16 @@ class LinkableProject:
         struct = structNR.dependency.locatable
         self._generate_type_constructor(dependency.locatable, struct)
 
-    def insert_unit(self, rootNamespace):
+    def insert_unit(self, fileName, rootNamespace):
         """
         Insert an unresolved translation unit into the collection.
 
         Args:
+            fileName (str): The unit file path.
             rootNamespace (objects.Namespace): The global namespace.
         """
+        self.fileName = fileName
+
         # Initialize library root namespace.
         if self.libName not in self.libRoots:
             self.libRoots[self.libName] = rootNamespace
@@ -1597,6 +1581,7 @@ class LinkableProject:
 
         self.libNamespaces = dict()
         self.libName = libName
+        self.fileName = None
         self.functions = []
         self.properties = []
         self.preImports = preImports
@@ -1609,6 +1594,7 @@ class LinkableProject:
 
         # Close this library
         self.libName = None
+        self.fileName = None
         self.functions = []
         self.properties = []
 
@@ -1624,7 +1610,7 @@ class LinkableProject:
             return
 
         # The return type is the struct.
-        returnTypename = Typename.from_location(locatable.references, struct.location())
+        returnTypename = Typename.from_location(struct.token.anchor.libName, struct.token.anchor.fileName, locatable.references, struct.location())
 
         # The parameters are deduced from the member lists.
         parameters = []
@@ -1646,7 +1632,7 @@ class LinkableProject:
         if Annotation.has(Language.noAssignment, struct.annotations):
             return
 
-        typename = Typename.from_location(struct.references, struct.location())
+        typename = Typename.from_location(struct.token.anchor.libName, struct.token.anchor.fileName, struct.references, struct.location())
         unnamed = Symto.from_token(struct.token, Token.Name, "")
         lhs = Parameter(None, unnamed, [], None, typename, True)
         rhs = Parameter(None, unnamed, [], None, typename, False)

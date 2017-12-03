@@ -257,7 +257,7 @@ class Project:
                 srcFileText = filePath.read_all_text()
 
                 # Pre-process the source
-                ppSrcFileText = preprocessor.run(srcFileText, libConfig.libName, projLibFilePPT)
+                ppSrcFileText = preprocessor.run(srcFileText, libName, projLibFilePPT)
 
                 # Tokenize the source
                 lexer = SymbolicLexer(libName=libName, fileName=str(filePath))
@@ -274,7 +274,7 @@ class Project:
                         raise UnknownLibraryReferenceError(ref.anchor, ref)
 
                 # Create a dependency graph for the unit
-                linkableProject.insert_unit(rootNamespace)
+                linkableProject.insert_unit(lexer.fileName, rootNamespace)
 
                 numFilesParsed += 1
 

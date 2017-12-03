@@ -1508,16 +1508,18 @@ class Parameter(Named):
         return Parameter(parser.namespace(), token, annotations, semantic, typename, isRef)
 
     @staticmethod
-    def this_parameter(references, location):
+    def this_parameter(libName, fileName, references, location):
         """
         Creates a this-parameter for a given type.
 
         Args:
+            libName (str): The library name.
+            fileName (str): The file name.
             references ([objects.Reference]): The references.
             location (objects.Location): The typename location.
         """
-        thisTypename = Typename.from_location(references, location)
-        thisToken = Symto(Token.Name, "", "", "this", -1, -1)
+        thisTypename = Typename.from_location(libName, fileName, references, location)
+        thisToken = Symto(Token.Name, libName, fileName, "this", -1, -1)
         return Parameter(None, thisToken, [], None, thisTypename, True)
 
 class FunctionReference(Named):
@@ -1787,7 +1789,7 @@ class Property(Named):
 
         # Add implicit "this" ref.
         if not Annotation.has(Language.static, annotations):
-            thisParameter = Parameter.this_parameter(parent.references, parent.location())
+            thisParameter = Parameter.this_parameter(name.anchor.libName, name.anchor.fileName, parent.references, parent.location())
             parameters.insert(0, thisParameter)
 
         # NOTE: if set is enabled below, the value parameter is not added but injected into the variable scope later.
@@ -2584,18 +2586,20 @@ class Typename(Locatable):
         return typename
 
     @staticmethod
-    def from_location(references, location):
+    def from_location(libName, fileName, references, location):
         """
         Create a typename from a location.
 
         Args:
+            libName (str): The library name to associate with the tokens.
+            fileName (str): The file name to associate with the tokens.
             references ([objects.Reference]): The references at the specified location.
             location (objects.Location): The location.
         Returns:
             objects.Typename: The corresponding typename.
         """
-        scope = [Symto(Token.String, "", "", rl.name, 0, 0) for rl in location]
-        templateParams = [[Symto(Token.String, "", "", str(p), 0, 0) for p in rl.templateParameters] for rl in location]
+        scope = [Symto(Token.String, libName, fileName, rl.name, 0, 0) for rl in location]
+        templateParams = [[Symto(Token.String, libName, fileName, str(p), 0, 0) for p in rl.templateParameters] for rl in location]
         return Typename(references, None, scope, templateParameters=templateParams, dims=location[-1].dims)
 
 class TemplateParameter(Named):
