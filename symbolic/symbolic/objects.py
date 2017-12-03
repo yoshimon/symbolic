@@ -2012,7 +2012,7 @@ class Struct(TemplateObject, Namespace):
 
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations(Language.private, Language.deprecated, Language.static, Language.noConstructor)
+        self.validate_system_annotations(Language.private, Language.deprecated, Language.static, Language.noConstructor, Language.noAssignment)
 
     def location(self):
         """
@@ -2161,7 +2161,7 @@ class Alias(TemplateObject):
 
     def validate(self):
         """Validate the object."""
-        self.validate_system_annotations(Language.private, Language.deprecated)
+        self.validate_system_annotations(Language.private, Language.deprecated, Language.noConstructor, Language.noAssignment)
 
     def location(self):
         """
