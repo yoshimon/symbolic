@@ -661,7 +661,7 @@ class InvalidArrayIndexDimensionsError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + "Invalid array index dimensions. Expected {0}-tuple.".format(str(self.expectedDims))
+        return super().__str__() + "Invalid array index dimensions. Expected {0}.".format(str(self.expectedDims))
 
 class NativeTypenameArrayError(Exception):
     """
