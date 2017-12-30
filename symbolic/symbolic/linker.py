@@ -1530,6 +1530,9 @@ class LinkableProject:
         Args:
             dependency (linker.Dependency): The alias dependency.
         """
+        if Annotation.has(Language.noConstructor, dependency.locatable.annotations):
+            return
+
         nr = self.navigate_dependency(dependency)
         structNR = self.navigate_alias_base(nr)
         struct = structNR.dependency.locatable
