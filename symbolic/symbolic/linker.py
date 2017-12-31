@@ -277,6 +277,7 @@ class AstNavigationResult:
     This is a convenience class to extract from a navigation result with an expected dependency match count of exactly one.
 
     Attributes:
+        navResult (linker.NavigationResult): The navigation result.
         dependency (linker.Dependency): The navigation result dependency object.
         explicitLocation (objects.Location): The explicit location.
         isLHSType (bool): True, if this is a LHS type. Otherwise False.
@@ -291,6 +292,7 @@ class AstNavigationResult:
             navResult (linker.NavigationResult): The navigation result to wrap.
             isLHSType (bool): True, if this is a LHS type. Otherwise False.
         """
+        self.navResult = navResult
         self.dependency = navResult.dependency
         explicitLoc = self.dependency.location.path
         if explicitLoc[0].kind != LocationKind.Reference:
@@ -440,6 +442,7 @@ class LinkableProject:
 
         Args:
             locatable (objects.Locatable): The locatable object to search for.
+            isLHSType (bool): True, if the LHS is a type. Otherwise False.
         Returns:
             linker.AstNavigationResult or None: The navigation result or None.
         """
@@ -448,18 +451,11 @@ class LinkableProject:
         if navResult is None or navResult.dependency is None:
             return None
 
+        navResult = self.navigate_alias_base(navResult)
         astNavResult = AstNavigationResult(navResult, isLHSType)
-
-        # Navigate through aliases down to base.
-        if astNavResult.explicitLocation.path[-1].kind == LocationKind.Type:
-            navResult = self.navigate_alias_base(navResult)
-            astNavResult = AstNavigationResult(navResult, isLHSType)
 
         # Copy array dimensions, if not scalar.
         if isinstance(locatable, Typename) and locatable.dims:
-            if astNavResult.explicitLocation.path[-1].dims:
-                raise InvalidAliasDimensionsError(locatable.anchor)
-
             astNavResult = astNavResult.as_array(locatable.dims)
 
         return astNavResult
@@ -1663,6 +1659,9 @@ class LinkableProject:
             # The name has to be resolvable by now
             # Catching unresolved objects will spawn templates, if encountered
             navResult = self.navigate_dependency(dependency)
+            errorAnchor = dependency.locatable.anchor
+            allowArrayTarget = not bool(dependency.location[-1].dims)
+            self.navigate_alias_base(navResult, errorAnchor=errorAnchor, allowArrayTarget=allowArrayTarget)
             self.links[dependency] = navResult
 
             # Add new unresolved dependencies to the queue
@@ -1858,7 +1857,7 @@ class LinkableProject:
         # Invoke the verification handler.
         return self._astVerifiers[atom.kind](container, atom, children, localVars, newLocalVars, isOptional, lhs, isAssignment)
 
-    def navigate_alias_target(self, navResult):
+    def navigate_alias_target(self, navResult, anchor, *, allowArrayTarget=True):
         """
         Navigate to the next target type of an alias.
 
@@ -1866,27 +1865,33 @@ class LinkableProject:
 
         Args:
             navResult (linker.NavigationResult): The previous navigation result to continue the search from.
+            anchor (lexer.Anchor): The anchor to use for error messages.
+            allowArrayTarget (bool): True, if the target can be an array.
         Returns:
             linker.NavigationResult or None: The next navigation result or None if there was no resolvable alias.
         """
         if navResult is None:
             return None
 
-        # There should only be one alias dependency at this location.
-        dependencies = navResult.resolvedDependencyLocation.dependencies
-        dependency = next((dependency for dependency in dependencies if isinstance(dependency.locatable, Alias)), None)
-        if dependency is None:
+        dependency = navResult.dependency
+        locatable = dependency.locatable
+        if not isinstance(locatable, Alias):
             return None
 
+        targetTypename = locatable.targetTypename
+
+        if not allowArrayTarget and targetTypename.dims:
+            raise InvalidAliasDimensionsError(anchor, targetTypename.anchor)
+
         # Navigate to the target type.
-        targetTypenameDependency = Dependency(dependency.locatable.targetTypename)
+        targetTypenameDependency = Dependency(targetTypename)
         baseNavResult = self.navigate_dependency(targetTypenameDependency)
 
         # Promote base type to array type.
-        dimNavResult = baseNavResult.dependency.as_array(dependency.locatable.targetTypename.dims)
+        dimNavResult = baseNavResult.dependency.as_array(targetTypename.dims)
         return NavigationResult(baseNavResult.resolvedDependencyLocation, dimNavResult)
 
-    def navigate_alias_base(self, navResult):
+    def navigate_alias_base(self, navResult, *, errorAnchor=None, allowArrayTarget=True):
         """
         Navigate to the base type of an alias.
 
@@ -1894,9 +1899,17 @@ class LinkableProject:
 
         Args:
             navResult (linker.NavigationResult): The previous navigation result to continue the search from.
+            errorAnchor (lexer.Anchor): The error anchor to use.
+            allowArrayTarget (bool): True, if the target can be an array.
         Returns:
-            linker.NavigationResult: The next navigation result.
+            linker.NavigationResult: The final navigation result.
         """
+        if navResult.dependency.location[-1].kind != LocationKind.Type:
+            return navResult
+
+        if errorAnchor is None:
+            errorAnchor = navResult.dependency.locatable.anchor
+
         result = navResult
         visitedResults = set()
         dependencyChain = [result.dependency.location]
@@ -1905,10 +1918,11 @@ class LinkableProject:
                 raise CircularDependencyError(dependencyChain)
 
             visitedResults.add(result.dependency.location)
-            nextResult = self.navigate_alias_target(result)
+            nextResult = self.navigate_alias_target(result, errorAnchor, allowArrayTarget=allowArrayTarget)
             if nextResult is None:
                 return result
 
+            allowArrayTarget &= not bool(nextResult.dependency.location[-1].dims)
             dependencyChain.append(nextResult.dependency.location)
             result = nextResult
 

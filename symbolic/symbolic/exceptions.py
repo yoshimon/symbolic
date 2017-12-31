@@ -775,7 +775,23 @@ class SetNotSupportedError(SourceError):
         return super().__str__() + "The property does not support write access."
 
 class InvalidAliasDimensionsError(SourceError):
-    """An exception class, that indicates that aliases must be scalar."""
+    """
+    An exception class, that indicates that aliases must be scalar.
+
+    Attributes:
+        aliasAnchor (lexer.Anchor): The alias anchor causing this exception.
+    """
+
+    def __init__(self, anchor, aliasAnchor):
+        """
+        Initialize the object.
+
+        Args:
+            anchor (lexer.Anchor): The source code anchor.
+            aliasAnchor (lexer.Anchor): The alias anchor causing this exception.
+        """
+        super().__init__(anchor)
+        self.aliasAnchor = aliasAnchor
 
     def __str__(self):
         """
@@ -784,7 +800,7 @@ class InvalidAliasDimensionsError(SourceError):
         Returns:
             str: The string representation.
         """
-        return super().__str__() + "Aliases with an underlying array type may not be referenced as an array."
+        return super().__str__() + "Aliases with an underlying array type may not be referenced as an array. See {0}.".format(str(self.aliasAnchor))
 
 class ZeroDivError(SourceError):
     """An exception class, that indicates an illegal division by zero."""
