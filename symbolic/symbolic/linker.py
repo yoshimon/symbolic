@@ -814,7 +814,7 @@ class LinkableProject:
         if lhs is None:
             raise MissingArrayTypeError(atom.token.anchor)
 
-        assert False
+        raise UnresolvedSymbolError(atom.token)
 
     def native_typename(self, references, name):
         """
@@ -1624,7 +1624,7 @@ class LinkableProject:
         parameters = []
         for memberList in struct.locatables:
             if isinstance(memberList, MemberList):
-                if not Annotation.has("uninitialized", memberList.annotations):
+                if not Annotation.has(Language.uninitialized, memberList.annotations):
                     parameters += [Parameter(None, member.token, [], None, memberList.typename, False) for member in memberList]
 
         constructor = Function(locatable.references, locatable.parent, locatable.token, [], None, FunctionKind.Regular, returnTypename, parameters)
@@ -1662,7 +1662,8 @@ class LinkableProject:
 
             # The name has to be resolvable by now
             # Catching unresolved objects will spawn templates, if encountered
-            self.links[dependency] = self.navigate_dependency(dependency)
+            navResult = self.navigate_dependency(dependency)
+            self.links[dependency] = navResult
 
             # Add new unresolved dependencies to the queue
             localUnresolvedDependencies += unresolvedDependencies

@@ -51,9 +51,10 @@ class Language:
     countTemplateArgs = "#"
     noConstructor = "no_constructor"
     noAssignment = "no_assignment"
+    uninitialized = "uninitialized"
     static = "static"
     private = "private"
     deprecated = "deprecated"
     implicit = "implicit"
-    annotations = { static, private, noConstructor, noAssignment, deprecated, implicit }
+    annotations = { static, private, noConstructor, noAssignment, deprecated, implicit, uninitialized }
     minArrayDim = 1
