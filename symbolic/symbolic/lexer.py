@@ -112,6 +112,18 @@ class Symto:
         return Symto(kind, other.anchor.libName, other.anchor.fileName, text, other.anchor.line, other.anchor.column)
 
     @staticmethod
+    def empty(anchor):
+        """
+        Create an empty token at an anchor.
+
+        Args:
+            anchor (lexer.Anchor): The anchor.
+        Returns:
+            Symto: The empty token.
+        """
+        return Symto(Token.Text, anchor.libName, anchor.fileName, "", anchor.line, anchor.column)
+
+    @staticmethod
     def with_bracket_level(other, bracketLevel):
         """
         Create a token from an existing token with a new bracket level.

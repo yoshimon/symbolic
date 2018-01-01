@@ -655,8 +655,8 @@ class LinkableProject:
         Returns:
             linker.AstNavigationResult: The location of the resulting type of this AST.
         """
-        # Navigate to the numeric type (None stands for INFINITY).
-        if atom.token is None or atom.token.isInteger:
+        # Navigate to the numeric type (Empty stands for INFINITY).
+        if atom.token == "" or atom.token.isInteger:
             # Int
             typename = self.native_int_typename(container.references)
         elif atom.token.isFloat:
@@ -684,7 +684,7 @@ class LinkableProject:
         Returns:
             linker.AstNavigationResult: The location of the resulting type of this AST.
         """
-        if atom.token is None or atom.token.isString:
+        if atom.token == "" or atom.token.isString:
             # String
             typename = self.native_string_typename(container.references)
 
@@ -707,22 +707,32 @@ class LinkableProject:
         Returns:
             linker.AstNavigationResult: The location of the resulting type of this AST.
         """
+        arrayAst = None
+        if children and children[-1].atom.kind == ExpressionAtomKind.ArrayBegin:
+            arrayAst = children[-1]
+            children = children[:-1]
+
         # Extract child information.
         childNRs = [self._verify_expression_ast_recursive(container, localVars, child, newLocalVars) for child in children]
         childTypenames = [Typename.from_location(atom.token.anchor.libName, atom.token.anchor.fileName, container.references, childNR.explicitLocation) for childNR in childNRs]
         parameters = [Parameter(container, child.atom.token, [], None, childTypenames[i], child.isRef) for i, child in enumerate(children)]
 
+        result = None
         isExplicitRef = lhs is not None
         parent = lhs.dependency.locatable if isExplicitRef else container
         if isExplicitRef and isinstance(lhs.dependency.locatable, Struct):
             result = self._try_verify_ast_property(parent, atom.token, parameters, lhs.isLHSType, isAssignment)
-            if result is not None:
-                return result
         else:
             possibleMatchNR = self._try_find_function(parent, atom.token, FunctionKind.Operator if atom.token.isOp else FunctionKind.Regular, parameters, isExplicitRef=isExplicitRef)
             if possibleMatchNR is not None:
                 result = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename, False)
-                return result
+
+        if result is not None and arrayAst is not None:
+            # Verify f()[0] array access.
+            result = self._verify_ast_array(container, arrayAst.atom, arrayAst.children, localVars, newLocalVars, isOptional, result, isAssignment)
+
+        if result is not None:
+            return result
 
         raise FunctionOverloadNotFoundError(atom.token, parameters)
 
@@ -759,16 +769,18 @@ class LinkableProject:
                     isScalar = False
 
         # Variable access by index.
-        varNR = self._verify_ast_var(container, atom, children, localVars, newLocalVars, True, lhs, isAssignment)
-        if varNR:
-            if any(child.atom.token is None for child in children):
-                raise InvalidArrayIndexTypeError(atom.token.anchor)
-
+        isFunctionCallArray = atom.token == ""
+        varNR = lhs if isFunctionCallArray else None
+        varNR = self._verify_ast_var(container, atom, children, localVars, newLocalVars, True, lhs, isAssignment) if varNR is None else varNR
+        if varNR is not None:
             # Make sure the indexing matches the type dimensions.
-            if varNR.isVar:
+            if varNR.isVar or isFunctionCallArray:
+                if any(child.atom.token == "" for child in children):
+                    raise MissingArrayDimensionsError(atom.token.anchor)
+
                 varTypeDims = varNR.explicitLocation[-1].dims
                 expectedDims = len(varTypeDims)
-                if len(children) != expectedDims or (expectedDims == 1 and children[0].atom.token is None):
+                if len(children) != expectedDims or (expectedDims == 1 and children[0].atom.token == ""):
                     if expectedDims == 0:
                         raise MissingArrayTypeError(atom.token.anchor)
                     else:
@@ -779,7 +791,7 @@ class LinkableProject:
                 return baseTypeNR
 
         memberNR = self._try_verify_ast_member_or_property(container, atom.token, lhs, isAssignment)
-        if memberNR:
+        if memberNR is not None:
             return memberNR
 
         # Array creation.

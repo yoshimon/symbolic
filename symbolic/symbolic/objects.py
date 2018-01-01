@@ -1212,7 +1212,7 @@ class Expression(Named):
                         if out[-1].kind in [ExpressionAtomKind.Delimiter, ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.TemplateBegin]:
                             raise InvalidExpressionError(t.anchor)
                     elif out[-1].kind == ExpressionAtomKind.ArrayBegin:
-                        out.append(ExpressionAtom(None, ExpressionAtomKind.Number))
+                        out.append(ExpressionAtom(Symto.empty(out[-1].token.anchor), ExpressionAtomKind.Number))
 
                     # Add comma as delimiter
                     out.append(ExpressionAtom(t, ExpressionAtomKind.Delimiter))
@@ -1230,11 +1230,11 @@ class Expression(Named):
                     stack.append(ExpressionAtom(t, -1))
                 elif (t.isCloseBracket and t != '>') or (t == '>' and states[-1] == State.Template): # Special case for template >
                     # Keep track of how many parameters were added
-                    if Algorithm.pop_while(stack, lambda atom: atom.token is not None and not atom.token == t.matchingOpenBracket, lambda atom: out.append(atom)):
+                    if Algorithm.pop_while(stack, lambda atom: atom.token != "" and atom.token != t.matchingOpenBracket, lambda atom: out.append(atom)):
                         raise MissingBracketsError(t.anchor)
 
                     # Pop open bracket and state
-                    if stack[-1].token is not None:
+                    if stack[-1].token != "":
                         stack.pop()
 
                     states.pop()
@@ -1245,7 +1245,7 @@ class Expression(Named):
                         if stackTop.kind in [ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.ArrayEnd, ExpressionAtomKind.TemplateEnd]:
                             if stackTop.kind == ExpressionAtomKind.ArrayEnd and out[-1].kind in [ExpressionAtomKind.ArrayBegin, ExpressionAtomKind.Delimiter]:
                                 # Array dimension = infinity
-                                out.append(ExpressionAtom(None, ExpressionAtomKind.Number))
+                                out.append(ExpressionAtom(Symto.empty(stackTop.token.anchor), ExpressionAtomKind.Number))
 
                             out.append(stackTop)
                             stack.pop()
@@ -1253,15 +1253,15 @@ class Expression(Named):
                             # Unnamed functions and array indexing, for example f()[0] or f<>().
                             # We just pretend these are part of the function call.
                             if t1 == "(":
-                                out.append(ExpressionAtom(None, ExpressionAtomKind.FunctionBegin))
+                                out.append(ExpressionAtom(Symto.empty(t1.anchor), ExpressionAtomKind.FunctionBegin))
                                 states.append(State.Function)
-                                stack.append(ExpressionAtom(None, ExpressionAtomKind.FunctionEnd))
+                                stack.append(ExpressionAtom(Symto.empty(t1.anchor), ExpressionAtomKind.FunctionEnd))
                                 isNextOpenParenFunction = True
                                 skip = 1
                             elif t1 == "[":
-                                out.append(ExpressionAtom(None, ExpressionAtomKind.ArrayBegin))
+                                out.append(ExpressionAtom(Symto.empty(t1.anchor), ExpressionAtomKind.ArrayBegin))
                                 states.append(State.Array)
-                                stack.append(ExpressionAtom(None, ExpressionAtomKind.ArrayEnd))
+                                stack.append(ExpressionAtom(Symto.empty(t1.anchor), ExpressionAtomKind.ArrayEnd))
                                 skip = 1
                 elif t.kind is Operator:
                     # Assume this is a unary op
@@ -1326,6 +1326,14 @@ class Expression(Named):
 
                 # Restore argument count
                 argCount = argCountStack.pop()
+
+                # f()[0]
+                if len(argStack) >= 2:
+                    r1 = argStack[-1]
+                    r2 = argStack[-2]
+                    if r1.atom.kind == ExpressionAtomKind.ArrayBegin and r2.atom.kind == ExpressionAtomKind.FunctionBegin:
+                        r2.children.append(r1)
+                        argStack.pop()
             elif atom.kind == ExpressionAtomKind.UnaryOp:
                 if len(argStack) < 1:
                     raise InvalidExpressionError(atom.token.anchor)
@@ -1355,7 +1363,7 @@ class Expression(Named):
                 rhs = argStack[-1]
                 argStack = argStack[:-2]
 
-                if atom.token is not None:
+                if atom.token != "":
                     root.children = [lhs, rhs]
                 else:
                     # Fake template <>None() or <>None[] binary operator None
