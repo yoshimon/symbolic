@@ -751,7 +751,6 @@ class LinkableProject:
             # Make sure the child (here: array index) resolves to an integer.
             for child in children:
                 childNR = self._verify_expression_ast_recursive(container, localVars, child, newLocalVars)
-                childTypename = Typename.from_location(atom.token.anchor.libName, atom.token.anchor.fileName, container.references, childNR.explicitLocation)
 
                 if childNR != intNR:
                     raise InvalidArrayIndexTypeError(atom.token.anchor)
@@ -762,6 +761,9 @@ class LinkableProject:
         # Variable access by index.
         varNR = self._verify_ast_var(container, atom, children, localVars, newLocalVars, True, lhs, isAssignment)
         if varNR:
+            if any(child.atom.token is None for child in children):
+                raise InvalidArrayIndexTypeError(atom.token.anchor)
+
             # Make sure the indexing matches the type dimensions.
             if varNR.isVar:
                 varTypeDims = varNR.explicitLocation[-1].dims
@@ -1661,7 +1663,7 @@ class LinkableProject:
             navResult = self.navigate_dependency(dependency)
             errorAnchor = dependency.locatable.anchor
             allowArrayTarget = not bool(dependency.location[-1].dims)
-            self.navigate_alias_base(navResult, errorAnchor=errorAnchor, allowArrayTarget=allowArrayTarget)
+            navResult = self.navigate_alias_base(navResult, errorAnchor=errorAnchor, allowArrayTarget=allowArrayTarget)
             self.links[dependency] = navResult
 
             # Add new unresolved dependencies to the queue
