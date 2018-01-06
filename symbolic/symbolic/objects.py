@@ -1440,6 +1440,7 @@ class Parameter(Named):
     Args:
         typename (objects.Typename): The typename.
         isRef (bool): True, if the parameter is a reference. Otherwise False.
+        _deducedAstNavResult (linker.AstNavigationResult): The cached AST navigation result for this parameter.
     """
 
     @Decorators.validated
@@ -1458,6 +1459,7 @@ class Parameter(Named):
         super().__init__(typename.references, parent, token, annotations, semantic, allowKeywordName=True)
         self.typename = typename
         self.isRef = isRef
+        self._deducedAstNavResult = None
 
     def validate(self):
         """Validate the object."""

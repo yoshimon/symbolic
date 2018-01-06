@@ -62,7 +62,6 @@ class Dependency:
         # Internal caches.
         self._hash = None
         self._linkableProject = None
-        self._resolvedParameterLocations = []
 
     def __eq__(self, other):
         """
@@ -96,30 +95,6 @@ class Dependency:
             str: The location string.
         """
         return "{0} using {1}".format(str(self.location), NavigationQuery.references_to_string(self.references))
-
-    def resolve_parameter_locations(self, linkableProject):
-        """
-        Return a generator sequence for the resolved parameter types.
-
-        Args:
-            linkableProject (linker.LinkableProject): The dependency collection to resolve the parameter with.
-        Returns:
-            list: The resolved parameter types.
-        """
-        if self._linkableProject != linkableProject:
-            self._linkableProject = linkableProject
-            self._resolvedParameterLocations = []
-
-            # Rebuild cache.
-            if linkableProject is not None:
-                for p in self.baseLocation[-1].parameters:
-                    pDep = Dependency(p)
-                    pResolved = linkableProject.navigate_dependency(pDep)
-                    pResolvedBase = linkableProject.navigate_alias_base(pResolved)
-                    pResolvedLocation = pResolvedBase.resolvedDependencyLocation
-                    self._resolvedParameterLocations.append(pResolvedLocation)
-
-        return self._resolvedParameterLocations
 
     def as_array(self, dims):
         """
@@ -1694,11 +1669,13 @@ class LinkableProject:
 
         self.unresolvedAliasDefaultConstructorDependencies.clear()
 
+        # Canonicalize all parameter signatures.
+        self.deduce_all_alias_parameters()
+
         # We solve location conflicts due to clashing parameter signatures by comparing the types now.
         self._solve_location_conflicts()
 
         # Now that all members and function parameters are resolved we can look at the instructions within the functions.
-        self.deduce_all_alias_parameters()
         self._verify_functions()
         self._verify_properties()
 
@@ -1720,6 +1697,7 @@ class LinkableProject:
         for p in parameters:
             astNR = self._ast_navigate_dependency(p, False)
             p.typename = Typename.from_location(p.token.anchor.libName, p.token.anchor.fileName, p.references, astNR.explicitLocation)
+            p._deducedAstNavResult = astNR
 
     def _verify_functions(self):
         """Verify all instructions within all instantiated functions of the current library."""
@@ -1999,12 +1977,10 @@ class LinkableProject:
         for conflict in self.locationConflicts:
             d0 = conflict.firstDependency
             d1 = conflict.secondDependency
-            d0Params = d0.resolve_parameter_locations(self)
-            d1Params = d1.resolve_parameter_locations(self)
-            isFalsePositive = any(p0 != p1 for p0, p1 in zip(d0Params, d1Params))
+            d0Params = d0.locatable.parameters
+            d1Params = d1.locatable.parameters
+            isFalsePositive = any(p0._deducedAstNavResult != p1._deducedAstNavResult for p0, p1 in zip(d0Params, d1Params))
             if not isFalsePositive:
-                d0Params = d0.resolve_parameter_locations(self)
-                d1Params = d1.resolve_parameter_locations(self)
                 raise DuplicateParameterSignatureError(d0.locatable.anchor, d1.locatable.anchor)
 
         self.locationConflicts = []
