@@ -1695,7 +1695,7 @@ class LinkableProject:
             parameters (list): The parameter list to process.
         """
         for p in parameters:
-            astNR = self._ast_navigate_dependency(p, False)
+            astNR = self._ast_navigate_dependency(p.typename, False)
             p.typename = Typename.from_location(p.token.anchor.libName, p.token.anchor.fileName, p.references, astNR.explicitLocation)
             p._deducedAstNavResult = astNR
 
