@@ -574,15 +574,14 @@ class LinkableProject:
             location = RelativeLocation(locationKind, token).location()
             typename = Typename.from_location(token.anchor.libName, token.anchor.fileName, references, location)
             navResult = self._ast_try_navigate_dependency(typename, True)
-            if navResult is not None and navResult.explicitLocation[-1].kind == locationKind:
-                return navResult
+            return navResult
         else:
             namespace = lhs.dependency.locatable
             if not isinstance(namespace, Namespace):
                 return None
 
             if locationKind == LocationKind.Type:
-                validLocatables = (Namespace, Alias)
+                validLocatables = (Struct, Alias)
             else:
                 validLocatables = (Namespace)
 
@@ -722,7 +721,8 @@ class LinkableProject:
         parent = lhs.dependency.locatable if isExplicitRef else container
         if isExplicitRef and isinstance(lhs.dependency.locatable, Struct):
             result = self._try_verify_ast_property(parent, atom.token, parameters, lhs.isLHSType, isAssignment)
-        else:
+
+        if result is None:
             possibleMatchNR = self._try_find_function(parent, atom.token, FunctionKind.Operator if atom.token.isOp else FunctionKind.Regular, parameters, isExplicitRef=isExplicitRef)
             if possibleMatchNR is not None:
                 result = self._ast_navigate_dependency(possibleMatchNR.dependency.locatable.returnTypename, False)
@@ -805,10 +805,10 @@ class LinkableProject:
             dims = []
             for child in children:
                 cat = child.atom.token
-                if cat is not None and cat.kind != Token.Number.Integer:
+                if cat != "" and cat.kind != Token.Number.Integer:
                     raise InvalidArrayIndexTypeError(cat.anchor)
 
-                if cat is not None:
+                if cat != "":
                     dim = int(str(cat))
                     if dim < Language.minArrayDim:
                         raise InvalidArrayDimensionsError(cat.anchor)
