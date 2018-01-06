@@ -1296,6 +1296,8 @@ class Expression(Named):
         argCountStack = []
         argStack = []
         parent = None
+        wasLastFunctionEnd = False
+        isArrayFunctionReturnAccessor = False
 
         for atom in postfixAtoms:
             root = ExpressionAST(atom, parent)
@@ -1304,12 +1306,15 @@ class Expression(Named):
                 argCount += 1 if argCount == 0 else 0
                 argStack.append(root)
             elif atom.kind in [ExpressionAtomKind.FunctionBegin, ExpressionAtomKind.ArrayBegin, ExpressionAtomKind.TemplateBegin]:
+                isArrayFunctionReturnAccessor = wasLastFunctionEnd and atom.kind == ExpressionAtomKind.ArrayBegin
                 argCount += 1 if argCount == 0 else 0
                 argCountStack.append(argCount)
                 argCount = 0
                 argStack.append(root)
                 parent = root
             elif atom.kind in [ExpressionAtomKind.FunctionEnd, ExpressionAtomKind.ArrayEnd, ExpressionAtomKind.TemplateEnd]:
+                wasLastFunctionEnd = atom.kind == ExpressionAtomKind.FunctionEnd
+
                 numArgs = argCount + 1
                 if len(argStack) < numArgs:
                     raise InvalidExpressionError(atom.token.anchor)
@@ -1328,10 +1333,11 @@ class Expression(Named):
                 argCount = argCountStack.pop()
 
                 # f()[0]
-                if len(argStack) >= 2:
+                if isArrayFunctionReturnAccessor and len(argStack) >= 2:
                     r1 = argStack[-1]
                     r2 = argStack[-2]
                     if r1.atom.kind == ExpressionAtomKind.ArrayBegin and r2.atom.kind == ExpressionAtomKind.FunctionBegin:
+                        r2.children.append(None)
                         r2.children.append(r1)
                         argStack.pop()
             elif atom.kind == ExpressionAtomKind.UnaryOp:

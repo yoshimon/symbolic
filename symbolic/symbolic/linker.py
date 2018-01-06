@@ -707,9 +707,9 @@ class LinkableProject:
             linker.AstNavigationResult: The location of the resulting type of this AST.
         """
         arrayAst = None
-        if children and children[-1].atom.kind == ExpressionAtomKind.ArrayBegin:
+        if len(children) > 1 and children[-2] is None: # Array accessor in last child
             arrayAst = children[-1]
-            children = children[:-1]
+            children = children[:-2]
 
         # Extract child information.
         childNRs = [self._verify_expression_ast_recursive(container, localVars, child, newLocalVars) for child in children]
