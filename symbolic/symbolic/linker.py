@@ -1698,8 +1698,17 @@ class LinkableProject:
         self._solve_location_conflicts()
 
         # Now that all members and function parameters are resolved we can look at the instructions within the functions.
+        self.deduce_all_alias_parameters()
         self._verify_functions()
         self._verify_properties()
+
+    def deduce_all_alias_parameters(self):
+        """Deduce all alias parameters."""
+        for func in self.functions:
+            self.deduce_alias_parameters(func.parameters)
+
+        for prop in self.properties:
+            self.deduce_alias_parameters(prop.parameters)
 
     def deduce_alias_parameters(self, parameters):
         """
@@ -1715,13 +1724,11 @@ class LinkableProject:
     def _verify_functions(self):
         """Verify all instructions within all instantiated functions of the current library."""
         for func in self.functions:
-            self.deduce_alias_parameters(func.parameters)
             self._verify_function(func)
 
     def _verify_properties(self):
         """Verify all instructions within all instantiated properties of the current library."""
         for prop in self.properties:
-            self.deduce_alias_parameters(prop.parameters)
             self._verify_property(prop)
 
     def _local_vars_from_parameters(self, parameters):
