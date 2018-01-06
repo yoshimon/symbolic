@@ -622,12 +622,12 @@ class LinkableProject:
             if varNR is not None:
                 varNR.isVar = True
                 return varNR
-        else:
-            # Try dependent lookup as struct member.
-            memberNR = self._try_verify_ast_member_or_property(container, atom.token, lhs, isAssignment)
-            if memberNR is not None:
-                memberNR.isVar = True
-                return memberNR
+
+        # Try dependent lookup as struct member.
+        memberNR = self._try_verify_ast_member_or_property(container, atom.token, lhs, isAssignment)
+        if memberNR is not None:
+            memberNR.isVar = True
+            return memberNR
 
         # Try lookup as namespace object.
         namespaceObjNR = self._try_verify_ast_namespace_object(LocationKind.Namespace, lhs, atom.token, container.references)
