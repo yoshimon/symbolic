@@ -583,7 +583,7 @@ class LinkableProject:
             if locationKind == LocationKind.Type:
                 validLocatables = (Struct, Alias)
             else:
-                validLocatables = (Namespace)
+                validLocatables = (Namespace, Alias)
 
             for loc in namespace.locatables:
                 if isinstance(loc, validLocatables) and loc.token == token:
@@ -1701,14 +1701,27 @@ class LinkableProject:
         self._verify_functions()
         self._verify_properties()
 
+    def deduce_alias_parameters(self, parameters):
+        """
+        Turn alias parameters into deduced type names.
+
+        Args:
+            parameters (list): The parameter list to process.
+        """
+        for p in parameters:
+            astNR = self._ast_navigate_dependency(p, False)
+            p.typename = Typename.from_location(p.token.anchor.libName, p.token.anchor.fileName, p.references, astNR.explicitLocation)
+
     def _verify_functions(self):
         """Verify all instructions within all instantiated functions of the current library."""
         for func in self.functions:
+            self.deduce_alias_parameters(func.parameters)
             self._verify_function(func)
 
     def _verify_properties(self):
         """Verify all instructions within all instantiated properties of the current library."""
         for prop in self.properties:
+            self.deduce_alias_parameters(prop.parameters)
             self._verify_property(prop)
 
     def _local_vars_from_parameters(self, parameters):
