@@ -141,6 +141,9 @@ class LinkedProjectYamlSerializer:
         Returns:
             dict: The serialized dictionary.
         """
+        if ast is None:
+            return None
+
         subDict = { "kind": str(ExpressionAtomKindToCategory.get(ast.atom.kind)).split(".")[1] }
 
         LinkedProjectYamlSerializer._add_opt(subDict, "ref", ast.isRef)
