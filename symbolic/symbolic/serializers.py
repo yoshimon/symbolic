@@ -4,7 +4,7 @@ import yaml
 
 from symbolic.algorithm import Algorithm
 from symbolic.linker import Dependency
-from symbolic.objects import Alias, ExpressionAtomKindToCategory, MemberList, Struct
+from symbolic.objects import Alias, ExpressionAtomKindToCategory, Location, MemberList, Struct
 
 class LinkedProjectYamlSerializer:
     """A helper class to serialize a linked project to YAML."""
@@ -84,8 +84,7 @@ class LinkedProjectYamlSerializer:
                 if isinstance(memberList, MemberList):
                     structMembers = list(str(member.token) for member in memberList)
                     memberTypenameNR = links[Dependency(memberList.typename)]
-                    memberBaseTypenameNR = linkableProject.navigate_alias_base(memberTypenameNR)
-                    typename = LinkedProjectYamlSerializer._navigation_result_to_type(memberBaseTypenameNR, memberList.typename.dims)
+                    typename = LinkedProjectYamlSerializer._navigation_result_to_type(memberTypenameNR)
 
                     data = { "type": typename }
 
@@ -114,20 +113,22 @@ class LinkedProjectYamlSerializer:
         return [LinkedProjectYamlSerializer._expression_ast_to_dict(annotation.expression.ast) for annotation in annotations]
 
     @staticmethod
-    def _navigation_result_to_type(navResult, dims):
+    def _navigation_result_to_type(navResult):
         """
         Convert a navigation result to a serialized type.
 
         Args:
             navResult (linker.NavigationResult): The navigation result.
-            dims ([int]): The type dimensions.
         Returns:
             dict: The serialized dictionary.
         """
-        dependency = navResult.dependency
-        path = Algorithm.join(".", dependency.baseLocationWithoutRef)
-        result = { "library": str(dependency.location[0]), "name": path }
-        LinkedProjectYamlSerializer._add_opt(result, "dims", dims)
+        oldDims = navResult.explicitLocation.pathWithoutRef[-1].dims
+        navResult.explicitLocation.pathWithoutRef[-1].dims = []
+        path = Algorithm.join(".", navResult.explicitLocation.pathWithoutRef)
+        navResult.explicitLocation.pathWithoutRef[-1].dims = oldDims
+
+        result = { "library": str(navResult.explicitLocation[0]), "name": path }
+        LinkedProjectYamlSerializer._add_opt(result, "dims", navResult.explicitLocation[-1].dims)
         return result
 
     @staticmethod

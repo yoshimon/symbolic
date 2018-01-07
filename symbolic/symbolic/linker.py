@@ -422,6 +422,11 @@ class LinkableProject:
             linker.AstNavigationResult or None: The navigation result or None.
         """
         dependency = Dependency(locatable)
+
+        astNavResult = self.links.get(dependency, None)
+        if astNavResult is not None:
+            return astNavResult
+
         navResult = self.try_navigate_dependency(dependency)
         if navResult is None or navResult.dependency is None:
             return None
@@ -1647,11 +1652,14 @@ class LinkableProject:
 
             # The name has to be resolvable by now
             # Catching unresolved objects will spawn templates, if encountered
+
+            # Verify alias array targets.
             navResult = self.navigate_dependency(dependency)
             errorAnchor = dependency.locatable.anchor
             allowArrayTarget = not bool(dependency.location[-1].dims)
-            navResult = self.navigate_alias_base(navResult, errorAnchor=errorAnchor, allowArrayTarget=allowArrayTarget)
-            self.links[dependency] = navResult
+            self.navigate_alias_base(navResult, errorAnchor=errorAnchor, allowArrayTarget=allowArrayTarget)
+
+            self.links[dependency] = self._ast_navigate_dependency(dependency.locatable, False)
 
             # Add new unresolved dependencies to the queue
             localUnresolvedDependencies += unresolvedDependencies
@@ -1947,13 +1955,12 @@ class LinkableProject:
         Returns:
             linker.NavigationResult or None: The navigation result.
         """
-        navResult = self.links.get(dependency, None)
-        if navResult is not None:
-            return navResult
+        astNavResult = self.links.get(dependency, None)
+        if astNavResult is not None:
+            return astNavResult.navResult
 
         navResult = self.try_navigate(dependency.locatable.anchor, dependency.locatable.references, dependency.locatable.parent, dependency.baseLocation)
         if navResult is not None:
-            self.links[navResult.dependency] = navResult
             return navResult
 
         return None
@@ -2052,8 +2059,8 @@ class LinkedProject:
 
                 for locatable in locatable.locatables:
                     if isinstance(locatable, MemberList):
-                        if not locatable.typename.dims:
-                            navResult = self.linkableProject.links[Dependency(locatable.typename)]
+                        navResult = self.linkableProject.links[Dependency(locatable.typename)]
+                        if not navResult.explicitLocation[-1].dims:
                             typeDag.add_edge(navResult.dependency, dependency) # MemberType -> Struct
             elif isinstance(locatable, Alias):
                 typeDag.add_node(dependency)
