@@ -4,7 +4,7 @@ import yaml
 
 from symbolic.algorithm import Algorithm
 from symbolic.linker import Dependency
-from symbolic.objects import Alias, ExpressionAtomKindToCategory, Location, MemberList, Struct
+from symbolic.objects import Alias, ExpressionAtomKindToCategory, Function, Location, MemberList, Struct
 
 class LinkedProjectYamlSerializer:
     """A helper class to serialize a linked project to YAML."""
@@ -160,4 +160,60 @@ class LinkedProjectYamlSerializer:
             functionsOutputFilePath (paths.VirtualPath): The functions output file path.
             linkedProject (linker.LinkedProject): The linked project to serialize.
         """
-        pass
+        linkableProject = linkedProject.linkableProject
+
+        # Per-library data
+        libraries = []
+        libDataOffset = 0
+        for libName in linkedProject.orderedLibraryNames:
+            libData = []
+
+            for dependency in linkedProject.sortedFunctionDependencies[libDataOffset:]:
+                if dependency.libName != libName:
+                    break
+
+                LinkedProjectYamlSerializer._serialize_function_dependency(linkableProject, linkableProject.links, dependency, libData)
+
+                libDataOffset += 1
+
+            libraries.append({ libName: libData })
+
+        allData = { "libraries": libraries }
+        with functionsOutputFilePath.open("w") as yamlFile:
+            yaml.dump(allData, yamlFile, default_flow_style=False)
+
+    @staticmethod
+    def _serialize_function_dependency(linkableProject, links, dependency, libData):
+        """
+        Serialize a type dependency to a library chunk.
+
+        Args:
+            dependency (linker.Dependency): The dependency to serialize.
+            libData (dict): The library data.
+        """
+        locatable = dependency.locatable
+        if isinstance(locatable, Function):
+            functionParameterList = []
+            for parameter in locatable.parameters:
+                typename = LinkedProjectYamlSerializer._navigation_result_to_type(parameter._deducedAstNavResult)
+
+                data = { "type": typename }
+
+                LinkedProjectYamlSerializer._add_opt(data, "name", str(parameter.token))
+                LinkedProjectYamlSerializer._add_opt(data, "annotations", LinkedProjectYamlSerializer._annotations(parameter.annotations))
+                LinkedProjectYamlSerializer._add_opt(data, "semantic", LinkedProjectYamlSerializer._expression_ast_to_dict(parameter.semantic.expression.ast) if parameter.semantic is not None else None)
+
+                functionParameterList.append(data)
+
+            returnTypenameNR = links[Dependency(locatable.returnTypename)]
+            functionReturnType = LinkedProjectYamlSerializer._navigation_result_to_type(returnTypenameNR)
+
+            functionData = dict()
+            LinkedProjectYamlSerializer._add_opt(functionData, "parameter list", functionParameterList)
+            LinkedProjectYamlSerializer._add_opt(functionData, "return type", functionReturnType)
+            LinkedProjectYamlSerializer._add_opt(functionData, "annotations", LinkedProjectYamlSerializer._annotations(locatable.annotations))
+            LinkedProjectYamlSerializer._add_opt(functionData, "semantic", LinkedProjectYamlSerializer._expression_ast_to_dict(locatable.semantic.expression.ast) if locatable.semantic is not None else None)
+
+            mangledName = Algorithm.left_join_parent(locatable, ".", lambda l: str(l.token))
+
+            libData.append({ mangledName: functionData })

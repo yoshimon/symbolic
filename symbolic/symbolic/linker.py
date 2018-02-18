@@ -2016,6 +2016,7 @@ class LinkedProject:
         self.sortedTypeDependencies = []
         self._sort_type_dependencies()
         self.functions = []
+        self._sort_function_dependencies()
 
     def _sort_type_dependencies(self):
         """
@@ -2043,6 +2044,33 @@ class LinkedProject:
             raise CircularDependencyError(dependencyChain)
 
         self.sortedTypeDependencies = list(sorted(sortedTypeDependencies, key=lambda dependency: self.orderedLibraryNames.index(dependency.libName)))
+
+    def _sort_function_dependencies(self):
+        """
+        Return the sorted function dependencies from the unlinked project.
+
+        Returns:
+            list: A sorted list of function dependencies.
+        """
+        functionDag = nx.DiGraph()
+        for resolvedLocation in self.linkableProject.resolvedObjects.values():
+            self._create_function_dag(functionDag, resolvedLocation)
+
+        # All dependencies have to resolve nicely
+        try:
+            sortedFunctionDependencies = list(nx.topological_sort(functionDag))
+        except nx.exception.NetworkXUnfeasible:
+            cycle = nx.find_cycle(functionDag)
+
+            # Circular dependency string
+            dependencyChain = []
+            for p in reversed(cycle):
+                dependencyChain.append(p[0].location)
+            dependencyChain.append(p[1].location)
+
+            raise CircularDependencyError(dependencyChain)
+
+        self.sortedFunctionDependencies = list(sorted(sortedFunctionDependencies, key=lambda dependency: self.orderedLibraryNames.index(dependency.libName)))
 
     def _create_type_dag(self, typeDag, resolvedLocation):
         """
@@ -2078,3 +2106,23 @@ class LinkedProject:
         # And repeat.
         for subLocationName, subLocation in resolvedLocation.subLocations.items():
             self._create_type_dag(typeDag, subLocation)
+
+    def _create_function_dag(self, functionDag, resolvedLocation):
+        """
+        Insert a resolved location with all its dependencies and sublocations into the given graph.
+
+        Args:
+            functionDag: The function reference DAG (Function -> Function).
+            resolvedLocation (linker.ResolvedLocation): The resolved location.
+        """
+        for dependency in resolvedLocation.dependencies:
+            locatable = dependency.locatable
+            if isinstance(locatable, Function):
+                functionDag.add_node(dependency)
+
+                for instruction in locatable.instructions:
+                    pass
+
+        # And repeat.
+        for subLocationName, subLocation in resolvedLocation.subLocations.items():
+            self._create_function_dag(functionDag, subLocation)
