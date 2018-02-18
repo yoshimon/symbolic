@@ -205,6 +205,8 @@ class LinkedProjectYamlSerializer:
 
                 functionParameterList.append(data)
 
+            instructionData = LinkedProjectYamlSerializer._serialize_instructions(locatable.instructions)
+
             returnTypenameNR = links[Dependency(locatable.returnTypename)]
             functionReturnType = LinkedProjectYamlSerializer._navigation_result_to_type(returnTypenameNR)
 
@@ -213,7 +215,20 @@ class LinkedProjectYamlSerializer:
             LinkedProjectYamlSerializer._add_opt(functionData, "return type", functionReturnType)
             LinkedProjectYamlSerializer._add_opt(functionData, "annotations", LinkedProjectYamlSerializer._annotations(locatable.annotations))
             LinkedProjectYamlSerializer._add_opt(functionData, "semantic", LinkedProjectYamlSerializer._expression_ast_to_dict(locatable.semantic.expression.ast) if locatable.semantic is not None else None)
+            LinkedProjectYamlSerializer._add_opt(functionData, "instructions", instructionData)
 
             mangledName = Algorithm.left_join_parent(locatable, ".", lambda l: str(l.token))
 
             libData.append({ mangledName: functionData })
+
+    @staticmethod
+    def _serialize_instructions(instructions):
+        instructionData = []
+
+        if instructions is not None:
+            for instruction in instructions:
+                exprAst = LinkedProjectYamlSerializer._expression_ast_to_dict(instruction.expression.ast) if instruction.expression is not None else None
+                childInstructions = LinkedProjectYamlSerializer._serialize_instructions(instruction.instructions)
+                instructionData.append({"kind": instruction.kind.name, "instruction": exprAst, "children": childInstructions})
+
+        return instructionData
